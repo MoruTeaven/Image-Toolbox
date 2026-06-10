@@ -831,14 +831,123 @@ html, body {
   color: var(--color-accent);
 }
 
-/* ── 图层面板（右侧下） ── */
+/* ── 右侧面板（属性 / 图层） ── */
 .panel-area {
   grid-area: panel;
-  display: flex;
-  flex-direction: column;
   background: var(--bg-panel);
   border-left: 1px solid var(--color-border);
   overflow: hidden;
+}
+
+.side-tabs {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.side-tabs__header {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 5px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.side-tabs__tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.side-tabs__tab:hover {
+  background: var(--bg-hover);
+  color: var(--color-text);
+}
+
+.side-tabs__tab--active {
+  background: var(--bg-card);
+  color: var(--color-text);
+  border-color: var(--color-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.side-tabs__badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.side-tabs__tab--active .side-tabs__badge {
+  background: var(--bg-active);
+  color: #ffffff;
+}
+
+.side-tabs__content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.side-tabs__pane {
+  height: 100%;
+  min-height: 0;
+}
+
+.side-tabs__pane:not(.side-tabs__pane--active) {
+  display: none;
+}
+
+.side-tabs__pane #property-panel,
+.side-tabs__pane #layer-panel {
+  height: 100%;
+  min-height: 0;
+}
+
+.side-tabs--tabs .panel__header {
+  display: none;
+}
+
+.side-tabs--tabs .panel--property {
+  border-bottom: 0;
+}
+
+.side-tabs--split .side-tabs__header {
+  display: none;
+}
+
+.side-tabs--split .side-tabs__content {
+  display: flex;
+  flex-direction: column;
+}
+
+.side-tabs--split .side-tabs__pane[data-panel-pane="property"] {
+  flex: 2;
+  height: auto;
+}
+
+.side-tabs--split .side-tabs__pane[data-panel-pane="layer"] {
+  flex: 3;
+  height: auto;
 }
 
 .panel {
@@ -860,17 +969,6 @@ html, body {
   flex-wrap: initial;
   gap: initial;
   align-content: initial;
-}
-
-/* 属性/图层面板的 wrapper 在 .panel-area 内分高度 */
-#property-panel {
-  flex: 2;
-  min-height: 0;
-}
-
-#layer-panel {
-  flex: 3;
-  min-height: 0;
 }
 
 .panel__header {

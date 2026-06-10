@@ -1,4 +1,5 @@
 import eventBus from '../core/EventBus.js';
+import { SIDE_PANEL_LAYOUT_KEY, SIDE_PANEL_LAYOUTS } from './SidePanelTabs.js';
 
 const THEME_STORAGE_KEY = 'image-toolbox-theme';
 const THEME_VERSION_KEY = 'image-toolbox-theme-version';
@@ -164,6 +165,13 @@ class AccountPage {
       if (theme) {
         this._setTheme(theme);
         this._render();
+        return;
+      }
+
+      const panelLayout = e.target.closest('[data-side-panel-layout]')?.dataset.sidePanelLayout;
+      if (panelLayout) {
+        this._setSidePanelLayout(panelLayout);
+        this._render();
       }
     });
 
@@ -224,6 +232,7 @@ class AccountPage {
 
   _renderSettings() {
     const theme = document.documentElement.getAttribute('data-theme') || 'light';
+    const sidePanelLayout = this._getSidePanelLayout();
     return `
       <div class="account-card">
         <div class="account-card__label">外观</div>
@@ -236,9 +245,13 @@ class AccountPage {
       </div>
 
       <div class="account-card">
-        <div class="account-card__label">更多设置</div>
-        <div class="account-card__value">编辑偏好</div>
-        <p>后续可以在这里放默认导出格式、画布背景、快捷键等配置。</p>
+        <div class="account-card__label">编辑器</div>
+        <div class="account-card__value">右侧面板布局</div>
+        <p>选择属性和图层的展示方式。Tab 布局更节省空间，上下布局可以同时查看两块内容。</p>
+        <div class="account-page__theme-row">
+          <button class="account-page__theme-choice ${sidePanelLayout === SIDE_PANEL_LAYOUTS.TABS ? 'account-page__theme-choice--active' : ''}" type="button" data-side-panel-layout="${SIDE_PANEL_LAYOUTS.TABS}">Tab 切换</button>
+          <button class="account-page__theme-choice ${sidePanelLayout === SIDE_PANEL_LAYOUTS.SPLIT ? 'account-page__theme-choice--active' : ''}" type="button" data-side-panel-layout="${SIDE_PANEL_LAYOUTS.SPLIT}">上下布局</button>
+        </div>
       </div>
     `;
   }
@@ -344,6 +357,18 @@ class AccountPage {
     document.querySelectorAll('.theme-toggle').forEach(el => {
       el.setAttribute('data-theme', theme);
     });
+  }
+
+  _setSidePanelLayout(layout) {
+    if (!Object.values(SIDE_PANEL_LAYOUTS).includes(layout)) return;
+
+    localStorage.setItem(SIDE_PANEL_LAYOUT_KEY, layout);
+    eventBus.emit('sidePanel:layoutChanged', layout);
+  }
+
+  _getSidePanelLayout() {
+    const saved = localStorage.getItem(SIDE_PANEL_LAYOUT_KEY);
+    return Object.values(SIDE_PANEL_LAYOUTS).includes(saved) ? saved : SIDE_PANEL_LAYOUTS.TABS;
   }
 
   _getUtoolsUser() {
