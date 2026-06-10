@@ -5,8 +5,8 @@ const THEME_VERSION_KEY = 'image-toolbox-theme-version';
 const THEME_VERSION = 'neutral-teal-light-default-v1';
 
 /**
- * 选项栏 UI 组件
- * 根据当前工具动态渲染控件，右侧放置主题切换按钮
+ * 顶部预设栏 UI 组件
+ * 根据当前工具动态渲染快捷预设，右侧放置主题切换按钮
  */
 class OptionsBar {
   constructor(containerEl, toolManager) {
@@ -20,6 +20,7 @@ class OptionsBar {
 
   _render() {
     this._el.innerHTML = `
+      <div class="optionsbar__label hidden" id="optionsbar-label">工具预设</div>
       <div class="optionsbar__controls" id="optionsbar-controls"></div>
       <div class="optionsbar__right">
         <div class="theme-toggle" id="theme-toggle" data-theme="light" title="切换主题">
@@ -84,13 +85,16 @@ class OptionsBar {
 
   _updateControls() {
     const controlsEl = this._el.querySelector('#optionsbar-controls');
+    const labelEl = this._el.querySelector('#optionsbar-label');
     if (!controlsEl) return;
 
     const module = this._tm.getCurrentModule();
     if (module && typeof module.getOptionsBarHTML === 'function') {
       controlsEl.innerHTML = module.getOptionsBarHTML();
+      labelEl?.classList.toggle('hidden', !controlsEl.innerHTML.trim());
     } else {
       controlsEl.innerHTML = '';
+      labelEl?.classList.add('hidden');
     }
   }
 

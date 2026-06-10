@@ -53,6 +53,16 @@ class CropModule extends BaseModule {
 
   setAspectRatio(ratio) {
     this.options.aspectRatio = ratio;
+    if (!this._cropRect) return;
+
+    this._cropRect.set({ lockUniScaling: !!ratio });
+    if (ratio) {
+      this._applyAspectRatioToCropRect('width');
+    } else {
+      this._cropRect.setCoords();
+      this._updateMask();
+    }
+    eventBus.emit('crop:updated', this._getCropBounds());
   }
 
   /**
@@ -63,14 +73,14 @@ class CropModule extends BaseModule {
     this.history.saveState();
 
     const canvas = this.canvasManager.canvas;
-    const cr = this._cropRect;
+    const bounds = this._getCropBounds();
 
     // 使用 clipPath 非破坏性裁剪
     const clipRect = new fabric.Rect({
-      left: cr.left,
-      top: cr.top,
-      width: cr.width * cr.scaleX,
-      height: cr.height * cr.scaleY,
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
       absolutePositioned: true,
     });
 
@@ -181,7 +191,11 @@ class CropModule extends BaseModule {
       cornerStyle: 'circle',
       transparentCorners: false,
       lockUniScaling: !!ratio,
+      lockScalingFlip: true,
+      excludeFromExport: true,
       excludeFromLayer: true,
+      excludeFromProperty: true,
+      excludeFromHistory: true,
       absolutePositioned: true,
     });
 
@@ -210,6 +224,102 @@ class CropModule extends BaseModule {
     });
 
     canvas.renderAll();
+  }
+
+  _getCropBounds() {
+    if (!this._cropRect) {
+      return { left: 0, top: 0, width: 0, height: 0 };
+    }
+
+    const cr = this._cropRect;
+    return {
+      left: cr.left || 0,
+      top: cr.top || 0,
+      width: Math.max(1, Math.abs((cr.width || 0) * (cr.scaleX || 1))),
+      height: Math.max(1, Math.abs((cr.height || 0) * (cr.scaleY || 1))),
+    };
+  }
+
+  _setCropBounds(bounds) {
+    if (!this._cropRect) return;
+
+    this._cropRect.set({
+      left: bounds.left,
+      top: bounds.top,
+      width: Math.max(1, bounds.width),
+      height: Math.max(1, bounds.height),
+      scaleX: 1,
+      scaleY: 1,
+    });
+    this._cropRect.setCoords();
+  }
+
+  _getAspectRatioValue() {
+    const ratio = this.options.aspectRatio;
+    if (!ratio || !ratio.w || !ratio.h) return null;
+    return ratio.w / ratio.h;
+  }
+
+  _applyAspectRatioToCropRect(changedProp = 'width') {
+    const ratioVal = this._getAspectRatioValue();
+    if (!this._cropRect || !ratioVal) return;
+
+    const current = this._getCropBounds();
+    const center = {
+      x: current.left + current.width / 2,
+      y: current.top + current.height / 2,
+    };
+
+    let width = current.width;
+    let height = current.height;
+    if (changedProp === 'height') {
+      width = height * ratioVal;
+    } else {
+      height = width / ratioVal;
+    }
+
+    const bounds = this._fitCropBoundsToVisible({ left: current.left, top: current.top, width, height }, center, ratioVal);
+    this._setCropBounds(bounds);
+    this._updateMask();
+  }
+
+  _fitCropBoundsToVisible(bounds, center, ratioVal = null) {
+    const vb = this._getVisibleBounds();
+    const maxWidth = Math.max(1, vb.width);
+    const maxHeight = Math.max(1, vb.height);
+    let width = Math.max(1, bounds.width);
+    let height = Math.max(1, bounds.height);
+
+    if (ratioVal) {
+      if (width > maxWidth) {
+        width = maxWidth;
+        height = width / ratioVal;
+      }
+      if (height > maxHeight) {
+        height = maxHeight;
+        width = height * ratioVal;
+      }
+    } else {
+      width = Math.min(width, maxWidth);
+      height = Math.min(height, maxHeight);
+    }
+
+    const nextCenter = center || {
+      x: bounds.left + bounds.width / 2,
+      y: bounds.top + bounds.height / 2,
+    };
+    let left = nextCenter.x - width / 2;
+    let top = nextCenter.y - height / 2;
+
+    left = this._clamp(left, vb.left, vb.left + maxWidth - width);
+    top = this._clamp(top, vb.top, vb.top + maxHeight - height);
+
+    return { left, top, width, height };
+  }
+
+  _clamp(value, min, max) {
+    if (max < min) return min;
+    return Math.max(min, Math.min(max, value));
   }
 
   _removeCropOverlay() {
@@ -255,6 +365,64 @@ class CropModule extends BaseModule {
         <button class="options-btn" id="crop-cancel">取消</button>
       </div>
     `;
+  }
+
+  getPropertyPanelHTML() {
+    if (!this._cropRect) {
+      return '<div class="property-empty">启用剪切后可编辑裁剪区域</div>';
+    }
+
+    const bounds = this._getCropBounds();
+    const ratio = this.options.aspectRatio;
+    const ratioLabel = ratio ? `${ratio.w}:${ratio.h}` : '自由';
+
+    return `
+      <div class="property-item">
+        <label>X</label>
+        <input type="number" class="property-input" data-prop="left" value="${this._formatNumber(bounds.left)}" />
+      </div>
+      <div class="property-item">
+        <label>Y</label>
+        <input type="number" class="property-input" data-prop="top" value="${this._formatNumber(bounds.top)}" />
+      </div>
+      <div class="property-item">
+        <label>宽</label>
+        <input type="number" class="property-input" data-prop="width" value="${this._formatNumber(bounds.width)}" min="1" />
+      </div>
+      <div class="property-item">
+        <label>高</label>
+        <input type="number" class="property-input" data-prop="height" value="${this._formatNumber(bounds.height)}" min="1" />
+      </div>
+      <div class="property-item property-item--wide">
+        <label>比例</label>
+        <span class="property-static">${ratioLabel}</span>
+      </div>
+      <div class="property-empty">拖动裁剪框，或直接输入区域数值</div>
+    `;
+  }
+
+  onPropertyChange(key, value, context = {}) {
+    if (!this._cropRect || !['left', 'top', 'width', 'height'].includes(key)) return;
+
+    if (this.options.aspectRatio && (key === 'width' || key === 'height')) {
+      this._applyAspectRatioToCropRect(key);
+      if (context.eventType === 'change') {
+        eventBus.emit('crop:updated', this._getCropBounds());
+      }
+      return;
+    }
+
+    this._cropRect.setCoords();
+    this._updateMask();
+    if (context.eventType === 'change') {
+      eventBus.emit('crop:updated', this._getCropBounds());
+    }
+  }
+
+  _formatNumber(value) {
+    const number = parseFloat(value);
+    if (!Number.isFinite(number)) return 0;
+    return Math.round(number * 100) / 100;
   }
 }
 

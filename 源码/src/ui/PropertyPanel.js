@@ -42,6 +42,7 @@ class PropertyPanel {
     eventBus.on('canvas:restored', () => this._updateProperties());
     eventBus.on('image:loaded', () => this._clearProperties());
     eventBus.on('tool:changed', () => this._updateProperties());
+    eventBus.on('crop:updated', () => this._updateProperties());
 
     // 物件修改 → 刷新属性
     eventBus.on('canvas:objectModified', () => {
@@ -61,13 +62,22 @@ class PropertyPanel {
     const bodyEl = this._el.querySelector('#property-body');
     if (!bodyEl) return;
 
+    const module = this._tm.getCurrentModule();
     const active = this._getActiveObject();
+
+    if (active?.excludeFromProperty && module && typeof module.getPropertyPanelHTML === 'function') {
+      const html = module.getPropertyPanelHTML();
+      if (html) {
+        bodyEl.innerHTML = html;
+        return;
+      }
+    }
+
     if (active) {
       bodyEl.innerHTML = this._getLayerPropertiesHTML(active);
       return;
     }
 
-    const module = this._tm.getCurrentModule();
     if (!module) {
       bodyEl.innerHTML = '<div class="property-empty">选中物件以编辑属性</div>';
       return;
@@ -335,10 +345,10 @@ class PropertyPanel {
     // 通知模块属性变更，保留模块自定义联动能力
     const module = this._tm.getCurrentModule();
     if (module?.onPropertyChange) {
-      module.onPropertyChange(prop, propertyValue);
+      module.onPropertyChange(prop, propertyValue, { eventType: e.type });
     }
 
-    if (e.type === 'change') {
+    if (e.type === 'change' && !active.excludeFromHistory) {
       this._notifyObjectChanged(active);
     }
   }

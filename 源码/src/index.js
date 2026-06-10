@@ -10,6 +10,7 @@ import ToolManager from './core/ToolManager.js';
 
 import Toolbar from './ui/Toolbar.js';
 import OptionsBar from './ui/OptionsBar.js';
+import SidePanelTabs from './ui/SidePanelTabs.js';
 import PropertyPanel from './ui/PropertyPanel.js';
 import LayerPanel from './ui/LayerPanel.js';
 import StatusBar from './ui/StatusBar.js';
@@ -28,6 +29,7 @@ class App {
 
     this.toolbar = null;
     this.optionsBar = null;
+    this.sidePanelTabs = null;
     this.propertyPanel = null;
     this.layerPanel = null;
     this.statusBar = null;
@@ -75,6 +77,11 @@ class App {
       this.optionsBar = new OptionsBar(
         document.getElementById('optionsbar'),
         this.toolManager
+      );
+
+      this.sidePanelTabs = new SidePanelTabs(
+        document.getElementById('panel-area'),
+        this.layerManager
       );
 
       this.propertyPanel = new PropertyPanel(
@@ -257,6 +264,7 @@ class App {
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const active = this.canvasManager?.getActiveObject();
         if (active && active.isEditing) return; // 文字编辑中不删除
+        if (active && active.excludeFromHistory) return; // 不删除裁剪框等临时工具对象
         this.canvasManager?.removeActiveObject();
         this.historyManager?.saveState();
         return;
@@ -274,7 +282,9 @@ class App {
     });
 
     // ═══ 画布操作后自动保存历史 ═══
-    eventBus.on('canvas:objectModified', () => {
+    eventBus.on('canvas:objectModified', (target) => {
+      if (target?.excludeFromHistory) return;
+
       // 防抖保存
       if (this._saveTimer) clearTimeout(this._saveTimer);
       this._saveTimer = setTimeout(() => {

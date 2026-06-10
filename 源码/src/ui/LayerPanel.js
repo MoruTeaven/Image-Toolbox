@@ -95,13 +95,6 @@ class LayerPanel {
       }
     });
 
-    // 删除图层
-    document.getElementById('layer-delete')?.addEventListener('click', () => {
-      const selected = this._getSelectedLayerId();
-      if (selected !== null) {
-        this._lm.deleteLayer(selected);
-      }
-    });
   }
 
   _handleDragStart(e) {
@@ -220,6 +213,14 @@ class LayerPanel {
 
   _handleActionClick(e) {
     const target = e.target;
+    if (target.id === 'layer-delete') {
+      const selected = this._getSelectedLayerId();
+      if (selected !== null) {
+        this._lm.deleteLayer(selected);
+      }
+      return;
+    }
+
     if (target.id === 'layer-add') {
       eventBus.emit('tool:requestChange', 'text');
     }
