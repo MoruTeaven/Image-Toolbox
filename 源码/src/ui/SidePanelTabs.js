@@ -62,7 +62,10 @@ class SidePanelTabs {
     eventBus.on('layers:updated', () => this._updateLayerCount());
     eventBus.on('image:loaded', () => this._updateLayerCount());
     eventBus.on('canvas:restored', () => this._updateLayerCount());
-    eventBus.on('sidePanel:layoutChanged', (layout) => this._applyLayout(layout, false));
+  }
+
+  applyLayout(layout, persist = true) {
+    this._applyLayout(layout, persist);
   }
 
   _activateTab(tabName, persist = true) {

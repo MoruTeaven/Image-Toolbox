@@ -65,6 +65,18 @@ class CropModule extends BaseModule {
     eventBus.emit('crop:updated', this._getCropBounds());
   }
 
+  applyPreset(presetName) {
+    const ratioMap = {
+      'crop-ratio-free': null,
+      'crop-ratio-1-1': { w: 1, h: 1 },
+      'crop-ratio-4-3': { w: 4, h: 3 },
+      'crop-ratio-16-9': { w: 16, h: 9 },
+    };
+
+    if (!Object.prototype.hasOwnProperty.call(ratioMap, presetName)) return;
+    this.setAspectRatio(ratioMap[presetName]);
+  }
+
   /**
    * 执行裁剪
    */
@@ -352,17 +364,10 @@ class CropModule extends BaseModule {
     const ratio = this.options.aspectRatio;
     return `
       <div class="options-group">
-        <label class="options-label">比例</label>
-        <div class="options-btn-group">
-          <button class="options-btn ${!ratio ? 'active' : ''}" data-ratio="free">自由</button>
-          <button class="options-btn ${ratio && ratio.w === 1 && ratio.h === 1 ? 'active' : ''}" data-ratio="1:1">1:1</button>
-          <button class="options-btn ${ratio && ratio.w === 4 && ratio.h === 3 ? 'active' : ''}" data-ratio="4:3">4:3</button>
-          <button class="options-btn ${ratio && ratio.w === 16 && ratio.h === 9 ? 'active' : ''}" data-ratio="16:9">16:9</button>
-        </div>
-      </div>
-      <div class="options-group">
-        <button class="options-btn options-btn-primary" id="crop-apply">应用</button>
-        <button class="options-btn" id="crop-cancel">取消</button>
+        <button class="options-btn options-btn-sm ${!ratio ? 'active' : ''}" data-preset="crop-ratio-free">自由比例</button>
+        <button class="options-btn options-btn-sm ${ratio && ratio.w === 1 && ratio.h === 1 ? 'active' : ''}" data-preset="crop-ratio-1-1">1:1</button>
+        <button class="options-btn options-btn-sm ${ratio && ratio.w === 4 && ratio.h === 3 ? 'active' : ''}" data-preset="crop-ratio-4-3">4:3</button>
+        <button class="options-btn options-btn-sm ${ratio && ratio.w === 16 && ratio.h === 9 ? 'active' : ''}" data-preset="crop-ratio-16-9">16:9</button>
       </div>
     `;
   }
@@ -374,7 +379,6 @@ class CropModule extends BaseModule {
 
     const bounds = this._getCropBounds();
     const ratio = this.options.aspectRatio;
-    const ratioLabel = ratio ? `${ratio.w}:${ratio.h}` : '自由';
 
     return `
       <div class="property-item">
@@ -395,10 +399,36 @@ class CropModule extends BaseModule {
       </div>
       <div class="property-item property-item--wide">
         <label>比例</label>
-        <span class="property-static">${ratioLabel}</span>
+        <select class="property-select property-select--short" data-module-prop="aspectRatio" data-refresh-property="true">
+          <option value="free" ${!ratio ? 'selected' : ''}>自由</option>
+          <option value="1:1" ${ratio && ratio.w === 1 && ratio.h === 1 ? 'selected' : ''}>1:1</option>
+          <option value="4:3" ${ratio && ratio.w === 4 && ratio.h === 3 ? 'selected' : ''}>4:3</option>
+          <option value="16:9" ${ratio && ratio.w === 16 && ratio.h === 9 ? 'selected' : ''}>16:9</option>
+        </select>
+      </div>
+      <div class="property-actions">
+        <button class="property-btn property-btn--primary" type="button" data-module-action="applyCrop">应用裁剪</button>
+        <button class="property-btn" type="button" data-module-action="cancelCrop">取消</button>
       </div>
       <div class="property-empty">拖动裁剪框，或直接输入区域数值</div>
     `;
+  }
+
+  onToolPropertyChange(key, value) {
+    if (key !== 'aspectRatio') return false;
+
+    this.setAspectRatio(this._parseRatio(value));
+    return true;
+  }
+
+  onToolPropertyAction(action) {
+    if (action === 'applyCrop') {
+      this.applyCrop();
+      return;
+    }
+    if (action === 'cancelCrop') {
+      this.cancelCrop();
+    }
   }
 
   onPropertyChange(key, value, context = {}) {
@@ -423,6 +453,12 @@ class CropModule extends BaseModule {
     const number = parseFloat(value);
     if (!Number.isFinite(number)) return 0;
     return Math.round(number * 100) / 100;
+  }
+
+  _parseRatio(value) {
+    if (value === 'free') return null;
+    const [w, h] = String(value).split(':').map(Number);
+    return Number.isFinite(w) && Number.isFinite(h) ? { w, h } : null;
   }
 }
 

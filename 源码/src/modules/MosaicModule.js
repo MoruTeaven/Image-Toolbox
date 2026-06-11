@@ -544,18 +544,46 @@ class MosaicModule extends BaseModule {
     this.history.saveState();
   }
 
+  applyPreset(presetName) {
+    const presets = {
+      'mosaic-light': { mode: 'mosaic', mosaicSize: 6 },
+      'mosaic-standard': { mode: 'mosaic', mosaicSize: 12 },
+      'blur-strong': { mode: 'blur', blurRadius: 18 },
+    };
+
+    const preset = presets[presetName];
+    if (!preset) return;
+
+    Object.assign(this.options, preset);
+    if (preset.mode) this.setMode(preset.mode);
+    if (preset.mosaicSize) this.setMosaicSize(preset.mosaicSize);
+    if (preset.blurRadius) this.setBlurRadius(preset.blurRadius);
+  }
+
   // ═══════════════════════════════════════
-  // 选项栏 HTML
+  // 预设栏 HTML
   // ═══════════════════════════════════════
 
   getOptionsBarHTML() {
-    const effectMode = this.options.mode;
-
-    // TODO: 画笔模式暂不暴露 UI，待修复 bug 后恢复 drawMode 切换按钮
-    let html = `
+    const isLight = this.options.mode === 'mosaic' && this.options.mosaicSize === 6;
+    const isStandard = this.options.mode === 'mosaic' && this.options.mosaicSize === 12;
+    const isStrongBlur = this.options.mode === 'blur' && this.options.blurRadius === 18;
+    return `
       <div class="options-group">
-        <label class="options-label">效果</label>
-        <select class="options-select" id="mosaic-mode">
+        <button class="options-btn options-btn-sm ${isLight ? 'active' : ''}" data-preset="mosaic-light">轻度马赛克</button>
+        <button class="options-btn options-btn-sm ${isStandard ? 'active' : ''}" data-preset="mosaic-standard">标准马赛克</button>
+        <button class="options-btn options-btn-sm ${isStrongBlur ? 'active' : ''}" data-preset="blur-strong">强模糊</button>
+      </div>
+    `;
+  }
+
+  getPropertyPanelHTML() {
+    const effectMode = this.options.mode;
+    let html = `
+      <div class="property-section-title">打码工具</div>
+      <div class="property-item property-item--wide">
+        <label>效果</label>
+        <select class="property-select" data-module-prop="mode" data-refresh-property="true">
           <option value="mosaic" ${effectMode === 'mosaic' ? 'selected' : ''}>马赛克</option>
           <option value="blur" ${effectMode === 'blur' ? 'selected' : ''}>模糊</option>
         </select>
@@ -564,25 +592,42 @@ class MosaicModule extends BaseModule {
 
     if (effectMode === 'mosaic') {
       html += `
-        <div class="options-group">
-          <label class="options-label">块大小</label>
-          <input type="range" class="options-slider" id="mosaic-size" 
-                 min="2" max="40" value="${this.options.mosaicSize}" />
-          <span class="options-value" id="mosaic-size-value">${this.options.mosaicSize}px</span>
+        <div class="property-item property-item--wide">
+          <label>块大小</label>
+          <input type="range" class="property-range" data-module-prop="mosaicSize" min="2" max="40" value="${this.options.mosaicSize}" />
+          <span class="property-value">${this.options.mosaicSize}px</span>
         </div>
       `;
     } else {
       html += `
-        <div class="options-group">
-          <label class="options-label">模糊强度</label>
-          <input type="range" class="options-slider" id="blur-radius" 
-                 min="1" max="30" value="${this.options.blurRadius}" />
-          <span class="options-value" id="blur-radius-value">${this.options.blurRadius}px</span>
+        <div class="property-item property-item--wide">
+          <label>模糊强度</label>
+          <input type="range" class="property-range" data-module-prop="blurRadius" min="1" max="30" value="${this.options.blurRadius}" />
+          <span class="property-value">${this.options.blurRadius}px</span>
         </div>
       `;
     }
 
     return html;
+  }
+
+  onToolPropertyChange(key, value) {
+    switch (key) {
+      case 'mode':
+        this.setMode(value);
+        return true;
+      case 'mosaicSize':
+        this.setMosaicSize(value);
+        return true;
+      case 'blurRadius':
+        this.setBlurRadius(value);
+        return true;
+      case 'brushSize':
+        this.setBrushSize(value);
+        return true;
+      default:
+        return false;
+    }
   }
 }
 

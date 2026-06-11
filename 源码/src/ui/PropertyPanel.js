@@ -32,9 +32,7 @@ class PropertyPanel {
     // 选择变化 → 更新属性面板
     eventBus.on('canvas:selectionCreated', () => this._updateProperties());
     eventBus.on('canvas:selectionUpdated', () => this._updateProperties());
-    eventBus.on('canvas:selectionCleared', () => {
-      this._clearProperties();
-    });
+    eventBus.on('canvas:selectionCleared', () => this._updateProperties());
     eventBus.on('layer:selected', () => this._updateProperties());
     eventBus.on('layers:updated', () => this._updateProperties());
     eventBus.on('canvas:objectAdded', () => this._updateProperties());
@@ -43,6 +41,7 @@ class PropertyPanel {
     eventBus.on('image:loaded', () => this._clearProperties());
     eventBus.on('tool:changed', () => this._updateProperties());
     eventBus.on('crop:updated', () => this._updateProperties());
+    eventBus.on('tool:propertiesChanged', () => this._updateProperties());
 
     // 物件修改 → 刷新属性
     eventBus.on('canvas:objectModified', () => {
@@ -54,6 +53,9 @@ class PropertyPanel {
       this._handleInput(e);
     });
     this._el.addEventListener('change', (e) => {
+      this._handleInput(e);
+    });
+    this._el.addEventListener('click', (e) => {
       this._handleInput(e);
     });
   }
@@ -253,7 +255,16 @@ class PropertyPanel {
   _handleInput(e) {
     const target = e.target;
     const prop = target.dataset.prop;
-    if (!prop) return;
+    const moduleProp = target.dataset.moduleProp;
+    const moduleAction = target.dataset.moduleAction;
+    if (!prop && !moduleProp && !moduleAction) return;
+    if (e.type === 'click' && !moduleAction) return;
+
+    const module = this._tm.getCurrentModule();
+    if (moduleProp || moduleAction) {
+      this._handleModuleInput(e, module, moduleProp, moduleAction);
+      return;
+    }
 
     const active = this._getActiveObject();
     if (!active) return;
@@ -343,13 +354,37 @@ class PropertyPanel {
     this._requestRender();
 
     // 通知模块属性变更，保留模块自定义联动能力
-    const module = this._tm.getCurrentModule();
     if (module?.onPropertyChange) {
       module.onPropertyChange(prop, propertyValue, { eventType: e.type });
     }
 
     if (e.type === 'change' && !active.excludeFromHistory) {
       this._notifyObjectChanged(active);
+    }
+  }
+
+  _handleModuleInput(e, module, prop, action) {
+    if (!module) return;
+
+    const target = e.target;
+    if (action) {
+      if (typeof module.onToolPropertyAction === 'function') {
+        module.onToolPropertyAction(action, { eventType: e.type });
+      }
+      return;
+    }
+
+    if (!prop || typeof module.onToolPropertyChange !== 'function') return;
+
+    const value = target.type === 'checkbox' ? target.checked : target.value;
+    const handled = module.onToolPropertyChange(prop, value, { eventType: e.type });
+
+    if (target.type === 'range' && target.nextElementSibling) {
+      target.nextElementSibling.textContent = `${value}px`;
+    }
+
+    if (handled !== false && target.dataset.refreshProperty === 'true') {
+      this._updateProperties();
     }
   }
 

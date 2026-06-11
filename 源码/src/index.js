@@ -15,6 +15,7 @@ import PropertyPanel from './ui/PropertyPanel.js';
 import LayerPanel from './ui/LayerPanel.js';
 import StatusBar from './ui/StatusBar.js';
 import AccountPage, { EDITOR_BARS_LAYOUT_KEY, EDITOR_BARS_LAYOUTS } from './ui/AccountPage.js';
+import { initTheme } from './utils/theme.js';
 
 // ═══════════════════════════════════════
 // 应用入口
@@ -47,6 +48,7 @@ class App {
     }
 
     try {
+      initTheme();
       this._applyEditorBarsLayout(this._getEditorBarsLayout());
 
       // 1. 初始化画布管理器
@@ -106,7 +108,8 @@ class App {
 
       this.accountPage = new AccountPage(
         document.getElementById('account-page'),
-        document.getElementById('app')
+        document.getElementById('app'),
+        this.sidePanelTabs
       );
 
       // 6. 绑定全局事件
@@ -247,6 +250,10 @@ class App {
     });
 
     // ═══ 编辑器布局偏好 ═══
+    eventBus.on('sidePanel:layoutChanged', (layout) => {
+      this.sidePanelTabs?.applyLayout(layout, false);
+    });
+
     eventBus.on('editorBars:layoutChanged', (layout) => {
       this._applyEditorBarsLayout(layout);
     });

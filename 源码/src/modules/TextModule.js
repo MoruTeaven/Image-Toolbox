@@ -208,37 +208,8 @@ class TextModule extends BaseModule {
   // ── 选项栏 ──
 
   getOptionsBarHTML() {
-    const opts = this.options;
     return `
       <div class="options-group">
-        <label class="options-label">字体</label>
-        <select class="options-select" id="text-font-family">
-          <option value="Microsoft YaHei, PingFang SC, sans-serif">微软雅黑</option>
-          <option value="SimSun, STSong, serif">宋体</option>
-          <option value="SimHei, STHeiti, sans-serif">黑体</option>
-          <option value="KaiTi, STKaiti, serif">楷体</option>
-          <option value="Arial, sans-serif">Arial</option>
-        </select>
-      </div>
-      <div class="options-group">
-        <label class="options-label">字号</label>
-        <select class="options-select" id="text-font-size">
-          ${[12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72].map(s =>
-            `<option value="${s}" ${s === opts.fontSize ? 'selected' : ''}>${s}</option>`
-          ).join('')}
-        </select>
-      </div>
-      <div class="options-group">
-        <label class="options-label">颜色</label>
-        <input type="color" class="options-color" id="text-color" value="${opts.fill}" />
-      </div>
-      <div class="options-group">
-        <button class="options-btn" id="text-bold" title="粗体" style="font-weight:bold">B</button>
-        <button class="options-btn" id="text-italic" title="斜体" style="font-style:italic">I</button>
-        <button class="options-btn" id="text-underline" title="下划线" style="text-decoration:underline">U</button>
-      </div>
-      <div class="options-group">
-        <label class="options-label">预设</label>
         <button class="options-btn options-btn-sm" data-preset="red" style="color:#d83b31">标注红</button>
         <button class="options-btn options-btn-sm" data-preset="white">说明白</button>
         <button class="options-btn options-btn-sm" data-preset="yellow" style="color:#FFD700">标题黄</button>
@@ -251,7 +222,53 @@ class TextModule extends BaseModule {
   getPropertyPanelHTML() {
     const active = this.canvasManager.getActiveObject();
     if (!active || (active.type !== 'i-text' && active.type !== 'text' && active.type !== 'textbox')) {
-      return '<div class="property-empty">选中文字物件以编辑属性</div>';
+      const opts = this.options;
+      return `
+        <div class="property-section-title">文字工具默认值</div>
+        <div class="property-item property-item--wide">
+          <label>字体</label>
+          <select class="property-select" data-module-prop="fontFamily">
+            ${this._getFontOptionsHTML(opts.fontFamily)}
+          </select>
+        </div>
+        <div class="property-item">
+          <label>字号</label>
+          <input type="number" class="property-input" data-module-prop="fontSize" value="${opts.fontSize}" min="8" max="200" />
+        </div>
+        <div class="property-item">
+          <label>颜色</label>
+          <input type="color" class="property-color" data-module-prop="fill" value="${opts.fill || '#000000'}" />
+        </div>
+        <div class="property-item">
+          <label>描边</label>
+          <input type="color" class="property-color" data-module-prop="stroke" value="${opts.stroke || '#000000'}" />
+        </div>
+        <div class="property-item">
+          <label>描边宽</label>
+          <input type="number" class="property-input" data-module-prop="strokeWidth" value="${opts.strokeWidth || 0}" min="0" max="20" />
+        </div>
+        <div class="property-item">
+          <label>粗体</label>
+          <input type="checkbox" class="property-checkbox" data-module-prop="fontWeight" ${opts.fontWeight === 'bold' ? 'checked' : ''} />
+        </div>
+        <div class="property-item">
+          <label>斜体</label>
+          <input type="checkbox" class="property-checkbox" data-module-prop="fontStyle" ${opts.fontStyle === 'italic' ? 'checked' : ''} />
+        </div>
+        <div class="property-item">
+          <label>下划线</label>
+          <input type="checkbox" class="property-checkbox" data-module-prop="underline" ${opts.underline ? 'checked' : ''} />
+        </div>
+        <div class="property-item">
+          <label>对齐</label>
+          <select class="property-select property-select--short" data-module-prop="textAlign">
+            ${this._getSelectOption('left', '左', opts.textAlign)}
+            ${this._getSelectOption('center', '中', opts.textAlign)}
+            ${this._getSelectOption('right', '右', opts.textAlign)}
+          </select>
+        </div>
+        <div class="property-empty">这些设置会用于接下来新增的文字。</div>
+      `;
     }
 
     return `
@@ -296,6 +313,62 @@ class TextModule extends BaseModule {
     }
 
     this.canvasManager.canvas.renderAll();
+  }
+
+  onToolPropertyChange(key, value) {
+    switch (key) {
+      case 'fontFamily':
+        this.options.fontFamily = value;
+        break;
+      case 'fontSize':
+        this.options.fontSize = Math.max(8, parseInt(value, 10) || this.options.fontSize);
+        break;
+      case 'fill':
+        this.options.fill = value;
+        break;
+      case 'stroke':
+        this.options.stroke = value;
+        break;
+      case 'strokeWidth':
+        this.options.strokeWidth = Math.max(0, parseInt(value, 10) || 0);
+        break;
+      case 'fontWeight':
+        this.options.fontWeight = value ? 'bold' : 'normal';
+        break;
+      case 'fontStyle':
+        this.options.fontStyle = value ? 'italic' : 'normal';
+        break;
+      case 'underline':
+        this.options.underline = !!value;
+        break;
+      case 'textAlign':
+        this.options.textAlign = value;
+        break;
+      default:
+        return false;
+    }
+
+    return true;
+  }
+
+  _getFontOptionsHTML(current) {
+    const options = [
+      ['Microsoft YaHei, PingFang SC, sans-serif', '微软雅黑'],
+      ['SimSun, STSong, serif', '宋体'],
+      ['SimHei, STHeiti, sans-serif', '黑体'],
+      ['KaiTi, STKaiti, serif', '楷体'],
+      ['Arial, sans-serif', 'Arial'],
+    ];
+    return options.map(([value, label]) => this._getSelectOption(value, label, current)).join('');
+  }
+
+  _getSelectOption(value, label, current) {
+    const selected = this._normalizeValue(value) === this._normalizeValue(current) ? ' selected' : '';
+    return `<option value="${value}"${selected}>${label}</option>`;
+  }
+
+  _normalizeValue(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
   }
 }
 

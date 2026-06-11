@@ -1,10 +1,8 @@
 import eventBus from '../core/EventBus.js';
 import { SIDE_PANEL_LAYOUT_KEY, SIDE_PANEL_LAYOUTS } from './SidePanelTabs.js';
+import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../utils/theme.js';
 import { updateCategories, updateRecords } from '../../updateRecords.js';
 
-const THEME_STORAGE_KEY = 'image-toolbox-theme';
-const THEME_VERSION_KEY = 'image-toolbox-theme-version';
-const THEME_VERSION = 'neutral-teal-light-default-v1';
 export const EDITOR_BARS_LAYOUT_KEY = 'image-toolbox-editor-bars-layout';
 export const EDITOR_BARS_LAYOUTS = {
   PRESETS_TOP: 'presets-top',
@@ -18,9 +16,10 @@ const VALID_EDITOR_BARS_LAYOUTS = new Set(Object.values(EDITOR_BARS_LAYOUTS));
  * 头像点击后进入独立页面，左侧导航，右侧内容区域
  */
 class AccountPage {
-  constructor(containerEl, editorEl) {
+  constructor(containerEl, editorEl, sidePanelTabs) {
     this._el = containerEl;
     this._editorEl = editorEl;
+    this._sidePanelTabs = sidePanelTabs;
     this._activeSection = 'mine';
     this._user = this._getUtoolsUser();
 
@@ -90,34 +89,34 @@ class AccountPage {
     eventBus.on('account:open', () => this.open());
 
     this._el.addEventListener('click', (e) => {
-      const navItem = e.target.closest('[data-section]');
+      const navItem = this._closest(e.target, '[data-section]');
       if (navItem) {
-        this._activeSection = navItem.dataset.section;
+        this._activeSection = navItem.getAttribute('data-section');
         this._render();
         return;
       }
 
-      const action = e.target.closest('[data-action]')?.dataset.action;
+      const action = this._closest(e.target, '[data-action]')?.getAttribute('data-action');
       if (action === 'back') {
         this.close();
         return;
       }
 
-      const theme = e.target.closest('[data-theme-choice]')?.dataset.themeChoice;
+      const theme = this._closest(e.target, '[data-theme-choice]')?.getAttribute('data-theme-choice');
       if (theme) {
         this._setTheme(theme);
         this._render();
         return;
       }
 
-      const panelLayout = e.target.closest('[data-side-panel-layout]')?.dataset.sidePanelLayout;
+      const panelLayout = this._closest(e.target, '[data-side-panel-layout]')?.getAttribute('data-side-panel-layout');
       if (panelLayout) {
         this._setSidePanelLayout(panelLayout);
         this._render();
         return;
       }
 
-      const editorBarsLayout = e.target.closest('[data-editor-bars-layout]')?.dataset.editorBarsLayout;
+      const editorBarsLayout = this._closest(e.target, '[data-editor-bars-layout]')?.getAttribute('data-editor-bars-layout');
       if (editorBarsLayout) {
         this._setEditorBarsLayout(editorBarsLayout);
         this._render();
@@ -141,6 +140,16 @@ class AccountPage {
         ${this._escapeHTML(label)}
       </button>
     `;
+  }
+
+  _closest(target, selector) {
+    if (!target) return null;
+    const match = typeof target.closest === 'function'
+      ? target.closest(selector)
+      : target.parentElement?.closest?.(selector) || null;
+
+    if (match && typeof this._el?.contains === 'function' && !this._el.contains(match)) return null;
+    return match;
   }
 
   _renderSection() {
@@ -167,7 +176,7 @@ class AccountPage {
   }
 
   _renderSettings() {
-    const theme = document.documentElement.getAttribute('data-theme') || 'light';
+    const theme = getThemeChoice();
     const sidePanelLayout = this._getSidePanelLayout();
     const editorBarsLayout = this._getEditorBarsLayout();
     return `
@@ -176,8 +185,9 @@ class AccountPage {
         <div class="account-card__value">主题设置</div>
         <p>选择适合当前图片处理环境的界面主题。</p>
         <div class="account-page__theme-row">
-          <button class="account-page__theme-choice ${theme === 'light' ? 'account-page__theme-choice--active' : ''}" type="button" data-theme-choice="light">浅色</button>
-          <button class="account-page__theme-choice ${theme === 'dark' ? 'account-page__theme-choice--active' : ''}" type="button" data-theme-choice="dark">深色</button>
+          <button class="account-page__theme-choice ${theme === THEME_CHOICES.SYSTEM ? 'account-page__theme-choice--active' : ''}" type="button" data-theme-choice="${THEME_CHOICES.SYSTEM}">跟随系统</button>
+          <button class="account-page__theme-choice ${theme === THEME_CHOICES.LIGHT ? 'account-page__theme-choice--active' : ''}" type="button" data-theme-choice="${THEME_CHOICES.LIGHT}">浅色</button>
+          <button class="account-page__theme-choice ${theme === THEME_CHOICES.DARK ? 'account-page__theme-choice--active' : ''}" type="button" data-theme-choice="${THEME_CHOICES.DARK}">深色</button>
         </div>
       </div>
 
@@ -297,19 +307,14 @@ class AccountPage {
   }
 
   _setTheme(theme) {
-    if (theme !== 'light' && theme !== 'dark') return;
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
-    localStorage.setItem(THEME_VERSION_KEY, THEME_VERSION);
-    document.querySelectorAll('.theme-toggle').forEach(el => {
-      el.setAttribute('data-theme', theme);
-    });
+    applyThemeChoice(theme);
   }
 
   _setSidePanelLayout(layout) {
     if (!Object.values(SIDE_PANEL_LAYOUTS).includes(layout)) return;
 
     localStorage.setItem(SIDE_PANEL_LAYOUT_KEY, layout);
+    this._sidePanelTabs?.applyLayout(layout, false);
     eventBus.emit('sidePanel:layoutChanged', layout);
   }
 
