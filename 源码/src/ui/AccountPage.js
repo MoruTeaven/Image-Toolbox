@@ -214,19 +214,6 @@ class AccountPage {
           <p>${this._escapeHTML(user.status)}</p>
         </div>
       </div>
-
-      <div class="account-page__grid">
-        <div class="account-card">
-          <div class="account-card__label">头像来源</div>
-          <div class="account-card__value">uTools 用户头像</div>
-          <p>头像会跟随 uTools 账号信息展示，加载失败时显示姓名首字母。</p>
-        </div>
-        <div class="account-card">
-          <div class="account-card__label">当前模式</div>
-          <div class="account-card__value">本地图片编辑</div>
-          <p>图片导入、编辑和导出流程保持在本机环境内完成。</p>
-        </div>
-      </div>
     `;
   }
 

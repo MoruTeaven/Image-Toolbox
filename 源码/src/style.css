@@ -385,6 +385,10 @@ html, body {
   box-shadow: 0 8px 24px rgba(25, 42, 46, 0.06);
 }
 
+.account-page__content > .account-card + .account-card {
+  margin-top: 14px;
+}
+
 .account-card--profile {
   display: flex;
   align-items: center;
