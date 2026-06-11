@@ -1,8 +1,17 @@
 # 图片工具箱 — 开发代理记录
 
-> 最后更新：2026-06-10
+> 最后更新：2026-06-11
 
 ## 功能改进
+
+### 修复二次裁剪范围和旋转裁剪 (2026-06-11)
+- [Bug] **第一次裁剪后再次剪切，裁剪框被上一轮裁剪范围裁掉**：
+  - **根因**：已应用裁剪保存在 `canvas.clipPath` 上，Fabric.js 会用画布级 clipPath 裁掉后续新增的裁剪遮罩和裁剪框，导致第二次进入剪切时裁剪框只能在上一轮裁剪范围内完整显示
+  - **修复**：进入剪切模式时临时移除画布级 clipPath，并把该裁剪范围临时转移到已有图层的对象级 clipPath 上渲染；应用/取消/退出剪切时再清理并恢复，避免裁剪工具自身被裁掉
+- [Bug] **裁剪框旋转后应用剪切不生效**：
+  - **根因**：`applyCrop()` 只用 `left/top/width/height` 重新创建未旋转矩形，丢失了裁剪框的 `angle`、`scaleX/scaleY`、`originX/originY` 等变换信息
+  - **修复**：从当前裁剪框复制完整几何变换创建 clipPath；`CanvasManager` 序列化 canvas clipPath 时额外保留 `absolutePositioned`/`inverted`，保证撤销/重做后定位语义一致
+  - 涉及文件：`CropModule.js`、`CanvasManager.js`、`updateRecords.js`
 
 ### 移除网络资源引用 (2026-06-10)
 - [Bug] **uTools 限制不能引入网络资源的 js 或 css**：

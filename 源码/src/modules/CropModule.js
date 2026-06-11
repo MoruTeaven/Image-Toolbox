@@ -14,6 +14,10 @@ class CropModule extends BaseModule {
 
     this._cropRect = null;
     this._maskRect = null;
+    this._detachedCanvasClipPath = null;
+    this._clipPathDetached = false;
+    this._objectClipPathBackups = null;
+    this._applyingCrop = false;
     this._isAdjusting = false;
     this._boundMouseDown = this._onMouseDown.bind(this);
     this._boundMouseMove = this._onMouseMove.bind(this);
@@ -25,6 +29,8 @@ class CropModule extends BaseModule {
 
     const canvas = this.canvasManager.canvas;
     canvas.defaultCursor = 'crosshair';
+    this._applyingCrop = false;
+    this._detachCanvasClipPath();
 
     // 创建遮罩和裁剪框（这两个对象在 super.activate() 之后创建，
     // 因此不受 BaseModule 的禁用影响，各自显式设置了 selectable/evented）
@@ -46,6 +52,12 @@ class CropModule extends BaseModule {
     canvas.off('mouse:up', this._boundMouseUp);
 
     this._removeCropOverlay();
+    if (this._applyingCrop) {
+      this._discardDetachedCanvasClipPath(false);
+    } else {
+      this._restoreDetachedCanvasClipPath(false);
+    }
+    this._applyingCrop = false;
     canvas.renderAll();
 
     super.deactivate();  // 恢复所有对象交互
@@ -69,8 +81,12 @@ class CropModule extends BaseModule {
     const ratioMap = {
       'crop-ratio-free': null,
       'crop-ratio-1-1': { w: 1, h: 1 },
+      'crop-ratio-3-2': { w: 3, h: 2 },
+      'crop-ratio-2-3': { w: 2, h: 3 },
+      'crop-ratio-3-4': { w: 3, h: 4 },
       'crop-ratio-4-3': { w: 4, h: 3 },
       'crop-ratio-16-9': { w: 16, h: 9 },
+      'crop-ratio-9-16': { w: 9, h: 16 },
     };
 
     if (!Object.prototype.hasOwnProperty.call(ratioMap, presetName)) return;
@@ -82,21 +98,16 @@ class CropModule extends BaseModule {
    */
   applyCrop() {
     if (!this._cropRect) return;
-    this.history.saveState();
-
     const canvas = this.canvasManager.canvas;
-    const bounds = this._getCropBounds();
+    const clipRect = this._createClipPathFromSource(this._cropRect);
 
-    // 使用 clipPath 非破坏性裁剪
-    const clipRect = new fabric.Rect({
-      left: bounds.left,
-      top: bounds.top,
-      width: bounds.width,
-      height: bounds.height,
-      absolutePositioned: true,
-    });
+    this._saveStateBeforeCrop(canvas);
+    this._clearTemporaryObjectClipPaths(false);
 
     canvas.clipPath = clipRect;
+    this._detachedCanvasClipPath = null;
+    this._clipPathDetached = false;
+    this._applyingCrop = true;
     this._removeCropOverlay();
     canvas.renderAll();
 
@@ -110,6 +121,7 @@ class CropModule extends BaseModule {
    */
   cancelCrop() {
     this._removeCropOverlay();
+    this._restoreDetachedCanvasClipPath(false);
     this.canvasManager.canvas.renderAll();
     eventBus.emit('tool:requestChange', 'select');
   }
@@ -214,6 +226,7 @@ class CropModule extends BaseModule {
     // 更新遮罩挖空效果
     this._cropRect.on('moving', () => this._updateMask());
     this._cropRect.on('scaling', () => this._updateMask());
+    this._cropRect.on('rotating', () => this._updateMask());
     this._cropRect.on('resizing', () => this._updateMask());
 
     canvas.add(this._cropRect);
@@ -334,6 +347,117 @@ class CropModule extends BaseModule {
     return Math.max(min, Math.min(max, value));
   }
 
+  _createClipPathFromSource(source) {
+    const clipRect = new fabric.Rect({
+      left: source.left || 0,
+      top: source.top || 0,
+      width: Math.max(1, source.width || 0),
+      height: Math.max(1, source.height || 0),
+      scaleX: source.scaleX == null ? 1 : source.scaleX,
+      scaleY: source.scaleY == null ? 1 : source.scaleY,
+      angle: source.angle || 0,
+      skewX: source.skewX || 0,
+      skewY: source.skewY || 0,
+      flipX: !!source.flipX,
+      flipY: !!source.flipY,
+      originX: source.originX || 'left',
+      originY: source.originY || 'top',
+      rx: source.rx || 0,
+      ry: source.ry || 0,
+      fill: '#000',
+      stroke: null,
+      strokeWidth: 0,
+      absolutePositioned: true,
+      objectCaching: false,
+    });
+    clipRect.setCoords();
+    return clipRect;
+  }
+
+  _detachCanvasClipPath() {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas?.clipPath) return;
+
+    this._detachedCanvasClipPath = canvas.clipPath;
+    this._clipPathDetached = true;
+    canvas.clipPath = null;
+    this._applyTemporaryObjectClipPaths(this._detachedCanvasClipPath, false);
+    this._requestRender();
+  }
+
+  _applyTemporaryObjectClipPaths(clipPath, render = true) {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas || !clipPath) return;
+
+    this._clearTemporaryObjectClipPaths(false);
+    this._objectClipPathBackups = canvas.getObjects()
+      .filter(obj => obj !== this._cropRect && obj !== this._maskRect)
+      .map(obj => ({ obj, clipPath: obj.clipPath || null }));
+
+    this._objectClipPathBackups.forEach(({ obj }) => {
+      obj.set('clipPath', this._createClipPathFromSource(clipPath));
+      obj.dirty = true;
+    });
+
+    if (render) this._requestRender();
+  }
+
+  _clearTemporaryObjectClipPaths(render = true) {
+    if (!this._objectClipPathBackups) return;
+
+    this._objectClipPathBackups.forEach(({ obj, clipPath }) => {
+      obj.set('clipPath', clipPath || null);
+      obj.dirty = true;
+    });
+    this._objectClipPathBackups = null;
+
+    if (render) this._requestRender();
+  }
+
+  _restoreDetachedCanvasClipPath(render = true) {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) return;
+
+    this._clearTemporaryObjectClipPaths(false);
+    if (this._clipPathDetached) {
+      canvas.clipPath = this._detachedCanvasClipPath;
+    }
+    this._detachedCanvasClipPath = null;
+    this._clipPathDetached = false;
+
+    if (render) this._requestRender();
+  }
+
+  _discardDetachedCanvasClipPath(render = true) {
+    this._clearTemporaryObjectClipPaths(false);
+    this._detachedCanvasClipPath = null;
+    this._clipPathDetached = false;
+
+    if (render) this._requestRender();
+  }
+
+  _saveStateBeforeCrop(canvas) {
+    const currentClipPath = canvas.clipPath;
+    this._clearTemporaryObjectClipPaths(false);
+
+    if (this._clipPathDetached) {
+      canvas.clipPath = this._detachedCanvasClipPath;
+    }
+
+    this.history.saveState();
+    canvas.clipPath = currentClipPath;
+  }
+
+  _requestRender() {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) return;
+    if (typeof canvas.requestRenderAll === 'function') {
+      canvas.requestRenderAll();
+    } else {
+      canvas.renderAll();
+    }
+  }
+
   _removeCropOverlay() {
     const canvas = this.canvasManager.canvas;
     if (this._maskRect) {
@@ -366,8 +490,12 @@ class CropModule extends BaseModule {
       <div class="options-group">
         <button class="options-btn options-btn-sm ${!ratio ? 'active' : ''}" data-preset="crop-ratio-free">自由比例</button>
         <button class="options-btn options-btn-sm ${ratio && ratio.w === 1 && ratio.h === 1 ? 'active' : ''}" data-preset="crop-ratio-1-1">1:1</button>
+        <button class="options-btn options-btn-sm ${ratio && ratio.w === 3 && ratio.h === 2 ? 'active' : ''}" data-preset="crop-ratio-3-2">3:2</button>
+        <button class="options-btn options-btn-sm ${ratio && ratio.w === 2 && ratio.h === 3 ? 'active' : ''}" data-preset="crop-ratio-2-3">2:3</button>
+        <button class="options-btn options-btn-sm ${ratio && ratio.w === 3 && ratio.h === 4 ? 'active' : ''}" data-preset="crop-ratio-3-4">3:4</button>
         <button class="options-btn options-btn-sm ${ratio && ratio.w === 4 && ratio.h === 3 ? 'active' : ''}" data-preset="crop-ratio-4-3">4:3</button>
         <button class="options-btn options-btn-sm ${ratio && ratio.w === 16 && ratio.h === 9 ? 'active' : ''}" data-preset="crop-ratio-16-9">16:9</button>
+        <button class="options-btn options-btn-sm ${ratio && ratio.w === 9 && ratio.h === 16 ? 'active' : ''}" data-preset="crop-ratio-9-16">9:16</button>
       </div>
     `;
   }
@@ -402,8 +530,12 @@ class CropModule extends BaseModule {
         <select class="property-select property-select--short" data-module-prop="aspectRatio" data-refresh-property="true">
           <option value="free" ${!ratio ? 'selected' : ''}>自由</option>
           <option value="1:1" ${ratio && ratio.w === 1 && ratio.h === 1 ? 'selected' : ''}>1:1</option>
+          <option value="3:2" ${ratio && ratio.w === 3 && ratio.h === 2 ? 'selected' : ''}>3:2</option>
+          <option value="2:3" ${ratio && ratio.w === 2 && ratio.h === 3 ? 'selected' : ''}>2:3</option>
+          <option value="3:4" ${ratio && ratio.w === 3 && ratio.h === 4 ? 'selected' : ''}>3:4</option>
           <option value="4:3" ${ratio && ratio.w === 4 && ratio.h === 3 ? 'selected' : ''}>4:3</option>
           <option value="16:9" ${ratio && ratio.w === 16 && ratio.h === 9 ? 'selected' : ''}>16:9</option>
+          <option value="9:16" ${ratio && ratio.w === 9 && ratio.h === 16 ? 'selected' : ''}>9:16</option>
         </select>
       </div>
       <div class="property-actions">

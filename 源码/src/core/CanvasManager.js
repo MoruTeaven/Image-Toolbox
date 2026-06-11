@@ -1,5 +1,7 @@
 import eventBus from './EventBus.js';
 
+const CLIP_PATH_SERIALIZED_PROPS = ['clipPath', 'absolutePositioned', 'inverted'];
+
 const DEFAULT_CANVAS_OPTIONS = {
   width: 800,
   height: 600,
@@ -272,10 +274,10 @@ class CanvasManager {
 
   toJSON() {
     if (!this.canvas) return null;
-    const json = this.canvas.toJSON(['clipPath', 'filters', 'id', 'selectable', 'evented']);
+    const json = this.canvas.toJSON(['clipPath', 'filters', 'id', 'selectable', 'evented', 'absolutePositioned', 'inverted']);
     // 手动序列化 canvas.clipPath（Fabric.js canvas.toJSON 不包含此属性）
     if (this.canvas.clipPath) {
-      json._canvasClipPath = this.canvas.clipPath.toJSON(['clipPath']);
+      json._canvasClipPath = this.canvas.clipPath.toJSON(CLIP_PATH_SERIALIZED_PROPS);
     }
     return json;
   }
@@ -296,6 +298,9 @@ class CanvasManager {
         if (canvasClipPathData) {
           fabric.util.enlivenObjects([canvasClipPathData], (objects) => {
             this.canvas.clipPath = objects[0] || null;
+            if (this.canvas.clipPath) {
+              this.canvas.clipPath.absolutePositioned = true;
+            }
             this.canvas.renderAll();
           }, 'fabric.Rect');
         } else {

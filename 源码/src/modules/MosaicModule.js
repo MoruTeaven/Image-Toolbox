@@ -548,6 +548,9 @@ class MosaicModule extends BaseModule {
     const presets = {
       'mosaic-light': { mode: 'mosaic', mosaicSize: 6 },
       'mosaic-standard': { mode: 'mosaic', mosaicSize: 12 },
+      'mosaic-heavy': { mode: 'mosaic', mosaicSize: 24 },
+      'blur-light': { mode: 'blur', blurRadius: 6 },
+      'blur-standard': { mode: 'blur', blurRadius: 12 },
       'blur-strong': { mode: 'blur', blurRadius: 18 },
     };
 
@@ -567,11 +570,17 @@ class MosaicModule extends BaseModule {
   getOptionsBarHTML() {
     const isLight = this.options.mode === 'mosaic' && this.options.mosaicSize === 6;
     const isStandard = this.options.mode === 'mosaic' && this.options.mosaicSize === 12;
+    const isHeavy = this.options.mode === 'mosaic' && this.options.mosaicSize === 24;
+    const isLightBlur = this.options.mode === 'blur' && this.options.blurRadius === 6;
+    const isStandardBlur = this.options.mode === 'blur' && this.options.blurRadius === 12;
     const isStrongBlur = this.options.mode === 'blur' && this.options.blurRadius === 18;
     return `
       <div class="options-group">
-        <button class="options-btn options-btn-sm ${isLight ? 'active' : ''}" data-preset="mosaic-light">轻度马赛克</button>
-        <button class="options-btn options-btn-sm ${isStandard ? 'active' : ''}" data-preset="mosaic-standard">标准马赛克</button>
+        <button class="options-btn options-btn-sm ${isLight ? 'active' : ''}" data-preset="mosaic-light">轻马赛克</button>
+        <button class="options-btn options-btn-sm ${isStandard ? 'active' : ''}" data-preset="mosaic-standard">中马赛克</button>
+        <button class="options-btn options-btn-sm ${isHeavy ? 'active' : ''}" data-preset="mosaic-heavy">重马赛克</button>
+        <button class="options-btn options-btn-sm ${isLightBlur ? 'active' : ''}" data-preset="blur-light">轻模糊</button>
+        <button class="options-btn options-btn-sm ${isStandardBlur ? 'active' : ''}" data-preset="blur-standard">中模糊</button>
         <button class="options-btn options-btn-sm ${isStrongBlur ? 'active' : ''}" data-preset="blur-strong">强模糊</button>
       </div>
     `;

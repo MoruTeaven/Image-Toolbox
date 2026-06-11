@@ -16,7 +16,6 @@ class OptionsBar {
 
   _render() {
     this._el.innerHTML = `
-      <div class="optionsbar__label hidden" id="optionsbar-label">工具预设</div>
       <div class="optionsbar__controls" id="optionsbar-controls"></div>
     `;
   }
@@ -36,16 +35,13 @@ class OptionsBar {
 
   _updateControls() {
     const controlsEl = this._el.querySelector('#optionsbar-controls');
-    const labelEl = this._el.querySelector('#optionsbar-label');
     if (!controlsEl) return;
 
     const module = this._tm.getCurrentModule();
     if (module && typeof module.getOptionsBarHTML === 'function') {
       controlsEl.innerHTML = module.getOptionsBarHTML();
-      labelEl?.classList.toggle('hidden', !controlsEl.innerHTML.trim());
     } else {
       controlsEl.innerHTML = '';
-      labelEl?.classList.add('hidden');
     }
   }
 

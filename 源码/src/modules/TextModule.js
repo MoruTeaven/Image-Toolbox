@@ -146,7 +146,7 @@ class TextModule extends BaseModule {
 
   /**
    * 应用文字预设样式
-   * @param {string} presetName - 'red' | 'white' | 'yellow'
+   * @param {string} presetName
    */
   applyPreset(presetName) {
     const presets = {
@@ -167,6 +167,30 @@ class TextModule extends BaseModule {
         fill: '#FFD700',
         fontWeight: 'bold',
         stroke: '#000000',
+        strokeWidth: 2,
+      },
+      black: {
+        fill: '#111111',
+        fontWeight: 'bold',
+        stroke: '#FFFFFF',
+        strokeWidth: 2,
+      },
+      outline: {
+        fill: '#FFFFFF',
+        fontWeight: 'bold',
+        stroke: '#000000',
+        strokeWidth: 3,
+      },
+      orange: {
+        fill: '#FF7A00',
+        fontWeight: 'bold',
+        stroke: '#FFFFFF',
+        strokeWidth: 2,
+      },
+      green: {
+        fill: '#2EAD4A',
+        fontWeight: 'bold',
+        stroke: '#FFFFFF',
         strokeWidth: 2,
       },
     };
@@ -213,6 +237,10 @@ class TextModule extends BaseModule {
         <button class="options-btn options-btn-sm" data-preset="red" style="color:#d83b31">标注红</button>
         <button class="options-btn options-btn-sm" data-preset="white">说明白</button>
         <button class="options-btn options-btn-sm" data-preset="yellow" style="color:#FFD700">标题黄</button>
+        <button class="options-btn options-btn-sm" data-preset="black">黑白字</button>
+        <button class="options-btn options-btn-sm" data-preset="outline">描边白</button>
+        <button class="options-btn options-btn-sm" data-preset="orange" style="color:#FF7A00">警示橙</button>
+        <button class="options-btn options-btn-sm" data-preset="green" style="color:#2EAD4A">强调绿</button>
       </div>
     `;
   }
