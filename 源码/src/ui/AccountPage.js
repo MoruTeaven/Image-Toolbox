@@ -215,23 +215,61 @@ class AccountPage {
 
   _renderAbout() {
     return `
-      <div class="account-card">
-        <div class="account-card__label">产品</div>
-        <div class="account-card__value">图片工具箱</div>
-        <p>面向 uTools 的轻量图片编辑插件，聚焦打码、裁剪、文字标注和快速导出。</p>
-      </div>
+      <div class="account-about">
+        <section class="account-about__hero">
+          <div class="account-about__hero-glow"></div>
+          <div class="account-about__logo-wrap">
+            <img class="account-about__logo" src="../logo.png" alt="图片工具箱" draggable="false">
+          </div>
+          <div class="account-about__hero-body">
+            <div class="account-about__kicker">Image Toolbox for uTools</div>
+            <h2>图片工具箱</h2>
+            <p>一款专注截图和图片快速处理的 uTools 插件，提供打码、裁剪、加字和快速导出能力。</p>
+            <div class="account-about__tags" aria-label="功能标签">
+              <span>轻量编辑</span>
+              <span>本地处理</span>
+              <span>快速导出</span>
+            </div>
+          </div>
+        </section>
 
-      <div class="account-page__grid">
-        <div class="account-card">
-          <div class="account-card__label">运行环境</div>
-          <div class="account-card__value">uTools 插件</div>
-          <p>支持从文件匹配、剪贴板和拖拽入口快速进入编辑。</p>
+        <div class="account-about__layout">
+          <section class="account-about__panel account-about__author">
+            <div class="account-about__section-label">作者</div>
+            <div class="account-about__author-name">抹露茶柒</div>
+            <p>感谢使用图片工具箱。如果你有功能建议、问题反馈或协作想法，可以通过下面的方式联系。</p>
+          </section>
+
+          <section class="account-about__panel account-about__contacts" aria-label="联系方式">
+            <a class="account-about__contact" href="https://moruteaven.com" target="_blank" rel="noopener noreferrer">
+              <span class="account-about__contact-icon">W</span>
+              <span>
+                <strong>作者主页</strong>
+                <em>moruteaven.com</em>
+              </span>
+            </a>
+            <a class="account-about__contact" href="mailto:me@moruteaven.com">
+              <span class="account-about__contact-icon">@</span>
+              <span>
+                <strong>联系邮箱</strong>
+                <em>me@moruteaven.com</em>
+              </span>
+            </a>
+            <a class="account-about__contact" href="https://qm.qq.com/q/Nzn12S22e6" target="_blank" rel="noopener noreferrer">
+              <span class="account-about__contact-icon">Q</span>
+              <span>
+                <strong>QQ 交流群</strong>
+                <em>加入群聊反馈问题</em>
+              </span>
+            </a>
+          </section>
         </div>
-        <div class="account-card">
-          <div class="account-card__label">版本</div>
-          <div class="account-card__value">v0.3</div>
-          <p>账户页为后续会员、反馈和偏好设置入口预留。</p>
-        </div>
+
+        <section class="account-about__footer">
+          <span>版本 v0.3</span>
+          <span>运行环境：uTools 插件</span>
+          <span>Copyright © 抹露茶柒</span>
+        </section>
       </div>
     `;
   }

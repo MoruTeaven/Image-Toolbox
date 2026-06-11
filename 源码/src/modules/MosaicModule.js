@@ -27,6 +27,9 @@ class MosaicModule extends BaseModule {
     this._selectionRect = null;   // 框选模式的虚线矩形
     this._brushPoints = [];       // 画笔模式的轨迹点
     this._brushPreview = null;    // 画笔预览圆圈
+    this._detachedCanvasClipPath = null;
+    this._clipPathDetached = false;
+    this._objectClipPathBackups = null;
 
     this._boundMouseDown = this._onMouseDown.bind(this);
     this._boundMouseMove = this._onMouseMove.bind(this);
@@ -40,6 +43,7 @@ class MosaicModule extends BaseModule {
 
     const canvas = this.canvasManager.canvas;
     canvas.defaultCursor = this.options.drawMode === 'brush' ? 'none' : 'crosshair';
+    this._detachCanvasClipPath();
 
     canvas.on('mouse:down', this._boundMouseDown);
     canvas.on('mouse:move', this._boundMouseMove);
@@ -57,6 +61,7 @@ class MosaicModule extends BaseModule {
 
     this._cleanupRect();
     this._cleanupBrush();
+    this._restoreDetachedCanvasClipPath(false);
     canvas.renderAll();
 
     super.deactivate();
@@ -254,18 +259,18 @@ class MosaicModule extends BaseModule {
     const points = this._brushPoints;
     this._brushPoints = [];
 
-    const rect = {
+    const rect = this._clipRectToEditableImage({
       left: Math.round(minX - padding),
       top: Math.round(minY - padding),
       width: Math.round(maxX - minX + padding * 2),
       height: Math.round(maxY - minY + padding * 2),
-    };
+    });
 
-    if (rect.width < 1 || rect.height < 1) return;
+    if (!rect || rect.width < 1 || rect.height < 1) return;
 
     // 按画笔路径做蒙版打码
     this._applyBrushMaskedEffect(rect, points);
-    this.history.saveState();
+    this._saveStateWithCanvasClipPath();
   }
 
   _cleanupBrush() {
@@ -418,6 +423,9 @@ class MosaicModule extends BaseModule {
    * 对指定矩形区域打码（框选模式使用）
    */
   applyMosaic(rect) {
+    rect = this._clipRectToEditableImage(rect);
+    if (!rect || rect.width < 1 || rect.height < 1) return;
+
     const mode = this.options.mode;
 
     if (mode === 'mosaic') {
@@ -426,7 +434,7 @@ class MosaicModule extends BaseModule {
       this._applyBlurEffect(rect);
     }
 
-    this.history.saveState();
+    this._saveStateWithCanvasClipPath();
   }
 
   _applyMosaicEffect(rect) {
@@ -520,6 +528,7 @@ class MosaicModule extends BaseModule {
       evented: false,
       id: 'mosaic_' + Date.now(),
     });
+    this._attachCurrentCropClipPath(img);
 
     // 清理框选虚线
     if (this._selectionRect) {
@@ -529,6 +538,201 @@ class MosaicModule extends BaseModule {
 
     canvas.add(img);
     canvas.renderAll();
+  }
+
+  _clipRectToEditableImage(rect) {
+    const bounds = this._getEditableImageBounds();
+    if (!bounds) return rect;
+
+    const left = this._clamp(rect.left, bounds.left, bounds.right);
+    const top = this._clamp(rect.top, bounds.top, bounds.bottom);
+    const right = this._clamp(rect.left + rect.width, bounds.left, bounds.right);
+    const bottom = this._clamp(rect.top + rect.height, bounds.top, bounds.bottom);
+
+    if (right <= left || bottom <= top) return null;
+    return {
+      left: Math.round(left),
+      top: Math.round(top),
+      width: Math.round(right - left),
+      height: Math.round(bottom - top),
+    };
+  }
+
+  _getEditableImageBounds() {
+    const imageBounds = this._getImageBounds();
+    if (!imageBounds) return null;
+
+    const cropBounds = this._getCurrentCropBounds();
+    return cropBounds ? this._intersectBounds(imageBounds, cropBounds) : imageBounds;
+  }
+
+  _getImageBounds() {
+    const image = this.canvasManager.originalImage;
+    if (!image) return null;
+
+    return this._normalizeBounds(image.getBoundingRect(true, true));
+  }
+
+  _getCurrentCropBounds() {
+    return this._getClipPathBounds(this._getActiveCropClipPath());
+  }
+
+  _getClipPathBounds(clipPath) {
+    if (!clipPath) return null;
+
+    const bounds = this._normalizeBounds(clipPath.getBoundingRect(true, true));
+    const nested = this._getClipPathBounds(clipPath.clipPath);
+    return nested ? this._intersectBounds(bounds, nested) : bounds;
+  }
+
+  _normalizeBounds(bounds) {
+    const left = bounds.left;
+    const top = bounds.top;
+    const width = Math.max(0, bounds.width || 0);
+    const height = Math.max(0, bounds.height || 0);
+    return {
+      left,
+      top,
+      right: left + width,
+      bottom: top + height,
+      width,
+      height,
+    };
+  }
+
+  _intersectBounds(a, b) {
+    const left = Math.max(a.left, b.left);
+    const top = Math.max(a.top, b.top);
+    const right = Math.min(a.right, b.right);
+    const bottom = Math.min(a.bottom, b.bottom);
+    if (right <= left || bottom <= top) return null;
+    return { left, top, right, bottom, width: right - left, height: bottom - top };
+  }
+
+  _clamp(value, min, max) {
+    if (max < min) return min;
+    return Math.max(min, Math.min(max, value));
+  }
+
+  _getActiveCropClipPath() {
+    return this._detachedCanvasClipPath || this.canvasManager.canvas?.clipPath || null;
+  }
+
+  _detachCanvasClipPath() {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas?.clipPath) return;
+
+    this._detachedCanvasClipPath = canvas.clipPath;
+    this._clipPathDetached = true;
+    canvas.clipPath = null;
+    this._applyTemporaryObjectClipPaths(this._detachedCanvasClipPath, false);
+    this._requestRender();
+  }
+
+  _applyTemporaryObjectClipPaths(clipPath, render = true) {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas || !clipPath) return;
+
+    this._clearTemporaryObjectClipPaths(false);
+    this._objectClipPathBackups = canvas.getObjects()
+      .filter(obj => obj !== this._selectionRect && obj !== this._brushPreview)
+      .map(obj => ({ obj, clipPath: obj.clipPath || null }));
+
+    this._objectClipPathBackups.forEach(({ obj }) => {
+      obj.set('clipPath', this._createClipPathFromSource(clipPath));
+      obj.dirty = true;
+    });
+
+    if (render) this._requestRender();
+  }
+
+  _clearTemporaryObjectClipPaths(render = true) {
+    if (!this._objectClipPathBackups) return;
+
+    this._objectClipPathBackups.forEach(({ obj, clipPath }) => {
+      obj.set('clipPath', clipPath || null);
+      obj.dirty = true;
+    });
+    this._objectClipPathBackups = null;
+
+    if (render) this._requestRender();
+  }
+
+  _restoreDetachedCanvasClipPath(render = true) {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) return;
+
+    this._clearTemporaryObjectClipPaths(false);
+    if (this._clipPathDetached) {
+      canvas.clipPath = this._detachedCanvasClipPath;
+    }
+    this._detachedCanvasClipPath = null;
+    this._clipPathDetached = false;
+
+    if (render) this._requestRender();
+  }
+
+  _saveStateWithCanvasClipPath() {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas || !this._clipPathDetached) {
+      this.history.saveState();
+      return;
+    }
+
+    const currentClipPath = canvas.clipPath;
+    this._clearTemporaryObjectClipPaths(false);
+    canvas.clipPath = this._detachedCanvasClipPath;
+    this.history.saveState();
+    canvas.clipPath = currentClipPath;
+    this._applyTemporaryObjectClipPaths(this._detachedCanvasClipPath, false);
+  }
+
+  _requestRender() {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) return;
+    if (typeof canvas.requestRenderAll === 'function') {
+      canvas.requestRenderAll();
+    } else {
+      canvas.renderAll();
+    }
+  }
+
+  _attachCurrentCropClipPath(obj) {
+    const clipPath = this._getActiveCropClipPath();
+    if (!obj || !clipPath) return;
+
+    obj.set('clipPath', this._createClipPathFromSource(clipPath));
+    obj.dirty = true;
+  }
+
+  _createClipPathFromSource(source) {
+    const clipPath = new fabric.Rect({
+      left: source.left || 0,
+      top: source.top || 0,
+      width: Math.max(1, source.width || 0),
+      height: Math.max(1, source.height || 0),
+      scaleX: source.scaleX == null ? 1 : source.scaleX,
+      scaleY: source.scaleY == null ? 1 : source.scaleY,
+      angle: source.angle || 0,
+      skewX: source.skewX || 0,
+      skewY: source.skewY || 0,
+      flipX: !!source.flipX,
+      flipY: !!source.flipY,
+      originX: source.originX || 'left',
+      originY: source.originY || 'top',
+      rx: source.rx || 0,
+      ry: source.ry || 0,
+      fill: '#000',
+      stroke: null,
+      strokeWidth: 0,
+      absolutePositioned: true,
+      objectCaching: false,
+    });
+    if (source.clipPath) {
+      clipPath.clipPath = this._createClipPathFromSource(source.clipPath);
+    }
+    clipPath.setCoords();
+    return clipPath;
   }
 
   /**
@@ -541,7 +745,7 @@ class MosaicModule extends BaseModule {
     );
     overlays.forEach(o => canvas.remove(o));
     canvas.renderAll();
-    this.history.saveState();
+    this._saveStateWithCanvasClipPath();
   }
 
   applyPreset(presetName) {

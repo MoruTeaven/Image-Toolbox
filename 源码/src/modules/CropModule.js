@@ -100,6 +100,9 @@ class CropModule extends BaseModule {
     if (!this._cropRect) return;
     const canvas = this.canvasManager.canvas;
     const clipRect = this._createClipPathFromSource(this._cropRect);
+    if (this._detachedCanvasClipPath) {
+      clipRect.clipPath = this._createClipPathFromSource(this._detachedCanvasClipPath);
+    }
 
     this._saveStateBeforeCrop(canvas);
     this._clearTemporaryObjectClipPaths(false);
@@ -370,6 +373,9 @@ class CropModule extends BaseModule {
       absolutePositioned: true,
       objectCaching: false,
     });
+    if (source.clipPath) {
+      clipRect.clipPath = this._createClipPathFromSource(source.clipPath);
+    }
     clipRect.setCoords();
     return clipRect;
   }
