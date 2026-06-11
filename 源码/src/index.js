@@ -14,7 +14,7 @@ import SidePanelTabs from './ui/SidePanelTabs.js';
 import PropertyPanel from './ui/PropertyPanel.js';
 import LayerPanel from './ui/LayerPanel.js';
 import StatusBar from './ui/StatusBar.js';
-import AccountPage from './ui/AccountPage.js';
+import AccountPage, { EDITOR_BARS_LAYOUT_KEY, EDITOR_BARS_LAYOUTS } from './ui/AccountPage.js';
 
 // ═══════════════════════════════════════
 // 应用入口
@@ -47,6 +47,8 @@ class App {
     }
 
     try {
+      this._applyEditorBarsLayout(this._getEditorBarsLayout());
+
       // 1. 初始化画布管理器
       this.canvasManager = new CanvasManager('fabric-canvas');
       this.canvasManager.init({
@@ -244,6 +246,11 @@ class App {
       this.historyManager?.redo();
     });
 
+    // ═══ 编辑器布局偏好 ═══
+    eventBus.on('editorBars:layoutChanged', (layout) => {
+      this._applyEditorBarsLayout(layout);
+    });
+
     // ═══ 快捷键 ═══
     document.addEventListener('keydown', (e) => {
       // Ctrl+Z 撤销
@@ -420,6 +427,22 @@ class App {
     if (label && this.canvasManager) {
       label.textContent = Math.round(this.canvasManager.zoomLevel * 100) + '%';
     }
+  }
+
+  _getEditorBarsLayout() {
+    const saved = localStorage.getItem(EDITOR_BARS_LAYOUT_KEY);
+    return Object.values(EDITOR_BARS_LAYOUTS).includes(saved) ? saved : EDITOR_BARS_LAYOUTS.PRESETS_TOP;
+  }
+
+  _applyEditorBarsLayout(layout) {
+    const normalized = Object.values(EDITOR_BARS_LAYOUTS).includes(layout)
+      ? layout
+      : EDITOR_BARS_LAYOUTS.PRESETS_TOP;
+
+    document.getElementById('app')?.classList.toggle(
+      'app--bars-swapped',
+      normalized === EDITOR_BARS_LAYOUTS.STATUS_TOP
+    );
   }
 }
 

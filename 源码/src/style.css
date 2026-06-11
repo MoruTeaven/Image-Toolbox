@@ -99,6 +99,14 @@ html, body {
   overflow: hidden;
 }
 
+.app.app--bars-swapped {
+  grid-template-rows: var(--statusbar-height) 1fr var(--optionsbar-height);
+  grid-template-areas:
+    "toolbar statusbar statusbar"
+    "toolbar canvas   panel"
+    "toolbar optionsbar optionsbar";
+}
+
 /* ── 工具栏（左侧） ── */
 .toolbar {
   grid-area: toolbar;
@@ -561,6 +569,11 @@ html, body {
   overflow-y: hidden;
   white-space: nowrap;
   z-index: 9;
+}
+
+.app.app--bars-swapped .optionsbar {
+  border-top: 1px solid var(--color-border);
+  border-bottom: none;
 }
 
 .optionsbar__controls {
@@ -1327,6 +1340,10 @@ html, body {
   font-size: 11px;
   gap: 12px;
   z-index: 9;
+}
+
+.app.app--bars-swapped .statusbar {
+  border-bottom: 1px solid rgba(255,255,255,0.12);
 }
 
 .statusbar__left {

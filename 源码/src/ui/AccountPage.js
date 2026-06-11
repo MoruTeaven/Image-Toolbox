@@ -1,75 +1,17 @@
 import eventBus from '../core/EventBus.js';
 import { SIDE_PANEL_LAYOUT_KEY, SIDE_PANEL_LAYOUTS } from './SidePanelTabs.js';
+import { updateCategories, updateRecords } from '../../updateRecords.js';
 
 const THEME_STORAGE_KEY = 'image-toolbox-theme';
 const THEME_VERSION_KEY = 'image-toolbox-theme-version';
 const THEME_VERSION = 'neutral-teal-light-default-v1';
+export const EDITOR_BARS_LAYOUT_KEY = 'image-toolbox-editor-bars-layout';
+export const EDITOR_BARS_LAYOUTS = {
+  PRESETS_TOP: 'presets-top',
+  STATUS_TOP: 'status-top',
+};
 
-const updateRecords = [
-  {
-    version: '0.3.0',
-    date: '2026-06-10',
-    changes: {
-      added: ['新增账户中心页面，支持从左下角 uTools 头像进入', '新增更新记录页面，用于展示版本功能变更'],
-      fixed: [],
-      improved: ['优化左侧工具栏结构，工具列表可滚动，账号入口固定在底部'],
-      adjusted: ['将用户入口确定为左下角头像，右上角继续留给页面级操作'],
-      removed: []
-    }
-  },
-  {
-    version: '0.2.4',
-    date: '2026-06-10',
-    changes: {
-      added: [],
-      fixed: ['修复 uTools 环境不能加载网络资源导致 Fabric.js 加载失败的问题'],
-      improved: ['将 Fabric.js 改为本地资源引用，提升插件加载稳定性'],
-      adjusted: [],
-      removed: ['移除外部 CDN 脚本引用']
-    }
-  },
-  {
-    version: '0.2.3',
-    date: '2026-06-09',
-    changes: {
-      added: ['新增导出成功和失败的应用内 Toast 提示'],
-      fixed: ['修复通过文件匹配进入插件后图片不显示的问题', '修复裁切操作无法撤销的问题', '修复文字模式下属性面板不生效的问题', '修复不透明度调整后文字直接消失的问题'],
-      improved: ['优化导出后的反馈方式，不再依赖系统通知', '优化不透明度滑块宽度，减少属性面板拥挤感'],
-      adjusted: [],
-      removed: []
-    }
-  },
-  {
-    version: '0.2.0',
-    date: '2026-06-08',
-    changes: {
-      added: ['新增背景图层展示和锁定逻辑', '新增工具栏撤销和重做按钮', '新增 Ctrl+Y 重做快捷键'],
-      fixed: ['修复图层面板刷新死循环问题', '修复选择图片后画布无显示的问题', '修复主题切换按钮不生效的问题', '修复工具模式下误触发图层选中和拖动的问题', '修复放大后裁剪框消失的问题'],
-      improved: ['优化保存到电脑和复制到剪贴板按钮样式', '优化图层面板排序，顶层图层显示在上方'],
-      adjusted: ['将 PNG、JPEG、WebP 导出按钮合并为一个保存到电脑按钮', '将框选打码和画笔打码合并为一个打码工具'],
-      removed: ['移除工具栏中重复的导出按钮', '移除独立的画笔打码入口']
-    }
-  },
-  {
-    version: '0.1.0',
-    date: '2026-06-08',
-    changes: {
-      added: ['发布第一个可用版本，支持图片导入、打码、裁切、文字标注和导出', '搭建五区编辑器布局：工具栏、选项栏、画布区、属性/图层面板和状态栏'],
-      fixed: [],
-      improved: [],
-      adjusted: [],
-      removed: []
-    }
-  }
-];
-
-const updateCategories = [
-  { key: 'added', title: '新增' },
-  { key: 'adjusted', title: '调整' },
-  { key: 'fixed', title: '修复' },
-  { key: 'improved', title: '优化' },
-  { key: 'removed', title: '去除' }
-];
+const VALID_EDITOR_BARS_LAYOUTS = new Set(Object.values(EDITOR_BARS_LAYOUTS));
 
 /**
  * 账号页 UI 组件
@@ -172,6 +114,13 @@ class AccountPage {
       if (panelLayout) {
         this._setSidePanelLayout(panelLayout);
         this._render();
+        return;
+      }
+
+      const editorBarsLayout = e.target.closest('[data-editor-bars-layout]')?.dataset.editorBarsLayout;
+      if (editorBarsLayout) {
+        this._setEditorBarsLayout(editorBarsLayout);
+        this._render();
       }
     });
 
@@ -220,6 +169,7 @@ class AccountPage {
   _renderSettings() {
     const theme = document.documentElement.getAttribute('data-theme') || 'light';
     const sidePanelLayout = this._getSidePanelLayout();
+    const editorBarsLayout = this._getEditorBarsLayout();
     return `
       <div class="account-card">
         <div class="account-card__label">外观</div>
@@ -238,6 +188,16 @@ class AccountPage {
         <div class="account-page__theme-row">
           <button class="account-page__theme-choice ${sidePanelLayout === SIDE_PANEL_LAYOUTS.TABS ? 'account-page__theme-choice--active' : ''}" type="button" data-side-panel-layout="${SIDE_PANEL_LAYOUTS.TABS}">Tab 切换</button>
           <button class="account-page__theme-choice ${sidePanelLayout === SIDE_PANEL_LAYOUTS.SPLIT ? 'account-page__theme-choice--active' : ''}" type="button" data-side-panel-layout="${SIDE_PANEL_LAYOUTS.SPLIT}">上下布局</button>
+        </div>
+      </div>
+
+      <div class="account-card">
+        <div class="account-card__label">编辑器</div>
+        <div class="account-card__value">顶部/底部栏位置</div>
+        <p>切换预设栏和状态栏在编辑器顶部、底部的相对位置。</p>
+        <div class="account-page__theme-row">
+          <button class="account-page__theme-choice ${editorBarsLayout === EDITOR_BARS_LAYOUTS.PRESETS_TOP ? 'account-page__theme-choice--active' : ''}" type="button" data-editor-bars-layout="${EDITOR_BARS_LAYOUTS.PRESETS_TOP}">预设栏在顶部</button>
+          <button class="account-page__theme-choice ${editorBarsLayout === EDITOR_BARS_LAYOUTS.STATUS_TOP ? 'account-page__theme-choice--active' : ''}" type="button" data-editor-bars-layout="${EDITOR_BARS_LAYOUTS.STATUS_TOP}">状态栏在顶部</button>
         </div>
       </div>
     `;
@@ -353,9 +313,21 @@ class AccountPage {
     eventBus.emit('sidePanel:layoutChanged', layout);
   }
 
+  _setEditorBarsLayout(layout) {
+    if (!VALID_EDITOR_BARS_LAYOUTS.has(layout)) return;
+
+    localStorage.setItem(EDITOR_BARS_LAYOUT_KEY, layout);
+    eventBus.emit('editorBars:layoutChanged', layout);
+  }
+
   _getSidePanelLayout() {
     const saved = localStorage.getItem(SIDE_PANEL_LAYOUT_KEY);
     return Object.values(SIDE_PANEL_LAYOUTS).includes(saved) ? saved : SIDE_PANEL_LAYOUTS.TABS;
+  }
+
+  _getEditorBarsLayout() {
+    const saved = localStorage.getItem(EDITOR_BARS_LAYOUT_KEY);
+    return VALID_EDITOR_BARS_LAYOUTS.has(saved) ? saved : EDITOR_BARS_LAYOUTS.PRESETS_TOP;
   }
 
   _getUtoolsUser() {
