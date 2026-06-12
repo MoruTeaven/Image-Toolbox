@@ -9,7 +9,14 @@ export const EDITOR_BARS_LAYOUTS = {
   STATUS_TOP: 'status-top',
 };
 
+export const EDITOR_SIDE_PANEL_POSITION_KEY = 'image-toolbox-editor-side-panel-position';
+export const EDITOR_SIDE_PANEL_POSITIONS = {
+  RIGHT: 'right',
+  LEFT: 'left',
+};
+
 const VALID_EDITOR_BARS_LAYOUTS = new Set(Object.values(EDITOR_BARS_LAYOUTS));
+const VALID_EDITOR_SIDE_PANEL_POSITIONS = new Set(Object.values(EDITOR_SIDE_PANEL_POSITIONS));
 
 /**
  * 账号页 UI 组件
@@ -102,6 +109,13 @@ class AccountPage {
         return;
       }
 
+      const externalUrl = this._closest(e.target, '[data-external-url]')?.getAttribute('data-external-url');
+      if (externalUrl) {
+        e.preventDefault();
+        this._openExternalUrl(externalUrl);
+        return;
+      }
+
       const theme = this._closest(e.target, '[data-theme-choice]')?.getAttribute('data-theme-choice');
       if (theme) {
         this._setTheme(theme);
@@ -119,6 +133,13 @@ class AccountPage {
       const editorBarsLayout = this._closest(e.target, '[data-editor-bars-layout]')?.getAttribute('data-editor-bars-layout');
       if (editorBarsLayout) {
         this._setEditorBarsLayout(editorBarsLayout);
+        this._render();
+        return;
+      }
+
+      const editorSidePanelPosition = this._closest(e.target, '[data-editor-side-panel-position]')?.getAttribute('data-editor-side-panel-position');
+      if (editorSidePanelPosition) {
+        this._setEditorSidePanelPosition(editorSidePanelPosition);
         this._render();
       }
     });
@@ -179,6 +200,7 @@ class AccountPage {
     const theme = getThemeChoice();
     const sidePanelLayout = this._getSidePanelLayout();
     const editorBarsLayout = this._getEditorBarsLayout();
+    const editorSidePanelPosition = this._getEditorSidePanelPosition();
     return `
       <div class="account-card">
         <div class="account-card__label">外观</div>
@@ -193,11 +215,21 @@ class AccountPage {
 
       <div class="account-card">
         <div class="account-card__label">编辑器</div>
-        <div class="account-card__value">右侧面板布局</div>
+        <div class="account-card__value">属性/图层面板布局</div>
         <p>选择属性和图层的展示方式。Tab 布局更节省空间，上下布局可以同时查看两块内容。</p>
         <div class="account-page__theme-row">
           <button class="account-page__theme-choice ${sidePanelLayout === SIDE_PANEL_LAYOUTS.TABS ? 'account-page__theme-choice--active' : ''}" type="button" data-side-panel-layout="${SIDE_PANEL_LAYOUTS.TABS}">Tab 切换</button>
           <button class="account-page__theme-choice ${sidePanelLayout === SIDE_PANEL_LAYOUTS.SPLIT ? 'account-page__theme-choice--active' : ''}" type="button" data-side-panel-layout="${SIDE_PANEL_LAYOUTS.SPLIT}">上下布局</button>
+        </div>
+      </div>
+
+      <div class="account-card">
+        <div class="account-card__label">编辑器</div>
+        <div class="account-card__value">属性/图层面板位置</div>
+        <p>将属性和图层侧栏放在画板右侧，或移到左侧工具栏与画板之间。</p>
+        <div class="account-page__theme-row">
+          <button class="account-page__theme-choice ${editorSidePanelPosition === EDITOR_SIDE_PANEL_POSITIONS.RIGHT ? 'account-page__theme-choice--active' : ''}" type="button" data-editor-side-panel-position="${EDITOR_SIDE_PANEL_POSITIONS.RIGHT}">画板右侧</button>
+          <button class="account-page__theme-choice ${editorSidePanelPosition === EDITOR_SIDE_PANEL_POSITIONS.LEFT ? 'account-page__theme-choice--active' : ''}" type="button" data-editor-side-panel-position="${EDITOR_SIDE_PANEL_POSITIONS.LEFT}">工具栏右侧</button>
         </div>
       </div>
 
@@ -214,6 +246,9 @@ class AccountPage {
   }
 
   _renderAbout() {
+    const appVersion = this._getCurrentVersion();
+    const utoolsVersion = this._getUtoolsVersion();
+
     return `
       <div class="account-about">
         <section class="account-about__hero">
@@ -241,21 +276,21 @@ class AccountPage {
           </section>
 
           <section class="account-about__panel account-about__contacts" aria-label="联系方式">
-            <a class="account-about__contact" href="https://moruteaven.com" target="_blank" rel="noopener noreferrer">
+            <a class="account-about__contact" href="https://moruteaven.com" data-external-url="https://moruteaven.com">
               <span class="account-about__contact-icon">W</span>
               <span>
                 <strong>作者主页</strong>
                 <em>moruteaven.com</em>
               </span>
             </a>
-            <a class="account-about__contact" href="mailto:me@moruteaven.com">
+            <a class="account-about__contact" href="mailto:me@moruteaven.com" data-external-url="mailto:me@moruteaven.com">
               <span class="account-about__contact-icon">@</span>
               <span>
                 <strong>联系邮箱</strong>
                 <em>me@moruteaven.com</em>
               </span>
             </a>
-            <a class="account-about__contact" href="https://qm.qq.com/q/Nzn12S22e6" target="_blank" rel="noopener noreferrer">
+            <a class="account-about__contact" href="https://qm.qq.com/q/Nzn12S22e6" data-external-url="https://qm.qq.com/q/Nzn12S22e6">
               <span class="account-about__contact-icon">Q</span>
               <span>
                 <strong>QQ 交流群</strong>
@@ -266,8 +301,8 @@ class AccountPage {
         </div>
 
         <section class="account-about__footer">
-          <span>版本 v0.3</span>
-          <span>运行环境：uTools 插件</span>
+          <span>图片工具箱版本：${this._escapeHTML(appVersion)}</span>
+          <span>uTools 版本：${this._escapeHTML(utoolsVersion)}</span>
           <span>Copyright © 抹露茶柒</span>
         </section>
       </div>
@@ -348,6 +383,44 @@ class AccountPage {
     applyThemeChoice(theme);
   }
 
+  _getCurrentVersion() {
+    const version = updateRecords?.[0]?.version;
+    return this._formatVersion(version);
+  }
+
+  _getUtoolsVersion() {
+    try {
+      if (typeof utools !== 'undefined' && typeof utools.getAppVersion === 'function') {
+        return this._formatVersion(utools.getAppVersion());
+      }
+    } catch (e) {
+      console.warn('[AccountPage] 获取 uTools 版本失败:', e);
+    }
+
+    return '未知';
+  }
+
+  _formatVersion(version) {
+    const text = String(version || '').trim();
+    if (!text) return '未知';
+    return /^v/i.test(text) ? text : `v${text}`;
+  }
+
+  _openExternalUrl(url) {
+    if (!url) return;
+
+    try {
+      if (typeof utools !== 'undefined' && typeof utools.shellOpenExternal === 'function') {
+        utools.shellOpenExternal(url);
+        return;
+      }
+    } catch (e) {
+      console.warn('[AccountPage] 使用 uTools 打开外部链接失败:', e);
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
   _setSidePanelLayout(layout) {
     if (!Object.values(SIDE_PANEL_LAYOUTS).includes(layout)) return;
 
@@ -363,6 +436,13 @@ class AccountPage {
     eventBus.emit('editorBars:layoutChanged', layout);
   }
 
+  _setEditorSidePanelPosition(position) {
+    if (!VALID_EDITOR_SIDE_PANEL_POSITIONS.has(position)) return;
+
+    localStorage.setItem(EDITOR_SIDE_PANEL_POSITION_KEY, position);
+    eventBus.emit('editorSidePanel:positionChanged', position);
+  }
+
   _getSidePanelLayout() {
     const saved = localStorage.getItem(SIDE_PANEL_LAYOUT_KEY);
     return Object.values(SIDE_PANEL_LAYOUTS).includes(saved) ? saved : SIDE_PANEL_LAYOUTS.TABS;
@@ -371,6 +451,11 @@ class AccountPage {
   _getEditorBarsLayout() {
     const saved = localStorage.getItem(EDITOR_BARS_LAYOUT_KEY);
     return VALID_EDITOR_BARS_LAYOUTS.has(saved) ? saved : EDITOR_BARS_LAYOUTS.PRESETS_TOP;
+  }
+
+  _getEditorSidePanelPosition() {
+    const saved = localStorage.getItem(EDITOR_SIDE_PANEL_POSITION_KEY);
+    return VALID_EDITOR_SIDE_PANEL_POSITIONS.has(saved) ? saved : EDITOR_SIDE_PANEL_POSITIONS.RIGHT;
   }
 
   _getUtoolsUser() {

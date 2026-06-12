@@ -1,5 +1,7 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const { execFileSync } = require('child_process');
 const { fileURLToPath } = require('url');
 const { clipboard, nativeImage } = require('electron');
 
@@ -13,12 +15,311 @@ const MIME_MAP = {
   svg: 'image/svg+xml',
 };
 
+const FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.ttc', '.otc']);
+let _systemFontsCache = null;
+
 // ── 文件操作 ──
 window.readImageFile = (filePath) => {
   const buffer = fs.readFileSync(filePath);
   const ext = path.extname(filePath).toLowerCase().replace('.', '');
   const mime = MIME_MAP[ext] || 'image/png';
   return 'data:' + mime + ';base64,' + buffer.toString('base64');
+};
+
+// ── 系统字体 ──
+window.getSystemFonts = () => {
+  if (_systemFontsCache) return _systemFontsCache.slice();
+
+  try {
+    _systemFontsCache = _loadSystemFonts();
+  } catch (e) {
+    console.error('[preload] 获取系统字体失败:', e);
+    _systemFontsCache = [];
+  }
+
+  return _systemFontsCache.slice();
+};
+
+const _loadSystemFonts = () => {
+  const families = new Map();
+
+  _getSystemFontFiles().forEach((filePath) => {
+    try {
+      _readFontFamilies(filePath).forEach((family) => {
+        const key = _normalizeFontName(family);
+        if (key && !families.has(key)) families.set(key, family);
+      });
+    } catch (e) {
+      // 个别系统字体可能是旧格式或权限受限，跳过不影响其它字体。
+    }
+  });
+
+  return Array.from(families.values()).sort((a, b) => (
+    a.localeCompare(b, 'zh-CN', { numeric: true, sensitivity: 'base' })
+  ));
+};
+
+const _getSystemFontFiles = () => {
+  const files = new Set();
+  const fontDirs = _getSystemFontDirs();
+
+  fontDirs.forEach((dir) => _collectFontFiles(dir, files));
+  _getRegisteredFontFiles(fontDirs).forEach((filePath) => {
+    if (_isFontFile(filePath) && fs.existsSync(filePath)) files.add(filePath);
+  });
+
+  return Array.from(files);
+};
+
+const _getSystemFontDirs = () => {
+  const dirs = [];
+  const homeDir = os.homedir();
+
+  if (process.platform === 'win32') {
+    const windowsDir = process.env.WINDIR || process.env.SystemRoot || 'C:\\Windows';
+    const localAppData = process.env.LOCALAPPDATA || path.join(homeDir, 'AppData', 'Local');
+    dirs.push(
+      path.join(windowsDir, 'Fonts'),
+      path.join(localAppData, 'Microsoft', 'Windows', 'Fonts')
+    );
+  } else if (process.platform === 'darwin') {
+    dirs.push(
+      '/System/Library/Fonts',
+      '/Library/Fonts',
+      path.join(homeDir, 'Library', 'Fonts')
+    );
+  } else {
+    dirs.push(
+      '/usr/share/fonts',
+      '/usr/local/share/fonts',
+      path.join(homeDir, '.fonts'),
+      path.join(homeDir, '.local', 'share', 'fonts')
+    );
+  }
+
+  const seen = new Set();
+  return dirs.filter((dir) => {
+    const key = path.resolve(dir).toLowerCase();
+    if (seen.has(key) || !fs.existsSync(dir)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const _collectFontFiles = (dir, files, depth = 0) => {
+  if (depth > 8) return;
+
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (e) {
+    return;
+  }
+
+  entries.forEach((entry) => {
+    const filePath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      _collectFontFiles(filePath, files, depth + 1);
+    } else if (entry.isFile() && _isFontFile(entry.name)) {
+      files.add(filePath);
+    }
+  });
+};
+
+const _getRegisteredFontFiles = (fontDirs) => {
+  if (process.platform !== 'win32') return [];
+
+  const files = new Set();
+  const registryKeys = [
+    'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts',
+    'HKCU\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts',
+  ];
+
+  registryKeys.forEach((key) => {
+    let output = '';
+    try {
+      output = execFileSync('reg', ['query', key], { encoding: 'utf8', windowsHide: true });
+    } catch (e) {
+      return;
+    }
+
+    output.split(/\r?\n/).forEach((line) => {
+      const match = line.match(/^\s+.+?\s+REG_\w+\s+(.+?)\s*$/);
+      if (!match) return;
+
+      const rawPath = _expandEnvPath(match[1].trim());
+      if (!_isFontFile(rawPath)) return;
+
+      if (path.isAbsolute(rawPath)) {
+        files.add(rawPath);
+        return;
+      }
+
+      fontDirs.forEach((dir) => files.add(path.join(dir, rawPath)));
+    });
+  });
+
+  return Array.from(files);
+};
+
+const _expandEnvPath = (value) => {
+  return String(value || '').replace(/%([^%]+)%/g, (_, name) => (
+    process.env[name] || process.env[name.toUpperCase()] || ''
+  ));
+};
+
+const _readFontFamilies = (filePath) => {
+  const buffer = fs.readFileSync(filePath);
+  const families = [];
+
+  _getFontOffsets(buffer).forEach((offset) => {
+    const family = _readSfntFamily(buffer, offset);
+    if (family) families.push(family);
+  });
+
+  return families;
+};
+
+const _getFontOffsets = (buffer) => {
+  if (buffer.length < 12) return [];
+
+  if (buffer.toString('ascii', 0, 4) === 'ttcf') {
+    const count = _readUInt32(buffer, 8);
+    const offsets = [];
+    for (let i = 0; i < count; i++) {
+      const offset = _readUInt32(buffer, 12 + i * 4);
+      if (offset > 0 && offset < buffer.length) offsets.push(offset);
+    }
+    return offsets;
+  }
+
+  return [0];
+};
+
+const _readSfntFamily = (buffer, sfntOffset) => {
+  if (!_isSfnt(buffer, sfntOffset)) return null;
+
+  const numTables = _readUInt16(buffer, sfntOffset + 4);
+  const tableDir = sfntOffset + 12;
+  let nameOffset = 0;
+  let nameLength = 0;
+
+  for (let i = 0; i < numTables; i++) {
+    const recordOffset = tableDir + i * 16;
+    if (recordOffset + 16 > buffer.length) break;
+    if (buffer.toString('ascii', recordOffset, recordOffset + 4) !== 'name') continue;
+
+    nameOffset = _readUInt32(buffer, recordOffset + 8);
+    nameLength = _readUInt32(buffer, recordOffset + 12);
+    break;
+  }
+
+  if (!nameOffset || nameOffset + 6 > buffer.length) return null;
+  return _pickFontFamilyName(_readNameRecords(buffer, nameOffset, nameLength));
+};
+
+const _isSfnt = (buffer, offset) => {
+  if (offset + 12 > buffer.length) return false;
+  const tag = buffer.toString('ascii', offset, offset + 4);
+  const version = _readUInt32(buffer, offset);
+  return version === 0x00010000 || tag === 'OTTO' || tag === 'true' || tag === 'typ1';
+};
+
+const _readNameRecords = (buffer, tableOffset, tableLength) => {
+  const count = _readUInt16(buffer, tableOffset + 2);
+  const stringBase = tableOffset + _readUInt16(buffer, tableOffset + 4);
+  const tableEnd = tableLength ? Math.min(buffer.length, tableOffset + tableLength) : buffer.length;
+  const records = [];
+
+  for (let i = 0; i < count; i++) {
+    const recordOffset = tableOffset + 6 + i * 12;
+    if (recordOffset + 12 > buffer.length) break;
+
+    const platformID = _readUInt16(buffer, recordOffset);
+    const languageID = _readUInt16(buffer, recordOffset + 4);
+    const nameID = _readUInt16(buffer, recordOffset + 6);
+    if (nameID !== 16 && nameID !== 1 && nameID !== 21) continue;
+
+    const length = _readUInt16(buffer, recordOffset + 8);
+    const offset = _readUInt16(buffer, recordOffset + 10);
+    const start = stringBase + offset;
+    const end = start + length;
+    if (start < stringBase || end > tableEnd || end > buffer.length) continue;
+
+    const name = _cleanFontName(_decodeFontName(buffer.slice(start, end), platformID));
+    if (name) records.push({ name, nameID, platformID, languageID });
+  }
+
+  return records;
+};
+
+const _pickFontFamilyName = (records) => {
+  for (const nameID of [16, 1, 21]) {
+    const candidates = records.filter((record) => record.nameID === nameID);
+    const cjk = candidates.find((record) => _isChineseLanguage(record.languageID) && _hasCjk(record.name))
+      || candidates.find((record) => _hasCjk(record.name));
+    if (cjk) return cjk.name;
+
+    const english = candidates.find((record) => record.languageID === 0x0409);
+    if (english) return english.name;
+
+    const windows = candidates.find((record) => record.platformID === 3);
+    if (windows) return windows.name;
+
+    if (candidates[0]) return candidates[0].name;
+  }
+
+  return null;
+};
+
+const _decodeFontName = (buffer, platformID) => {
+  if (platformID === 0 || platformID === 3 || _looksUtf16BE(buffer)) {
+    return _decodeUtf16BE(buffer);
+  }
+
+  return buffer.toString('latin1');
+};
+
+const _decodeUtf16BE = (buffer) => {
+  const length = buffer.length - (buffer.length % 2);
+  const swapped = Buffer.allocUnsafe(length);
+  for (let i = 0; i < length; i += 2) {
+    swapped[i] = buffer[i + 1];
+    swapped[i + 1] = buffer[i];
+  }
+  return swapped.toString('utf16le');
+};
+
+const _looksUtf16BE = (buffer) => {
+  if (buffer.length < 4) return false;
+  let zeroBytes = 0;
+  for (let i = 0; i < buffer.length; i += 2) {
+    if (buffer[i] === 0) zeroBytes++;
+  }
+  return zeroBytes >= Math.ceil(buffer.length / 4);
+};
+
+const _cleanFontName = (value) => {
+  return String(value || '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const _normalizeFontName = (value) => _cleanFontName(value).toLowerCase();
+
+const _isFontFile = (filePath) => FONT_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+
+const _hasCjk = (value) => /[\u2e80-\u9fff]/.test(value);
+
+const _isChineseLanguage = (languageID) => [0x0804, 0x0404, 0x0c04, 0x1004, 0x1404].includes(languageID);
+
+const _readUInt16 = (buffer, offset) => {
+  return offset + 2 <= buffer.length ? buffer.readUInt16BE(offset) : 0;
+};
+
+const _readUInt32 = (buffer, offset) => {
+  return offset + 4 <= buffer.length ? buffer.readUInt32BE(offset) : 0;
 };
 
 const _detectImageMime = (buffer) => {

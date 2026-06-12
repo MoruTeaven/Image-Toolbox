@@ -706,11 +706,11 @@ class MosaicModule extends BaseModule {
   }
 
   _createClipPathFromSource(source) {
-    const clipPath = new fabric.Rect({
+    const width = Math.max(1, source.width || (source.rx || 0) * 2 || 0);
+    const height = Math.max(1, source.height || (source.ry || 0) * 2 || 0);
+    const commonOptions = {
       left: source.left || 0,
       top: source.top || 0,
-      width: Math.max(1, source.width || 0),
-      height: Math.max(1, source.height || 0),
       scaleX: source.scaleX == null ? 1 : source.scaleX,
       scaleY: source.scaleY == null ? 1 : source.scaleY,
       angle: source.angle || 0,
@@ -720,14 +720,29 @@ class MosaicModule extends BaseModule {
       flipY: !!source.flipY,
       originX: source.originX || 'left',
       originY: source.originY || 'top',
-      rx: source.rx || 0,
-      ry: source.ry || 0,
       fill: '#000',
       stroke: null,
       strokeWidth: 0,
       absolutePositioned: true,
       objectCaching: false,
-    });
+    };
+
+    const clipPath = source.type === 'ellipse'
+      ? new fabric.Ellipse({
+        ...commonOptions,
+        width,
+        height,
+        rx: width / 2,
+        ry: height / 2,
+      })
+      : new fabric.Rect({
+        ...commonOptions,
+        width,
+        height,
+        rx: source.rx || 0,
+        ry: source.ry || 0,
+      });
+
     if (source.clipPath) {
       clipPath.clipPath = this._createClipPathFromSource(source.clipPath);
     }

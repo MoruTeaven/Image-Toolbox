@@ -107,6 +107,22 @@ html, body {
     "toolbar optionsbar optionsbar";
 }
 
+.app.app--panel-left {
+  grid-template-columns: var(--toolbar-width) var(--panel-width) 1fr;
+  grid-template-areas:
+    "toolbar optionsbar optionsbar"
+    "toolbar panel     canvas"
+    "toolbar statusbar statusbar";
+}
+
+.app.app--panel-left.app--bars-swapped {
+  grid-template-rows: var(--statusbar-height) 1fr var(--optionsbar-height);
+  grid-template-areas:
+    "toolbar statusbar statusbar"
+    "toolbar panel     canvas"
+    "toolbar optionsbar optionsbar";
+}
+
 /* ── 工具栏（左侧） ── */
 .toolbar {
   grid-area: toolbar;
@@ -1072,6 +1088,11 @@ html, body {
   overflow: hidden;
 }
 
+.app.app--panel-left .panel-area {
+  border-left: none;
+  border-right: 1px solid var(--color-border);
+}
+
 .side-tabs {
   display: flex;
   flex-direction: column;
@@ -1347,7 +1368,7 @@ html, body {
 }
 
 .property-select {
-  width: 100px;
+  width: 120px;
   background: var(--bg-card);
   color: var(--color-text);
   border: 1px solid var(--color-border);
@@ -1358,7 +1379,7 @@ html, body {
 }
 
 .property-select--short {
-  width: 52px;
+  width: 88px;
 }
 
 .property-checkbox {

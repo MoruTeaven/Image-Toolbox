@@ -9,6 +9,7 @@ class CropModule extends BaseModule {
   constructor(canvasManager, historyManager, defaultOptions = {}) {
     super(canvasManager, historyManager, {
       aspectRatio: null,  // null = 自由比例，或 {w, h} 如 {w:1, h:1}
+      cropShape: 'rect',  // rect = 矩形，ellipse = 椭圆/圆形
       ...defaultOptions,
     });
 
@@ -77,7 +78,29 @@ class CropModule extends BaseModule {
     eventBus.emit('crop:updated', this._getCropBounds());
   }
 
+  setCropShape(shape) {
+    const nextShape = this._normalizeCropShape(shape);
+    if (this.options.cropShape === nextShape) return;
+
+    this.options.cropShape = nextShape;
+    if (!this._cropRect) return;
+
+    const canvas = this.canvasManager.canvas;
+    const oldCropRect = this._cropRect;
+    const nextCropRect = this._createCropFrameFromSource(oldCropRect, nextShape);
+
+    canvas.remove(oldCropRect);
+    this._cropRect = nextCropRect;
+    this._bindCropFrameEvents(nextCropRect);
+    canvas.add(nextCropRect);
+    canvas.setActiveObject(nextCropRect);
+    this._updateMask();
+    eventBus.emit('crop:updated', this._getCropBounds());
+  }
+
   applyPreset(presetName) {
+    if (this.applyShapePreset(presetName)) return;
+
     const ratioMap = {
       'crop-ratio-free': null,
       'crop-ratio-1-1': { w: 1, h: 1 },
@@ -91,6 +114,17 @@ class CropModule extends BaseModule {
 
     if (!Object.prototype.hasOwnProperty.call(ratioMap, presetName)) return;
     this.setAspectRatio(ratioMap[presetName]);
+  }
+
+  applyShapePreset(presetName) {
+    const shapeMap = {
+      'crop-shape-rect': 'rect',
+      'crop-shape-ellipse': 'ellipse',
+    };
+
+    if (!Object.prototype.hasOwnProperty.call(shapeMap, presetName)) return false;
+    this.setCropShape(shapeMap[presetName]);
+    return true;
   }
 
   /**
@@ -177,6 +211,7 @@ class CropModule extends BaseModule {
       excludeFromExport: true,
       excludeFromLayer: true,
       absolutePositioned: true,
+      objectCaching: false,
     });
     this.canvasManager.canvas.add(this._maskRect);
   }
@@ -187,8 +222,9 @@ class CropModule extends BaseModule {
     const vb = this._getVisibleBounds();
     const center = this._getVisibleCenter();
 
-    let w = vb.width * 0.7;
-    let h = vb.height * 0.7;
+    const defaultSize = Math.min(vb.width, vb.height) * 0.7;
+    let w = defaultSize;
+    let h = defaultSize;
 
     if (ratio) {
       // 按比例计算
@@ -200,11 +236,26 @@ class CropModule extends BaseModule {
       }
     }
 
-    this._cropRect = new fabric.Rect({
+    this._cropRect = this._createCropFrame({
       left: center.x - w / 2,
       top: center.y - h / 2,
       width: w,
       height: h,
+    });
+
+    this._bindCropFrameEvents(this._cropRect);
+
+    canvas.add(this._cropRect);
+    canvas.setActiveObject(this._cropRect);
+    this._updateMask();
+  }
+
+  _createCropFrame(source, shape = this._getCropShape()) {
+    const width = Math.max(1, source.width || 0);
+    const height = Math.max(1, source.height || 0);
+    const commonOptions = {
+      left: source.left || 0,
+      top: source.top || 0,
       fill: 'transparent',
       stroke: '#FFFFFF',
       strokeWidth: 1.5,
@@ -217,24 +268,139 @@ class CropModule extends BaseModule {
       cornerSize: 8,
       cornerStyle: 'circle',
       transparentCorners: false,
-      lockUniScaling: !!ratio,
+      lockUniScaling: !!this.options.aspectRatio,
       lockScalingFlip: true,
       excludeFromExport: true,
       excludeFromLayer: true,
       excludeFromProperty: true,
       excludeFromHistory: true,
       absolutePositioned: true,
+      scaleX: source.scaleX == null ? 1 : source.scaleX,
+      scaleY: source.scaleY == null ? 1 : source.scaleY,
+      angle: source.angle || 0,
+      skewX: source.skewX || 0,
+      skewY: source.skewY || 0,
+      flipX: !!source.flipX,
+      flipY: !!source.flipY,
+      originX: source.originX || 'left',
+      originY: source.originY || 'top',
+    };
+
+    let cropFrame;
+
+    if (shape === 'ellipse') {
+      cropFrame = new fabric.Ellipse({
+        ...commonOptions,
+        width,
+        height,
+        rx: width / 2,
+        ry: height / 2,
+      });
+    } else {
+      cropFrame = new fabric.Rect({
+        ...commonOptions,
+        width,
+        height,
+      });
+    }
+
+    this._applyCropFrameControls(cropFrame);
+    return cropFrame;
+  }
+
+  _createCropFrameFromSource(source, shape = this._getCropShape()) {
+    return this._createCropFrame({
+      left: source.left || 0,
+      top: source.top || 0,
+      width: Math.max(1, source.width || (source.rx || 0) * 2),
+      height: Math.max(1, source.height || (source.ry || 0) * 2),
+      scaleX: source.scaleX == null ? 1 : source.scaleX,
+      scaleY: source.scaleY == null ? 1 : source.scaleY,
+      angle: source.angle || 0,
+      skewX: source.skewX || 0,
+      skewY: source.skewY || 0,
+      flipX: !!source.flipX,
+      flipY: !!source.flipY,
+      originX: source.originX || 'left',
+      originY: source.originY || 'top',
+    }, shape);
+  }
+
+  _bindCropFrameEvents(cropFrame) {
+    cropFrame.on('moving', () => this._updateMask());
+    cropFrame.on('scaling', () => this._updateMask());
+    cropFrame.on('rotating', () => this._updateMask());
+    cropFrame.on('resizing', () => this._updateMask());
+  }
+
+  _applyCropFrameControls(cropFrame) {
+    const rotateControl = cropFrame?.controls?.mtr;
+    if (!rotateControl || typeof fabric.Control !== 'function') return;
+
+    cropFrame.controls = { ...cropFrame.controls };
+    const rotateControlOptions = {
+      x: rotateControl.x,
+      y: rotateControl.y,
+      actionName: rotateControl.actionName || 'rotate',
+      sizeX: 22,
+      sizeY: 22,
+      render: this._renderCropRotateControl.bind(this),
+    };
+
+    [
+      'offsetX',
+      'offsetY',
+      'cursorStyleHandler',
+      'mouseDownHandler',
+      'actionHandler',
+      'mouseUpHandler',
+      'getActionName',
+      'withConnection',
+      'touchSizeX',
+      'touchSizeY',
+    ].forEach((key) => {
+      if (rotateControl[key] !== undefined) {
+        rotateControlOptions[key] = rotateControl[key];
+      }
     });
 
-    // 更新遮罩挖空效果
-    this._cropRect.on('moving', () => this._updateMask());
-    this._cropRect.on('scaling', () => this._updateMask());
-    this._cropRect.on('rotating', () => this._updateMask());
-    this._cropRect.on('resizing', () => this._updateMask());
+    cropFrame.controls.mtr = new fabric.Control(rotateControlOptions);
+  }
 
-    canvas.add(this._cropRect);
-    canvas.setActiveObject(this._cropRect);
-    this._updateMask();
+  _renderCropRotateControl(ctx, left, top) {
+    ctx.save();
+    ctx.translate(left, top);
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 11, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 1;
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = '#2563EB';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 5.5, -Math.PI * 0.85, Math.PI * 0.55);
+    ctx.strokeStyle = '#2563EB';
+    ctx.lineWidth = 1.8;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(5.3, 4.5);
+    ctx.lineTo(8.1, 3.9);
+    ctx.lineTo(6.5, 1.4);
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    ctx.restore();
   }
 
   _updateMask() {
@@ -249,9 +415,19 @@ class CropModule extends BaseModule {
       top: vb.top,
       width: vb.width,
       height: vb.height,
+      clipPath: this._createMaskClipPath(),
     });
+    this._maskRect.dirty = true;
 
     canvas.renderAll();
+  }
+
+  _createMaskClipPath() {
+    if (!this._cropRect) return null;
+
+    const clipPath = this._createClipPathFromSource(this._cropRect);
+    clipPath.inverted = true;
+    return clipPath;
   }
 
   _getCropBounds() {
@@ -271,11 +447,29 @@ class CropModule extends BaseModule {
   _setCropBounds(bounds) {
     if (!this._cropRect) return;
 
+    const width = Math.max(1, bounds.width);
+    const height = Math.max(1, bounds.height);
+
+    if (this._isEllipseObject(this._cropRect)) {
+      this._cropRect.set({
+        left: bounds.left,
+        top: bounds.top,
+        width,
+        height,
+        rx: width / 2,
+        ry: height / 2,
+        scaleX: 1,
+        scaleY: 1,
+      });
+      this._cropRect.setCoords();
+      return;
+    }
+
     this._cropRect.set({
       left: bounds.left,
       top: bounds.top,
-      width: Math.max(1, bounds.width),
-      height: Math.max(1, bounds.height),
+      width,
+      height,
       scaleX: 1,
       scaleY: 1,
     });
@@ -350,12 +544,24 @@ class CropModule extends BaseModule {
     return Math.max(min, Math.min(max, value));
   }
 
+  _getCropShape() {
+    return this._normalizeCropShape(this.options.cropShape);
+  }
+
+  _normalizeCropShape(shape) {
+    return shape === 'ellipse' ? 'ellipse' : 'rect';
+  }
+
+  _isEllipseObject(obj) {
+    return obj?.type === 'ellipse';
+  }
+
   _createClipPathFromSource(source) {
-    const clipRect = new fabric.Rect({
+    const width = Math.max(1, source.width || (source.rx || 0) * 2 || 0);
+    const height = Math.max(1, source.height || (source.ry || 0) * 2 || 0);
+    const commonOptions = {
       left: source.left || 0,
       top: source.top || 0,
-      width: Math.max(1, source.width || 0),
-      height: Math.max(1, source.height || 0),
       scaleX: source.scaleX == null ? 1 : source.scaleX,
       scaleY: source.scaleY == null ? 1 : source.scaleY,
       angle: source.angle || 0,
@@ -365,19 +571,34 @@ class CropModule extends BaseModule {
       flipY: !!source.flipY,
       originX: source.originX || 'left',
       originY: source.originY || 'top',
-      rx: source.rx || 0,
-      ry: source.ry || 0,
       fill: '#000',
       stroke: null,
       strokeWidth: 0,
       absolutePositioned: true,
       objectCaching: false,
-    });
+    };
+
+    const clipPath = this._isEllipseObject(source)
+      ? new fabric.Ellipse({
+        ...commonOptions,
+        width,
+        height,
+        rx: width / 2,
+        ry: height / 2,
+      })
+      : new fabric.Rect({
+        ...commonOptions,
+        width,
+        height,
+        rx: source.rx || 0,
+        ry: source.ry || 0,
+      });
+
     if (source.clipPath) {
-      clipRect.clipPath = this._createClipPathFromSource(source.clipPath);
+      clipPath.clipPath = this._createClipPathFromSource(source.clipPath);
     }
-    clipRect.setCoords();
-    return clipRect;
+    clipPath.setCoords();
+    return clipPath;
   }
 
   _detachCanvasClipPath() {
@@ -492,7 +713,12 @@ class CropModule extends BaseModule {
 
   getOptionsBarHTML() {
     const ratio = this.options.aspectRatio;
+    const shape = this._getCropShape();
     return `
+      <div class="options-group">
+        <button class="options-btn options-btn-sm ${shape === 'rect' ? 'active' : ''}" data-preset="crop-shape-rect">矩形</button>
+        <button class="options-btn options-btn-sm ${shape === 'ellipse' ? 'active' : ''}" data-preset="crop-shape-ellipse">椭圆/圆形</button>
+      </div>
       <div class="options-group">
         <button class="options-btn options-btn-sm ${!ratio ? 'active' : ''}" data-preset="crop-ratio-free">自由比例</button>
         <button class="options-btn options-btn-sm ${ratio && ratio.w === 1 && ratio.h === 1 ? 'active' : ''}" data-preset="crop-ratio-1-1">1:1</button>
@@ -513,8 +739,16 @@ class CropModule extends BaseModule {
 
     const bounds = this._getCropBounds();
     const ratio = this.options.aspectRatio;
+    const shape = this._getCropShape();
 
     return `
+      <div class="property-item property-item--wide">
+        <label>形状</label>
+        <select class="property-select property-select--short" data-module-prop="cropShape" data-refresh-property="true">
+          <option value="rect" ${shape === 'rect' ? 'selected' : ''}>矩形</option>
+          <option value="ellipse" ${shape === 'ellipse' ? 'selected' : ''}>椭圆/圆形</option>
+        </select>
+      </div>
       <div class="property-item">
         <label>X</label>
         <input type="number" class="property-input" data-prop="left" value="${this._formatNumber(bounds.left)}" />
@@ -553,6 +787,11 @@ class CropModule extends BaseModule {
   }
 
   onToolPropertyChange(key, value) {
+    if (key === 'cropShape') {
+      this.setCropShape(value);
+      return true;
+    }
+
     if (key !== 'aspectRatio') return false;
 
     this.setAspectRatio(this._parseRatio(value));

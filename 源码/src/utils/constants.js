@@ -54,6 +54,7 @@ export const ZOOM = {
 // 裁剪
 export const CROP_DEFAULTS = {
   ASPECT_RATIO: null,
+  SHAPE: 'rect',
 };
 
 // 文字预设样式

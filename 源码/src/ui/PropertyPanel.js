@@ -1,4 +1,5 @@
 import eventBus from '../core/EventBus.js';
+import { getFontOptionsHTML } from '../utils/fonts.js';
 
 /**
  * 属性面板 UI 组件
@@ -493,14 +494,7 @@ class PropertyPanel {
   }
 
   _getFontOptionsHTML(current) {
-    const options = [
-      ['Microsoft YaHei, PingFang SC, sans-serif', '微软雅黑'],
-      ['SimSun, STSong, serif', '宋体'],
-      ['SimHei, STHeiti, sans-serif', '黑体'],
-      ['KaiTi, STKaiti, serif', '楷体'],
-      ['Arial, sans-serif', 'Arial'],
-    ];
-    return options.map(([value, label]) => this._getSelectOption(value, label, current)).join('');
+    return getFontOptionsHTML(current);
   }
 
   _getSelectOption(value, label, current) {

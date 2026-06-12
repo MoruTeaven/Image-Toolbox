@@ -1,5 +1,6 @@
 import BaseModule from './BaseModule.js';
 import eventBus from '../core/EventBus.js';
+import { getFontOptionsHTML } from '../utils/fonts.js';
 
 /**
  * 加字模块 — 在图片上添加文字标注
@@ -400,14 +401,7 @@ class TextModule extends BaseModule {
   }
 
   _getFontOptionsHTML(current) {
-    const options = [
-      ['Microsoft YaHei, PingFang SC, sans-serif', '微软雅黑'],
-      ['SimSun, STSong, serif', '宋体'],
-      ['SimHei, STHeiti, sans-serif', '黑体'],
-      ['KaiTi, STKaiti, serif', '楷体'],
-      ['Arial, sans-serif', 'Arial'],
-    ];
-    return options.map(([value, label]) => this._getSelectOption(value, label, current)).join('');
+    return getFontOptionsHTML(current);
   }
 
   _getSelectOption(value, label, current) {

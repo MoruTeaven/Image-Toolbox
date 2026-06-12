@@ -302,7 +302,7 @@ class CanvasManager {
               this.canvas.clipPath.absolutePositioned = true;
             }
             this.canvas.renderAll();
-          }, 'fabric.Rect');
+          });
         } else {
           // 快照中没有 clipPath → 清除画布上已有的（撤消裁切的关键）
           this.canvas.clipPath = null;

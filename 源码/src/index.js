@@ -14,7 +14,12 @@ import SidePanelTabs from './ui/SidePanelTabs.js';
 import PropertyPanel from './ui/PropertyPanel.js';
 import LayerPanel from './ui/LayerPanel.js';
 import StatusBar from './ui/StatusBar.js';
-import AccountPage, { EDITOR_BARS_LAYOUT_KEY, EDITOR_BARS_LAYOUTS } from './ui/AccountPage.js';
+import AccountPage, {
+  EDITOR_BARS_LAYOUT_KEY,
+  EDITOR_BARS_LAYOUTS,
+  EDITOR_SIDE_PANEL_POSITION_KEY,
+  EDITOR_SIDE_PANEL_POSITIONS,
+} from './ui/AccountPage.js';
 import { initTheme } from './utils/theme.js';
 
 // ═══════════════════════════════════════
@@ -50,6 +55,7 @@ class App {
     try {
       initTheme();
       this._applyEditorBarsLayout(this._getEditorBarsLayout());
+      this._applyEditorSidePanelPosition(this._getEditorSidePanelPosition());
 
       // 1. 初始化画布管理器
       this.canvasManager = new CanvasManager('fabric-canvas');
@@ -258,6 +264,10 @@ class App {
       this._applyEditorBarsLayout(layout);
     });
 
+    eventBus.on('editorSidePanel:positionChanged', (position) => {
+      this._applyEditorSidePanelPosition(position);
+    });
+
     // ═══ 快捷键 ═══
     document.addEventListener('keydown', (e) => {
       // Ctrl+Z 撤销
@@ -449,6 +459,22 @@ class App {
     document.getElementById('app')?.classList.toggle(
       'app--bars-swapped',
       normalized === EDITOR_BARS_LAYOUTS.STATUS_TOP
+    );
+  }
+
+  _getEditorSidePanelPosition() {
+    const saved = localStorage.getItem(EDITOR_SIDE_PANEL_POSITION_KEY);
+    return Object.values(EDITOR_SIDE_PANEL_POSITIONS).includes(saved) ? saved : EDITOR_SIDE_PANEL_POSITIONS.RIGHT;
+  }
+
+  _applyEditorSidePanelPosition(position) {
+    const normalized = Object.values(EDITOR_SIDE_PANEL_POSITIONS).includes(position)
+      ? position
+      : EDITOR_SIDE_PANEL_POSITIONS.RIGHT;
+
+    document.getElementById('app')?.classList.toggle(
+      'app--panel-left',
+      normalized === EDITOR_SIDE_PANEL_POSITIONS.LEFT
     );
   }
 }
