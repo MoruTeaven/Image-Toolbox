@@ -274,7 +274,18 @@ class CanvasManager {
 
   toJSON() {
     if (!this.canvas) return null;
-    const json = this.canvas.toJSON(['clipPath', 'filters', 'id', 'selectable', 'evented', 'absolutePositioned', 'inverted']);
+    const json = this.canvas.toJSON([
+      'clipPath',
+      'filters',
+      'id',
+      'selectable',
+      'evented',
+      'absolutePositioned',
+      'inverted',
+      'objectCaching',
+      'strokeLineCap',
+      'strokeLineJoin',
+    ]);
     // 手动序列化 canvas.clipPath（Fabric.js canvas.toJSON 不包含此属性）
     if (this.canvas.clipPath) {
       json._canvasClipPath = this.canvas.clipPath.toJSON(CLIP_PATH_SERIALIZED_PROPS);

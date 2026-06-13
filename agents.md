@@ -4,6 +4,19 @@
 
 ## 功能改进
 
+### 橡皮擦工具 (2026-06-13)
+- [功能] **新增橡皮擦工具，默认作用于当前图层**：
+  - 新增 `EraserModule`，工具栏新增"橡皮擦"入口，快捷键 `E`
+  - 进入橡皮擦时默认锁定当前选中图层；未选中图层时，落笔位置自动选取鼠标下方最上层可编辑图层
+  - 擦除采用栅格化合并方案：将目标图层渲染到临时 canvas，用 `destination-out` 绘制擦除路径，再转回 `fabric.Image` 替换原图层，擦除效果直接固化到像素中
+  - 属性面板支持 1-120px 大小调节，预设栏提供细/中/粗/特粗；擦除后图层变为位图，擦除效果直接固化到当前图层外观中
+  - 排除旧版橡皮擦路径（`eraser_` ID 或 `globalCompositeOperation: 'destination-out'`）不被选为擦除目标
+  - 涉及文件：`EraserModule.js`、`ToolManager.js`、`Toolbar.js`、`CanvasManager.js`、`updateRecords.js`
+- [Bug] **第二次擦除会撤销第一次擦除操作**（2026-06-13）：
+  - **根因**：`_onPathCreated` 直接用 `target.clipPath = newErasePath` 覆盖，每次新擦除都会替换掉之前的擦除路径
+  - **修复**：新增 `_mergeEraseClipPath` 方法，将多次擦除路径合并到 `fabric.Group` 中；第一次擦除创建单个反向路径，第二次及之后将所有路径收集到标记为 `_eraserContainer` 的 Group，保留完整擦除历史；兼容剪切工具的 clipPath 嵌套
+  - 涉及文件：`EraserModule.js`
+
 ### 画笔工具 (2026-06-13)
 - [功能] **新增独立画笔工具**：
   - 新增 `BrushModule`，使用 Fabric.js 自由绘制生成可独立选择、移动、删除和排序的涂鸦路径图层

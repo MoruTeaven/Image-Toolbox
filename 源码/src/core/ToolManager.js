@@ -3,6 +3,7 @@ import SelectModule from '../modules/SelectModule.js';
 import MosaicModule from '../modules/MosaicModule.js';
 import CropModule from '../modules/CropModule.js';
 import BrushModule from '../modules/BrushModule.js';
+import EraserModule from '../modules/EraserModule.js';
 import TextModule from '../modules/TextModule.js';
 import ExportModule from '../modules/ExportModule.js';
 
@@ -60,6 +61,16 @@ class ToolManager {
       shortcut: 'B',
       module: BrushModule,
       defaultOptions: { color: '#d83b31', width: 6 },
+    });
+
+    this.registerTool({
+      name: 'eraser',
+      label: '橡皮擦',
+      icon: 'eraser',
+      group: 'annotate',
+      shortcut: 'E',
+      module: EraserModule,
+      defaultOptions: { width: 20 },
     });
 
     this.registerTool({
