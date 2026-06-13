@@ -27,6 +27,19 @@ class OptionsBar {
       this._updateControls();
     });
 
+    [
+      'canvas:selectionCreated',
+      'canvas:selectionUpdated',
+      'canvas:selectionCleared',
+      'canvas:objectModified',
+      'canvas:restored',
+      'image:loaded',
+    ].forEach(eventName => {
+      eventBus.on(eventName, () => {
+        if (this._currentTool) this._updateControls();
+      });
+    });
+
     // 预设栏只处理一键预设，不承载细调参数
     this._el.addEventListener('click', (e) => {
       this._handleControlEvent(e);

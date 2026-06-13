@@ -1,5 +1,5 @@
 import eventBus from '../core/EventBus.js';
-import { getFontOptionsHTML } from '../utils/fonts.js';
+import { getFontOptionsHTML, recordFontUsage } from '../utils/fonts.js';
 
 /**
  * 属性面板 UI 组件
@@ -320,6 +320,7 @@ class PropertyPanel {
         break;
       case 'fontFamily':
         active.set('fontFamily', value);
+        if (e.type === 'change') recordFontUsage(value);
         break;
       case 'fontSize':
       case 'strokeWidth': {

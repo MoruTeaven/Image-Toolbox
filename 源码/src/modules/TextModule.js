@@ -1,6 +1,6 @@
 import BaseModule from './BaseModule.js';
 import eventBus from '../core/EventBus.js';
-import { getFontOptionsHTML } from '../utils/fonts.js';
+import { getFontOptionsHTML, recordFontUsage } from '../utils/fonts.js';
 
 /**
  * 加字模块 — 在图片上添加文字标注
@@ -91,6 +91,7 @@ class TextModule extends BaseModule {
     canvas.add(textObj);
     canvas.setActiveObject(textObj);
     canvas.renderAll();
+    recordFontUsage(opts.fontFamily);
 
     // 进入编辑模式
     setTimeout(() => {
@@ -107,6 +108,7 @@ class TextModule extends BaseModule {
   setFontFamily(family) {
     this.options.fontFamily = family;
     this._updateActiveTextStyle('fontFamily', family);
+    recordFontUsage(family);
   }
 
   setFontSize(size) {
@@ -364,10 +366,11 @@ class TextModule extends BaseModule {
     this.canvasManager.canvas.renderAll();
   }
 
-  onToolPropertyChange(key, value) {
+  onToolPropertyChange(key, value, context = {}) {
     switch (key) {
       case 'fontFamily':
         this.options.fontFamily = value;
+        if (context.eventType === 'change') recordFontUsage(value);
         break;
       case 'fontSize':
         this.options.fontSize = Math.max(8, parseInt(value, 10) || this.options.fontSize);

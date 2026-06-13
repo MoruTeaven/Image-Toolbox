@@ -954,6 +954,16 @@ html, body {
   border-color: var(--color-accent);
 }
 
+.options-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.options-btn:disabled:hover {
+  background: var(--bg-card);
+  border-color: var(--color-border);
+}
+
 .options-btn.active {
   background: var(--bg-active);
   color: #ffffff;
@@ -994,6 +1004,21 @@ html, body {
 .text-preset-btn:hover {
   background: #9ca5aa;
   border-color: #7c878d;
+}
+
+.brush-color-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.brush-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--brush-color);
+  border: 1px solid rgba(0, 0, 0, 0.24);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
 }
 
 /* ── 画布区（中央） ── */
