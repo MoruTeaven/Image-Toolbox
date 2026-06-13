@@ -159,9 +159,10 @@ class EraserModule extends BaseModule {
    */
   _rasterizeErasedLayer(target, erasePath) {
     const canvas = this.canvasManager.canvas;
-    if (!canvas) return;
+    if (!canvas || !erasePath?.path?.length) return;
 
     try {
+      target.setCoords();
       const bounds = target.getBoundingRect(true, true);
       const cropLeft = Math.floor(bounds.left);
       const cropTop = Math.floor(bounds.top);
@@ -169,110 +170,134 @@ class EraserModule extends BaseModule {
       const cropBottom = Math.ceil(bounds.top + bounds.height);
       const cropWidth = Math.max(1, cropRight - cropLeft);
       const cropHeight = Math.max(1, cropBottom - cropTop);
+      const rasterCanvas = this._renderTargetRegion(target, cropLeft, cropTop, cropWidth, cropHeight);
+      const rasterCtx = rasterCanvas.getContext('2d');
+      this._drawErasePathToContext(rasterCtx, erasePath, cropLeft, cropTop);
 
-      // 先在完整画布坐标系中合成，避免手动转换路径坐标导致擦偏。
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = Math.max(1, Math.ceil(canvas.width));
-      tempCanvas.height = Math.max(1, Math.ceil(canvas.height));
-      const tempFabricCanvas = new fabric.StaticCanvas(tempCanvas, {
-        backgroundColor: null,
-        renderOnAddRemove: false,
+      const newImg = new fabric.Image(rasterCanvas, {
+        left: cropLeft,
+        top: cropTop,
+        width: rasterCanvas.width,
+        height: rasterCanvas.height,
+        scaleX: 1,
+        scaleY: 1,
+        angle: 0,
+        originX: 'left',
+        originY: 'top',
+        opacity: 1,
+        id: target.id,
+        selectable: false,
+        evented: false,
       });
 
-      target.clone((clonedTarget) => {
-        this._prepareRasterObject(clonedTarget);
+      newImg.setCoords();
 
-        const eraser = this._createRasterErasePath(erasePath);
-        tempFabricCanvas.add(clonedTarget);
-        tempFabricCanvas.add(eraser);
-        tempFabricCanvas.renderAll();
+      const targetIndex = canvas.getObjects().indexOf(target);
+      canvas.remove(target);
+      if (targetIndex >= 0) {
+        canvas.insertAt(newImg, targetIndex);
+      } else {
+        canvas.add(newImg);
+      }
 
-        const cropCanvas = document.createElement('canvas');
-        cropCanvas.width = cropWidth;
-        cropCanvas.height = cropHeight;
-        const cropCtx = cropCanvas.getContext('2d');
-        cropCtx.drawImage(tempCanvas, -cropLeft, -cropTop);
+      if (this._targetObject === target || this._strokeTarget === target) {
+        this._targetObject = newImg;
+      }
 
-        const newImg = new fabric.Image(cropCanvas, {
-          left: cropLeft,
-          top: cropTop,
-          width: cropWidth,
-          height: cropHeight,
-          scaleX: 1,
-          scaleY: 1,
-          angle: 0,
-          originX: 'left',
-          originY: 'top',
-          opacity: 1,
-          id: target.id,
-          selectable: false,
-          evented: false,
-        });
-
-        if (target.clipPath) {
-          newImg.set('clipPath', target.clipPath);
-        }
-
-        newImg.setCoords();
-
-        const targetIndex = canvas.getObjects().indexOf(target);
-        canvas.remove(target);
-        if (targetIndex >= 0) {
-          canvas.insertAt(newImg, targetIndex);
-        } else {
-          canvas.add(newImg);
-        }
-
-        if (this._targetObject === target || this._strokeTarget === target) {
-          this._targetObject = newImg;
-        }
-
-        tempFabricCanvas.dispose();
-        canvas.renderAll();
-      });
+      canvas.renderAll();
     } catch (err) {
       console.error('[EraserModule] 栅格化擦除失败:', err);
     }
   }
 
-  _prepareRasterObject(obj) {
-    obj.set({
-      selectable: false,
-      evented: false,
-      objectCaching: false,
-    });
-    obj.setCoords();
+  _renderTargetRegion(target, left, top, width, height) {
+    const canvas = this.canvasManager.canvas;
+    const objects = canvas.getObjects();
+    const visibilityBackups = objects.map(obj => ({ obj, visible: obj.visible }));
+    const viewportTransform = canvas.viewportTransform?.slice();
+    const backgroundColor = canvas.backgroundColor;
+
+    try {
+      canvas.discardActiveObject();
+      objects.forEach(obj => {
+        obj.visible = obj === target;
+      });
+      canvas.backgroundColor = null;
+      canvas.viewportTransform = [1, 0, 0, 1, 0, 0];
+      canvas.calcViewportBoundaries?.();
+
+      return canvas.toCanvasElement(1, {
+        left,
+        top,
+        width,
+        height,
+        enableRetinaScaling: false,
+      });
+    } finally {
+      visibilityBackups.forEach(({ obj, visible }) => {
+        obj.visible = visible;
+      });
+      if (viewportTransform) {
+        canvas.viewportTransform = viewportTransform;
+      }
+      canvas.backgroundColor = backgroundColor;
+      canvas.calcViewportBoundaries?.();
+      canvas.requestRenderAll?.();
+    }
   }
 
-  _createRasterErasePath(sourcePath) {
-    const eraser = new fabric.Path(this._clonePathData(sourcePath.path || []), {
-      left: sourcePath.left || 0,
-      top: sourcePath.top || 0,
-      scaleX: sourcePath.scaleX == null ? 1 : sourcePath.scaleX,
-      scaleY: sourcePath.scaleY == null ? 1 : sourcePath.scaleY,
-      angle: sourcePath.angle || 0,
-      skewX: sourcePath.skewX || 0,
-      skewY: sourcePath.skewY || 0,
-      flipX: !!sourcePath.flipX,
-      flipY: !!sourcePath.flipY,
-      originX: sourcePath.originX || 'left',
-      originY: sourcePath.originY || 'top',
-      fill: null,
-      stroke: '#000000',
-      strokeWidth: sourcePath.strokeWidth || this.options.width,
-      strokeLineCap: 'round',
-      strokeLineJoin: 'round',
-      globalCompositeOperation: 'destination-out',
-      objectCaching: false,
-      selectable: false,
-      evented: false,
+  _drawErasePathToContext(ctx, erasePath, cropLeft, cropTop) {
+    const pathData = fabric.util.transformPath
+      ? fabric.util.transformPath(erasePath.path, erasePath.calcTransformMatrix(), erasePath.pathOffset)
+      : this._clonePathData(erasePath.path);
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = erasePath.strokeWidth || this.options.width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#000000';
+    ctx.beginPath();
+
+    pathData.forEach(command => {
+      this._drawPathCommand(ctx, command, -cropLeft, -cropTop);
     });
 
-    if (sourcePath.pathOffset) {
-      eraser.pathOffset = new fabric.Point(sourcePath.pathOffset.x, sourcePath.pathOffset.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  _drawPathCommand(ctx, command, offsetX, offsetY) {
+    switch (command[0]) {
+      case 'M':
+        ctx.moveTo(command[1] + offsetX, command[2] + offsetY);
+        break;
+      case 'L':
+        ctx.lineTo(command[1] + offsetX, command[2] + offsetY);
+        break;
+      case 'Q':
+        ctx.quadraticCurveTo(
+          command[1] + offsetX,
+          command[2] + offsetY,
+          command[3] + offsetX,
+          command[4] + offsetY
+        );
+        break;
+      case 'C':
+        ctx.bezierCurveTo(
+          command[1] + offsetX,
+          command[2] + offsetY,
+          command[3] + offsetX,
+          command[4] + offsetY,
+          command[5] + offsetX,
+          command[6] + offsetY
+        );
+        break;
+      case 'Z':
+      case 'z':
+        ctx.closePath();
+        break;
     }
-    eraser.setCoords();
-    return eraser;
   }
 
   _clonePathData(pathData) {
