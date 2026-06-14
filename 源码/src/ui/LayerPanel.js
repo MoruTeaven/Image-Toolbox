@@ -10,6 +10,8 @@ class LayerPanel {
     this._lm = layerManager;
     this._dragLayerId = null;
     this._dropPanelIndex = null;
+    this._selectedLayerId = null;
+    this._activeLayerIds = [];
 
     this._bindEvents();
     this._render();
@@ -42,8 +44,9 @@ class LayerPanel {
     });
 
     // 画布操作 → 同步图层
-    eventBus.on('canvas:objectAdded', () => {
+    eventBus.on('canvas:objectAdded', (obj) => {
       this._lm.syncLayers();
+      this._selectLayerByObject(obj);
     });
     eventBus.on('canvas:objectRemoved', () => {
       this._lm.syncLayers();
@@ -53,9 +56,27 @@ class LayerPanel {
     });
 
     // 选择变化 → 高亮对应图层
-    eventBus.on('canvas:selectionCreated', () => this._refreshLayerList());
-    eventBus.on('canvas:selectionUpdated', () => this._refreshLayerList());
-    eventBus.on('canvas:selectionCleared', () => this._refreshLayerList());
+    eventBus.on('canvas:selectionCreated', () => this._selectLayerFromActiveObject());
+    eventBus.on('canvas:selectionUpdated', () => this._selectLayerFromActiveObject());
+    eventBus.on('canvas:selectionCleared', () => {
+      this._activeLayerIds = [];
+      this._refreshLayerList();
+    });
+    eventBus.on('layer:selected', (meta) => {
+      this._selectedLayerId = meta?.id ?? null;
+      this._activeLayerIds = meta ? [meta.id] : [];
+      this._refreshLayerList();
+    });
+    eventBus.on('image:loaded', () => {
+      this._selectedLayerId = null;
+      this._activeLayerIds = [];
+      this._refreshLayerList();
+    });
+    eventBus.on('canvas:restored', () => {
+      this._selectedLayerId = null;
+      this._activeLayerIds = [];
+      this._refreshLayerList();
+    });
 
     // 事件委托
     this._el.addEventListener('click', (e) => {
@@ -82,6 +103,9 @@ class LayerPanel {
       }
 
       // 选中图层
+      this._selectedLayerId = layerId;
+      this._activeLayerIds = [];
+      this._refreshLayerList();
       this._lm.selectLayer(layerId);
     });
 
@@ -227,10 +251,56 @@ class LayerPanel {
   }
 
   _getSelectedLayerId() {
+    return this._selectedLayerId;
+  }
+
+  _selectLayerFromActiveObject() {
     const active = this._lm._cm?.getActiveObject();
-    if (!active) return null;
-    const meta = this._lm._findMeta(active);
-    return meta ? meta.id : null;
+    const layerIds = this._getSelectedLayerIds(active);
+    this._activeLayerIds = layerIds;
+    if (layerIds.length > 0) {
+      this._selectedLayerId = layerIds[0];
+    }
+    this._refreshLayerList();
+  }
+
+  _selectLayerByObject(obj) {
+    if (!obj || obj.excludeFromLayer) return;
+
+    const meta = this._lm.getLayerByObject?.(obj) || this._lm._findMeta?.(obj);
+    if (!meta) return;
+
+    this._selectedLayerId = meta.id;
+    this._activeLayerIds = [meta.id];
+    this._refreshLayerList();
+  }
+
+  _getSelectedLayerIds(activeObj) {
+    if (!activeObj) return [];
+
+    const objects = activeObj.type === 'activeSelection' && typeof activeObj.getObjects === 'function'
+      ? activeObj.getObjects()
+      : [activeObj];
+
+    return objects
+      .map(obj => this._lm.getLayerByObject?.(obj) || this._lm._findMeta?.(obj))
+      .filter(Boolean)
+      .map(meta => meta.id);
+  }
+
+  _getSelectedLayerIdSet() {
+    const ids = this._activeLayerIds;
+    return ids.length > 0 ? new Set(ids) : new Set(this._selectedLayerId === null ? [] : [this._selectedLayerId]);
+  }
+
+  _ensureSelectedLayerExists(layers) {
+    const layerIds = new Set(layers.map(layer => layer.id));
+    this._activeLayerIds = this._activeLayerIds.filter(id => layerIds.has(id));
+
+    if (this._selectedLayerId === null) return;
+    if (!layerIds.has(this._selectedLayerId)) {
+      this._selectedLayerId = null;
+    }
   }
 
   _refreshLayerList() {
@@ -244,9 +314,10 @@ class LayerPanel {
 
     this._lm.syncLayers();
     const layers = this._lm.getLayers();
+    this._ensureSelectedLayerExists(layers);
     if (countEl) countEl.textContent = layers.length;
 
-    const activeObj = this._lm._cm?.getActiveObject();
+    const selectedLayerIds = this._getSelectedLayerIdSet();
 
     // 图标映射
     const typeIcons = {
@@ -263,7 +334,7 @@ class LayerPanel {
 
     let html = '';
     for (const layer of layers) {
-      const isSelected = activeObj && activeObj === layer.fabricObj;
+      const isSelected = selectedLayerIds.has(layer.id);
       const isBg = layer.isBackground;
 
       // 背景图层用特殊图标
@@ -282,7 +353,7 @@ class LayerPanel {
         : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>`;
 
       html += `
-        <li class="layer-item ${isSelected ? 'layer-item--selected' : ''} ${isBg ? 'layer-item--background' : ''}" data-layer-id="${layer.id}" draggable="${!isBg}">
+        <li class="layer-item ${isSelected ? 'layer-item--selected' : ''} ${isBg ? 'layer-item--background' : ''}" data-layer-id="${layer.id}" draggable="${!isBg}" aria-selected="${isSelected}">
           <span class="layer-item__visibility" title="${layer.visible ? '隐藏' : '显示'}">${eyeIcon}</span>
           <span class="layer-item__thumbnail">${icon}</span>
           <span class="layer-item__name" title="${layer.name}">${layer.name}</span>

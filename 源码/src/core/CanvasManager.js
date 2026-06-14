@@ -166,6 +166,7 @@ class CanvasManager {
       multiplier: 1,
       ...options,
     };
+    this.refreshDynamicMosaics?.({ render: true });
     return this.canvas.toDataURL(opts);
   }
 
@@ -285,6 +286,17 @@ class CanvasManager {
       'objectCaching',
       'strokeLineCap',
       'strokeLineJoin',
+      '_layerName',
+      '_mosaicDynamic',
+      '_mosaicMode',
+      '_mosaicSize',
+      '_mosaicBlurRadius',
+      '_mosaicWidth',
+      '_mosaicHeight',
+      '_mosaicMaskType',
+      '_mosaicBrushPoints',
+      '_mosaicBrushSize',
+      '_mosaicLassoPoints',
     ]);
     // 手动序列化 canvas.clipPath（Fabric.js canvas.toJSON 不包含此属性）
     if (this.canvas.clipPath) {

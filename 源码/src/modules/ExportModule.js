@@ -122,6 +122,7 @@ class ExportModule extends BaseModule {
     const backgroundColor = canvas.backgroundColor;
 
     try {
+      this.canvasManager.refreshDynamicMosaics?.({ render: true });
       if (options.resetViewport) {
         canvas.viewportTransform = [1, 0, 0, 1, 0, 0];
       }

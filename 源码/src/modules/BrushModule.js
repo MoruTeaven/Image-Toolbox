@@ -12,8 +12,11 @@ class BrushModule extends BaseModule {
       ...defaultOptions,
     });
 
+    this._cursorPreview = null;
     this._savedBeforeStroke = false;
     this._boundMouseDown = this._onMouseDown.bind(this);
+    this._boundMouseMove = this._onMouseMove.bind(this);
+    this._boundMouseOut = this._hideCursorPreview.bind(this);
     this._boundPathCreated = this._onPathCreated.bind(this);
   }
 
@@ -25,12 +28,16 @@ class BrushModule extends BaseModule {
 
     canvas.discardActiveObject();
     canvas.isDrawingMode = true;
-    canvas.defaultCursor = 'crosshair';
-    canvas.freeDrawingCursor = 'crosshair';
+    canvas.defaultCursor = 'none';
+    canvas.hoverCursor = 'none';
+    canvas.freeDrawingCursor = 'none';
     this._ensureBrush();
     this._applyBrushOptions();
     canvas.on('mouse:down', this._boundMouseDown);
+    canvas.on('mouse:out', this._boundMouseOut);
     canvas.on('path:created', this._boundPathCreated);
+    canvas.upperCanvasEl?.addEventListener('mousemove', this._boundMouseMove);
+    canvas.upperCanvasEl?.addEventListener('mouseleave', this._boundMouseOut);
 
     eventBus.emit('module:activated', 'brush');
   }
@@ -39,9 +46,14 @@ class BrushModule extends BaseModule {
     const canvas = this.canvasManager.canvas;
     if (canvas) {
       canvas.off('mouse:down', this._boundMouseDown);
+      canvas.off('mouse:out', this._boundMouseOut);
       canvas.off('path:created', this._boundPathCreated);
+      canvas.upperCanvasEl?.removeEventListener('mousemove', this._boundMouseMove);
+      canvas.upperCanvasEl?.removeEventListener('mouseleave', this._boundMouseOut);
+      this._removeCursorPreview();
       canvas.isDrawingMode = false;
       canvas.freeDrawingCursor = 'crosshair';
+      canvas.hoverCursor = 'move';
       this._savedBeforeStroke = false;
     }
 
@@ -51,12 +63,14 @@ class BrushModule extends BaseModule {
   setColor(color) {
     this.options.color = this._normalizeColor(color, this.options.color);
     this._applyBrushOptions();
+    this._updateCursorPreviewStyle();
   }
 
   setWidth(width) {
     const parsed = parseInt(width, 10);
     this.options.width = this._clamp(Number.isFinite(parsed) ? parsed : this.options.width, 1, 80);
     this._applyBrushOptions();
+    this._updateCursorPreviewStyle();
   }
 
   applyPreset(presetName) {
@@ -139,6 +153,24 @@ class BrushModule extends BaseModule {
     this._savedBeforeStroke = true;
   }
 
+  _onMouseMove(e) {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) return;
+
+    const nativeEvent = e?.e || e;
+    if (!nativeEvent) return;
+
+    const pointer = canvas.getPointer(nativeEvent);
+    const preview = this._ensureCursorPreview();
+    preview.set({
+      left: pointer.x,
+      top: pointer.y,
+      visible: true,
+    });
+    canvas.bringToFront(preview);
+    this._requestRender();
+  }
+
   _onPathCreated(e) {
     const path = e.path;
     if (!path) return;
@@ -155,8 +187,79 @@ class BrushModule extends BaseModule {
     });
     path.setCoords();
     this.canvasManager.canvas.discardActiveObject();
+    if (this._cursorPreview) {
+      this.canvasManager.canvas.bringToFront(this._cursorPreview);
+    }
     this.canvasManager.canvas.renderAll();
     this._savedBeforeStroke = false;
+  }
+
+  _ensureCursorPreview() {
+    if (this._cursorPreview) return this._cursorPreview;
+
+    const canvas = this.canvasManager.canvas;
+    const preview = new fabric.Circle({
+      left: 0,
+      top: 0,
+      originX: 'center',
+      originY: 'center',
+      radius: this.options.width / 2,
+      fill: 'rgba(255,255,255,0.08)',
+      stroke: this.options.color,
+      strokeWidth: 1,
+      strokeUniform: true,
+      selectable: false,
+      evented: false,
+      excludeFromLayer: true,
+      excludeFromProperty: true,
+      excludeFromHistory: true,
+      excludeFromExport: true,
+      objectCaching: false,
+      visible: false,
+    });
+
+    this._cursorPreview = preview;
+    canvas.add(preview);
+    canvas.bringToFront(preview);
+    return preview;
+  }
+
+  _updateCursorPreviewStyle() {
+    if (!this._cursorPreview) return;
+
+    this._cursorPreview.set({
+      radius: this.options.width / 2,
+      stroke: this.options.color,
+    });
+    this._cursorPreview.setCoords();
+    this._requestRender();
+  }
+
+  _hideCursorPreview() {
+    if (!this._cursorPreview) return;
+
+    this._cursorPreview.set('visible', false);
+    this._requestRender();
+  }
+
+  _removeCursorPreview() {
+    if (!this._cursorPreview) return;
+
+    const canvas = this.canvasManager.canvas;
+    if (canvas) {
+      canvas.remove(this._cursorPreview);
+    }
+    this._cursorPreview = null;
+  }
+
+  _requestRender() {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) return;
+    if (typeof canvas.requestRenderAll === 'function') {
+      canvas.requestRenderAll();
+    } else {
+      canvas.renderAll();
+    }
   }
 
   _ensureBrush() {

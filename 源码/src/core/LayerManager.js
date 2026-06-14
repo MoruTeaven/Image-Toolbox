@@ -31,10 +31,16 @@ class LayerManager {
       // 跳过标记为不显示在图层面板的对象（如裁剪遮罩/裁剪框）
       if (obj.excludeFromLayer) continue;
 
-      // 在旧列表中查找已有元数据（按对象引用匹配）
+      // 在旧列表中查找已有元数据（优先按对象引用，替换对象时再按稳定 id 匹配）
       let meta = oldLayers.find(l => l.fabricObj === obj) || null;
+      if (!meta && obj.id) {
+        meta = oldLayers.find(l => !newLayers.includes(l) && l.fabricObj?.id === obj.id) || null;
+      }
       if (!meta) {
         meta = this._createMeta(obj, false, newLayers);
+      } else {
+        meta.fabricObj = obj;
+        this._setObjectLayerName(obj, meta.name);
       }
       meta.zIndex = objects.length - 1 - i;
       newLayers.push(meta);
@@ -45,6 +51,8 @@ class LayerManager {
       let bgMeta = oldLayers.find(l => l.fabricObj === this._cm.originalImage) || null;
       if (!bgMeta) {
         bgMeta = this._createMeta(this._cm.originalImage, true, newLayers);
+      } else {
+        bgMeta.fabricObj = this._cm.originalImage;
       }
       bgMeta.zIndex = 0;
       newLayers.push(bgMeta);
@@ -92,6 +100,8 @@ class LayerManager {
   _createMeta(obj, isBackground = false, newLayers = null) {
     const id = ++this._idCounter;
 
+    const savedName = this._getObjectLayerName(obj);
+
     // 按对象功能命名（不是按 Fabric type 字面翻译）
     const funcLabelMap = {
       'image': '马赛克',       // 非背景图片 = 马赛克覆盖层
@@ -103,23 +113,44 @@ class LayerManager {
       'path': '涂鸦',
       'group': '组合',
     };
-    const funcLabel = funcLabelMap[obj.type] || '图层';
+    let name = isBackground ? '背景' : savedName;
+    if (!name) {
+      const funcLabel = funcLabelMap[obj.type] || '图层';
 
-    // 同类图层序号：已在旧列表 + 本批次新创建的 = 当前总计
-    // 用 newLayers（本次同步正在构建的列表）计已存在的同类，更准确
-    const countSource = newLayers || this._layers;
-    const sameTypeCount = countSource.filter(l => l.name.startsWith(funcLabel)).length;
-    const name = `${funcLabel}-${sameTypeCount + 1}`;
+      // 同类图层序号：已在旧列表 + 本批次新创建的 = 当前总计
+      // 用 newLayers（本次同步正在构建的列表）计已存在的同类，更准确
+      const countSource = newLayers || this._layers;
+      const sameTypeCount = countSource.filter(l => l.name.startsWith(funcLabel)).length;
+      name = `${funcLabel}-${sameTypeCount + 1}`;
+    }
 
-    return {
+    const meta = {
       id,
-      name: isBackground ? '背景' : name,
+      name,
       visible: obj.visible !== false,
       locked: isBackground ? true : (!obj.selectable && !obj.evented),
       fabricObj: obj,
       zIndex: 0,
       isBackground,
     };
+
+    if (!isBackground) {
+      this._setObjectLayerName(obj, meta.name);
+    }
+
+    return meta;
+  }
+
+  _getObjectLayerName(obj) {
+    if (typeof obj?._layerName !== 'string') return '';
+
+    return obj._layerName.trim() ? obj._layerName : '';
+  }
+
+  _setObjectLayerName(obj, name) {
+    if (!obj || typeof name !== 'string' || !name.trim()) return;
+
+    obj._layerName = name;
   }
 
   /**
@@ -324,6 +355,7 @@ class LayerManager {
     const meta = this._layers.find(l => l.id === layerId);
     if (!meta) return;
     meta.name = newName;
+    this._setObjectLayerName(meta.fabricObj, newName);
     eventBus.emit('layers:updated', this._layers);
   }
 

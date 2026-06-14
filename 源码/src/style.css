@@ -1475,11 +1475,12 @@ html, body {
   align-items: center;
   gap: 4px;
   padding: 3px 6px;
+  border: 1px solid transparent;
   border-radius: 3px;
   cursor: grab;
   font-size: 11px;
   color: var(--color-text);
-  transition: background 0.1s;
+  transition: background 0.1s, border-color 0.1s, box-shadow 0.1s;
 }
 
 .layer-item:active {
@@ -1492,7 +1493,20 @@ html, body {
 
 .layer-item--selected {
   background: var(--bg-active) !important;
+  border-color: var(--color-accent);
+  box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.85);
   color: #ffffff !important;
+}
+
+.layer-item--selected .layer-item__thumbnail {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.58);
+  color: #ffffff;
+}
+
+.layer-item--selected .layer-item__visibility:hover,
+.layer-item--selected .layer-item__lock:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .layer-item--dragging {

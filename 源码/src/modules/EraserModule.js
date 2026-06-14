@@ -173,6 +173,7 @@ class EraserModule extends BaseModule {
       const rasterCanvas = this._renderTargetRegion(target, cropLeft, cropTop, cropWidth, cropHeight);
       const rasterCtx = rasterCanvas.getContext('2d');
       this._drawErasePathToContext(rasterCtx, erasePath, cropLeft, cropTop);
+      const layerName = typeof target._layerName === 'string' ? target._layerName : '';
 
       const newImg = new fabric.Image(rasterCanvas, {
         left: cropLeft,
@@ -189,6 +190,10 @@ class EraserModule extends BaseModule {
         selectable: false,
         evented: false,
       });
+
+      if (layerName) {
+        newImg._layerName = layerName;
+      }
 
       newImg.setCoords();
 
