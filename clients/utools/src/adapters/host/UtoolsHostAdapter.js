@@ -1,12 +1,139 @@
 /**
  * UtoolsHostAdapter
- * uTools/ZTools 平台宿主适配器
- * 实现 HostAdapter 接口，封装 uTools API
+ * uTools/ZTools 平台宿主适配器。
+ *
+ * 对外提供分组能力，同时保留旧方法，便于逐步迁移现有 UI/模块。
  */
 
-export default class UtoolsHostAdapter {
+const DEFAULT_HOST_NAME = 'uTools';
+
+function getHostApi() {
+  if (typeof window !== 'undefined') {
+    return window.hostTools
+      || window.utools
+      || window.ztools
+      || null;
+  }
+
+  if (typeof globalThis !== 'undefined') {
+    return globalThis.utools || globalThis.ztools || null;
+  }
+
+  return null;
+}
+
+function getHostDisplayName(api = getHostApi()) {
+  try {
+    if (api && typeof api.getAppName === 'function') {
+      const name = api.getAppName();
+      if (name) return String(name);
+    }
+  } catch (e) {
+    console.warn('[UtoolsHostAdapter] 获取宿主名称失败:', e);
+  }
+
+  if (typeof window !== 'undefined') {
+    if (window.ztools) return 'ZTools';
+    if (window.utools) return 'uTools';
+  }
+
+  return DEFAULT_HOST_NAME;
+}
+
+function normalizeUtoolsUser(user) {
+  if (!user) return null;
+
+  return {
+    nickname: user.nickname || user.name || user.userName || user.username || '',
+    avatar: user.avatar || user.avatarUrl || user.photo || '',
+    type: user.type || '',
+    raw: user,
+  };
+}
+
+function getRawUser(api = getHostApi()) {
+  try {
+    if (api && typeof api.getUser === 'function') return api.getUser();
+    if (api && typeof api.getUserInfo === 'function') return api.getUserInfo();
+    if (typeof window !== 'undefined' && typeof window.getHostUser === 'function') return window.getHostUser();
+  } catch (e) {
+    console.warn('[UtoolsHostAdapter] 获取宿主用户失败:', e);
+  }
+
+  return null;
+}
+
+function openExternal(url, api = getHostApi()) {
+  if (!url) return false;
+
+  try {
+    if (api && typeof api.shellOpenExternal === 'function') {
+      api.shellOpenExternal(url);
+      return true;
+    }
+  } catch (e) {
+    console.warn('[UtoolsHostAdapter] 使用宿主打开外部链接失败:', e);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return true;
+  }
+
+  return false;
+}
+
+class UtoolsHostAdapter {
   constructor() {
-    this._isUTools = typeof utools !== 'undefined';
+    this._api = getHostApi();
+    this._isUTools = !!this._api;
+
+    this.platform = {
+      id: typeof window !== 'undefined' && window.ztools ? 'ztools' : 'utools',
+      name: getHostDisplayName(this._api),
+      version: this.getHostAppVersion(),
+      runtime: 'electron',
+    };
+
+    this.user = {
+      getCurrentUser: () => this.getHostUser(),
+      fetchServerTemporaryToken: () => this.fetchUserServerTemporaryToken(),
+    };
+
+    this.storage = {
+      get: (key) => this.getStorageItem(key),
+      set: (key, value) => this.setStorageItem(key, value),
+      remove: (key) => this.removeStorageItem(key),
+    };
+
+    this.file = {
+      pickImage: () => this.pickImage(),
+      readImageFile: (filePath) => this.readImageFile(filePath),
+      saveImage: (data, suggestedName) => this.saveImage(data, suggestedName),
+    };
+
+    this.clipboard = {
+      writeImage: (data) => this.copyImage(data),
+      readText: () => this.readClipboard(),
+      writeText: (text) => this.writeClipboard(text),
+    };
+
+    this.window = {
+      setHeight: (height) => this.setWindowHeight(height),
+      setWidth: (width) => this.setWindowWidth(width),
+      setTitle: (title) => this.setWindowTitle(title),
+    };
+
+    this.system = {
+      openExternal: (url) => this.openHostExternal(url),
+      getSystemFonts: () => this.getSystemFonts(),
+      showNotification: (message, type) => this.showNotification(message, type),
+    };
+
+    this.lifecycle = {
+      onEnter: (callback) => this.onPluginEnter(callback),
+      onExit: (callback) => this.onPluginOut(callback),
+    };
   }
 
   get isUTools() {
@@ -14,143 +141,196 @@ export default class UtoolsHostAdapter {
   }
 
   get name() {
-    return 'utools';
+    return this.platform.id;
   }
 
   setWindowHeight(height) {
-    if (this._isUTools && utools?.setExpendHeight) {
-      utools.setExpendHeight(height);
+    if (this._api && typeof this._api.setExpendHeight === 'function') {
+      this._api.setExpendHeight(height);
     }
   }
 
   setWindowWidth(width) {
-    if (this._isUTools && utools?.setExpendWidth) {
-      utools.setExpendWidth(width);
+    if (this._api && typeof this._api.setExpendWidth === 'function') {
+      this._api.setExpendWidth(width);
     }
   }
 
   setWindowTitle(title) {
-    if (this._isUTools && utools?.setMainWindowTitle) {
-      utools.setMainWindowTitle(title);
+    if (this._api && typeof this._api.setMainWindowTitle === 'function') {
+      this._api.setMainWindowTitle(title);
     }
   }
 
   onPluginEnter(callback) {
-    if (this._isUTools && utools?.onPluginEnter) {
-      utools.onPluginEnter(callback);
+    if (this._api && typeof this._api.onPluginEnter === 'function') {
+      this._api.onPluginEnter(callback);
     }
+    return () => {};
   }
 
   onPluginOut(callback) {
-    if (this._isUTools && utools?.onPluginOut) {
-      utools.onPluginOut(callback);
+    if (this._api && typeof this._api.onPluginOut === 'function') {
+      this._api.onPluginOut(callback);
     }
+    return () => {};
   }
 
   showOpenDialog(options) {
-    if (this._isUTools && utools?.showOpenDialog) {
-      return utools.showOpenDialog(options);
+    if (this._api && typeof this._api.showOpenDialog === 'function') {
+      return this._api.showOpenDialog(options);
     }
     return null;
   }
 
   showSaveDialog(options) {
-    if (this._isUTools && utools?.showSaveDialog) {
-      return utools.showSaveDialog(options);
+    if (this._api && typeof this._api.showSaveDialog === 'function') {
+      return this._api.showSaveDialog(options);
     }
     return null;
   }
 
-  readFile(path) {
+  pickImage() {
+    if (typeof window !== 'undefined' && typeof window.showOpenImageDialog === 'function') {
+      const result = window.showOpenImageDialog();
+      const filePath = Array.isArray(result) ? result[0] : result?.filePaths?.[0];
+      return filePath ? this.readImageFile(filePath) : null;
+    }
+    return null;
+  }
+
+  readImageFile(filePath) {
     if (typeof window !== 'undefined' && typeof window.readImageFile === 'function') {
-      return window.readImageFile(path);
+      return window.readImageFile(filePath);
     }
     return null;
   }
 
-  writeClipboard(dataURL) {
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      return navigator.clipboard.writeText(dataURL);
+  readFile(filePath) {
+    return this.readImageFile(filePath);
+  }
+
+  saveImage(data, suggestedName = 'edited.png') {
+    if (typeof window === 'undefined') return false;
+    if (typeof window.showSaveImageDialog !== 'function' || typeof window.writeImageFile !== 'function') return false;
+
+    const filePath = window.showSaveImageDialog(suggestedName);
+    if (!filePath) return false;
+
+    return !!window.writeImageFile(filePath, data);
+  }
+
+  copyImage(data) {
+    if (typeof window !== 'undefined' && typeof window.copyImageToClipboard === 'function') {
+      window.copyImageToClipboard(data);
+      return true;
     }
-    return Promise.reject(new Error('Clipboard API not available'));
+    return false;
+  }
+
+  writeClipboard(text) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      return navigator.clipboard.writeText(text).then(() => true);
+    }
+    return Promise.resolve(false);
   }
 
   readClipboard() {
     if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
       return navigator.clipboard.readText();
     }
-    return Promise.reject(new Error('Clipboard API not available'));
+    return Promise.resolve(null);
   }
 
   showNotification(message, type) {
-    if (this._isUTools && utools?.showNotification) {
-      utools.showNotification(message, type);
+    if (this._api && typeof this._api.showNotification === 'function') {
+      this._api.showNotification(message, type);
     }
   }
 
-  fetchLocalFile(path) {
-    if (this._isUTools && utools?.fetchLocalFile) {
-      return utools.fetchLocalFile(path);
+  fetchLocalFile(filePath) {
+    if (this._api && typeof this._api.fetchLocalFile === 'function') {
+      return this._api.fetchLocalFile(filePath);
     }
     return null;
   }
 
   getHostAppVersion() {
-    if (this._isUTools && utools?.getVersion) {
-      return utools.getVersion();
+    if (this._api && typeof this._api.getVersion === 'function') {
+      return this._api.getVersion();
     }
     return 'unknown';
   }
 
   getHostName() {
-    if (this._isUTools && utools?.getNickname) {
-      return utools.getNickname();
-    }
-    return 'unknown';
+    return this.platform?.name || getHostDisplayName(this._api);
   }
 
   getHostUser() {
-    if (this._isUTools && utools?.getUserInfo) {
-      return utools.getUserInfo();
+    return normalizeUtoolsUser(getRawUser(this._api));
+  }
+
+  fetchUserServerTemporaryToken() {
+    if (this._api && typeof this._api.fetchUserServerTemporaryToken === 'function') {
+      return this._api.fetchUserServerTemporaryToken();
     }
+    return Promise.resolve(null);
+  }
+
+  getStorageItem(key) {
+    const storage = this._api?.dbStorage;
+    if (storage && typeof storage.getItem === 'function') return storage.getItem(key);
+    if (typeof localStorage !== 'undefined') return localStorage.getItem(key);
     return null;
   }
 
-  openHostExternal(url) {
-    if (this._isUTools && utools?.shellOpenExternal) {
-      utools.shellOpenExternal(url);
-    } else if (typeof window !== 'undefined') {
-      window.open(url, '_blank');
+  setStorageItem(key, value) {
+    const storage = this._api?.dbStorage;
+    if (storage && typeof storage.setItem === 'function') {
+      storage.setItem(key, value);
+      return;
     }
+    if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+  }
+
+  removeStorageItem(key) {
+    const storage = this._api?.dbStorage;
+    if (storage && typeof storage.removeItem === 'function') {
+      storage.removeItem(key);
+      return;
+    }
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
+  }
+
+  getSystemFonts() {
+    if (typeof window !== 'undefined' && typeof window.getSystemFonts === 'function') {
+      return window.getSystemFonts();
+    }
+    return [];
+  }
+
+  openHostExternal(url) {
+    return openExternal(url, this._api);
   }
 }
 
-// 便捷导出函数（供 UI 直接调用）
+const defaultAdapter = new UtoolsHostAdapter();
+
+export default UtoolsHostAdapter;
+
+// 便捷导出函数（旧 UI 兼容；新代码优先注入 host adapter）
 export function getHostAppVersion() {
-  if (typeof utools !== 'undefined' && utools.getVersion) {
-    return utools.getVersion();
-  }
-  return 'unknown';
+  return defaultAdapter.getHostAppVersion();
 }
 
 export function getHostName() {
-  if (typeof utools !== 'undefined' && utools.getNickname) {
-    return utools.getNickname();
-  }
-  return 'unknown';
+  return defaultAdapter.getHostName();
 }
 
 export function getHostUser() {
-  if (typeof utools !== 'undefined' && utools.getUserInfo) {
-    return utools.getUserInfo();
-  }
-  return null;
+  return defaultAdapter.getHostUser();
 }
 
 export function openHostExternal(url) {
-  if (typeof utools !== 'undefined' && utools.shellOpenExternal) {
-    utools.shellOpenExternal(url);
-  } else {
-    window.open(url, '_blank');
-  }
+  return defaultAdapter.openHostExternal(url);
 }

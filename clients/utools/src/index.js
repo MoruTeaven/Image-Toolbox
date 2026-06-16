@@ -85,7 +85,8 @@ class App {
       // 5. 初始化 UI 组件
       this.toolbar = new Toolbar(
         document.getElementById('toolbar'),
-        this.toolManager
+        this.toolManager,
+        this.hostAdapter
       );
 
       this.optionsBar = new OptionsBar(
@@ -119,7 +120,8 @@ class App {
       this.accountPage = new AccountPage(
         document.getElementById('account-page'),
         document.getElementById('app'),
-        this.sidePanelTabs
+        this.sidePanelTabs,
+        this.hostAdapter
       );
 
       // 6. 绑定全局事件

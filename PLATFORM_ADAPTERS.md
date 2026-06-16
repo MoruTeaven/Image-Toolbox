@@ -96,10 +96,11 @@ interface UserAdapter {
 }
 
 interface HostUser {
-  id: string;
+  id?: string;
   nickname?: string;
   avatar?: string;
   email?: string;
+  type?: string;
   raw?: unknown;
 }
 ```
@@ -107,7 +108,7 @@ interface HostUser {
 不同平台映射：
 
 ```text
-uTools: utools.getUserInfo() / getUser()
+uTools: utools.getUser()
 ZTools: ztools 用户接口，若兼容 utools 则复用
 Tauri: invoke('get_current_user') 或本地配置
 Web: null 或业务登录态
@@ -118,6 +119,82 @@ Web: null 或业务登录态
 - `core/` 只认 `HostUser`
 - 平台原始字段放到 `raw`
 - 不保证所有端都有用户；无用户时返回 `null`
+- `id` 不强制要求；某些宿主只提供昵称/头像，不提供稳定用户 id
+
+#### uTools 用户接口
+
+官方文档：<https://www.u-tools.cn/docs/developer/utools-api/user.html>
+
+uTools 端可以直接调用：
+
+```js
+const user = utools.getUser();
+```
+
+返回值：
+
+```ts
+interface UtoolsUserInfo {
+  avatar: string;
+  nickname: string;
+  type: 'member' | 'user';
+}
+```
+
+未登录时返回 `null`。
+
+映射到统一用户模型：
+
+```js
+function normalizeUtoolsUser(user) {
+  if (!user) return null;
+
+  return {
+    nickname: user.nickname,
+    avatar: user.avatar,
+    type: user.type,
+    raw: user,
+  };
+}
+```
+
+uTools 端默认用户展示策略：
+
+```js
+const user = normalizeUtoolsUser(utools.getUser());
+
+const displayUser = {
+  nickname: user?.nickname || '本地用户',
+  avatar: user?.avatar || DEFAULT_AVATAR,
+  type: user?.type || 'local',
+};
+```
+
+也就是说，uTools 当前端可以直接把 `utools.getUser()` 返回的 `nickname` 和 `avatar` 作为默认展示值：
+
+```text
+昵称: user.nickname
+头像: user.avatar
+用户类型: user.type
+```
+
+只有在未登录、接口不可用、头像为空时，才使用客户端内置默认值。
+
+uTools 还提供服务端临时 token：
+
+```js
+const { token, expired_at } = await utools.fetchUserServerTemporaryToken();
+```
+
+这个 token 不应该放进 `core` 的通用用户对象里。建议由 uTools adapter 单独暴露：
+
+```ts
+interface UtoolsUserAdapter extends UserAdapter {
+  fetchServerTemporaryToken(): Promise<{ token: string; expired_at: number }>;
+}
+```
+
+用途：后续如果有云同步、会员校验、服务端接口请求，可以由 `clients/utools` 自己调用。
 
 ### StorageAdapter
 

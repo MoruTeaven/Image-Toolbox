@@ -1,8 +1,30 @@
 import eventBus from '../../../../core/src/EventBus.js';
 import { SIDE_PANEL_LAYOUT_KEY, SIDE_PANEL_LAYOUTS } from './SidePanelTabs.js';
 import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../../../../core/src/utils/theme.js';
-import { getHostAppVersion, getHostName, getHostUser, openHostExternal } from '../adapters/host/UtoolsHostAdapter.js';
-import { updateCategories, updateRecords } from '../updateRecords.js';
+import { updateCategories, updateRecords, PLATFORMS } from '../updateRecords.js';
+
+/**
+ * 获取当前平台标识
+ */
+function getCurrentPlatform() {
+  if (typeof window === 'undefined') return null;
+  if (window.ztools) return PLATFORMS.ZTOOLS;
+  if (window.utools) return PLATFORMS.UTOOLS;
+  return null;
+}
+
+/**
+ * 检查更新项是否应在当前平台显示
+ * @param {null|string[]} platforms - 平台限制 (null=所有平台, ['utools']=仅utools等)
+ * @returns {boolean} 是否应显示
+ */
+function shouldShowForCurrentPlatform(platforms) {
+  if (platforms === null || platforms === undefined) return true;
+  if (!Array.isArray(platforms)) return true;
+  
+  const currentPlatform = getCurrentPlatform();
+  return platforms.includes(currentPlatform);
+}
 
 export const EDITOR_BARS_LAYOUT_KEY = 'image-toolbox-editor-bars-layout';
 export const EDITOR_BARS_LAYOUTS = {
@@ -24,10 +46,11 @@ const VALID_EDITOR_SIDE_PANEL_POSITIONS = new Set(Object.values(EDITOR_SIDE_PANE
  * Opens from the avatar into a standalone page with side navigation.
  */
 class AccountPage {
-  constructor(containerEl, editorEl, sidePanelTabs) {
+  constructor(containerEl, editorEl, sidePanelTabs, host = null) {
     this._el = containerEl;
     this._editorEl = editorEl;
     this._sidePanelTabs = sidePanelTabs;
+    this._host = host;
     this._activeSection = 'mine';
     this._user = this._getHostUser();
 
@@ -183,7 +206,7 @@ class AccountPage {
 
   _renderMine() {
     const user = this._getUserView();
-    const hostName = getHostName();
+    const hostName = this._getHostName();
     return `
       <div class="account-card account-card--profile">
         <div class="account-card__avatar-wrap">
@@ -249,7 +272,7 @@ class AccountPage {
 
   _renderAbout() {
     const appVersion = this._getCurrentVersion();
-    const hostName = getHostName();
+    const hostName = this._getHostName();
     const hostVersion = this._getHostVersion();
 
     return `
@@ -334,19 +357,60 @@ class AccountPage {
     `;
   }
 
-  _renderChangeGroup(record, category) {
-    const items = record.changes?.[category.key] || [];
-    if (items.length === 0) return '';
+   _renderChangeGroup(record, category) {
+     const items = record.changes?.[category.key] || [];
+     if (items.length === 0) return '';
 
-    return `
-      <div class="update-record__group update-record__group--${category.key}">
-        <div class="update-record__group-title">${this._escapeHTML(category.title)}</div>
-        <ul>
-          ${items.map(item => `<li>${this._escapeHTML(item)}</li>`).join('')}
-        </ul>
-      </div>
-    `;
-  }
+     // 过滤出当前平台应显示的项目
+     const visibleItems = items.filter(item => {
+       // 兼容旧格式（字符串）
+       if (typeof item === 'string') return true;
+       // 新格式（对象）- 检查平台限制
+       return shouldShowForCurrentPlatform(item.platforms);
+     });
+
+     if (visibleItems.length === 0) return '';
+
+     return `
+       <div class="update-record__group update-record__group--${category.key}">
+         <div class="update-record__group-title">${this._escapeHTML(category.title)}</div>
+         <ul>
+           ${visibleItems.map(item => this._renderChangeItem(item)).join('')}
+         </ul>
+       </div>
+     `;
+   }
+
+   /**
+    * 渲染单个更新项，处理平台限制标记
+    */
+   _renderChangeItem(item) {
+     // 兼容旧格式（字符串）
+     if (typeof item === 'string') {
+       return `<li>${this._escapeHTML(item)}</li>`;
+     }
+
+     // 新格式（对象）
+     const text = item.text || '';
+     const platforms = item.platforms;
+     const currentPlatform = getCurrentPlatform();
+
+     // 如果有平台限制且当前不是所有平台，添加平台标签
+     let badge = '';
+     if (Array.isArray(platforms) && platforms.length > 0 && platforms.length < 3) {
+       const platformLabels = {
+         'utools': 'uTools',
+         'ztools': 'ZTools',
+         'local': '本地环境'
+       };
+       const labels = platforms.map(p => platformLabels[p] || p).join('/');
+       const isCurrentPlatform = shouldShowForCurrentPlatform(platforms);
+       const badgeClass = isCurrentPlatform ? 'update-item__platform-badge--current' : 'update-item__platform-badge--other';
+       badge = `<span class="update-item__platform-badge ${badgeClass}">${this._escapeHTML(labels)}</span>`;
+     }
+
+     return `<li><span class="update-item__text">${this._escapeHTML(text)}</span>${badge}</li>`;
+   }
 
   _renderAvatar(className) {
     const user = this._getUserView();
@@ -362,7 +426,7 @@ class AccountPage {
 
   _getUserView() {
     const user = this._user || {};
-    const hostName = getHostName();
+    const hostName = this._getHostName();
     const name = user.nickname || user.name || user.userName || user.username || `${hostName} 用户`;
     const avatar = user.avatar || user.avatarUrl || user.photo || '';
     return {
@@ -394,7 +458,7 @@ class AccountPage {
 
   _getHostVersion() {
     try {
-      return this._formatVersion(getHostAppVersion());
+      return this._formatVersion(this._host?.platform?.version || this._host?.getHostAppVersion?.());
     } catch (e) {
       console.warn('[AccountPage] 获取宿主版本失败:', e);
     }
@@ -412,7 +476,7 @@ class AccountPage {
     if (!url) return;
 
     try {
-      if (openHostExternal(url)) {
+      if (this._host?.system?.openExternal?.(url) || this._host?.openHostExternal?.(url)) {
         return;
       }
     } catch (e) {
@@ -461,11 +525,23 @@ class AccountPage {
 
   _getHostUser() {
     try {
-      return getHostUser();
+      const result = this._host?.user?.getCurrentUser?.() || this._host?.getHostUser?.() || null;
+      if (result && typeof result.then === 'function') {
+        result.then((user) => {
+          this._user = user;
+          this._render();
+        }).catch((e) => console.warn('[AccountPage] 获取宿主用户信息失败:', e));
+        return null;
+      }
+      return result;
     } catch (e) {
       console.warn('[AccountPage] 获取宿主用户信息失败:', e);
     }
     return null;
+  }
+
+  _getHostName() {
+    return this._host?.platform?.name || this._host?.getHostName?.() || 'uTools';
   }
 
   _getInitial(name) {

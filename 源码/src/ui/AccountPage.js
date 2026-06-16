@@ -2,7 +2,30 @@ import eventBus from '../core/EventBus.js';
 import { SIDE_PANEL_LAYOUT_KEY, SIDE_PANEL_LAYOUTS } from './SidePanelTabs.js';
 import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../utils/theme.js';
 import { getHostAppVersion, getHostName, getHostUser, openHostExternal } from '../utils/host.js';
-import { updateCategories, updateRecords } from '../../updateRecords.js';
+import { updateCategories, updateRecords, PLATFORMS } from '../../updateRecords.js';
+
+/**
+ * 获取当前平台标识
+ */
+function getCurrentPlatform() {
+  if (typeof window === 'undefined') return null;
+  if (window.ztools) return PLATFORMS.ZTOOLS;
+  if (window.utools) return PLATFORMS.UTOOLS;
+  return null;
+}
+
+/**
+ * 检查更新项是否应在当前平台显示
+ * @param {null|string[]} platforms - 平台限制 (null=所有平台, ['utools']=仅utools等)
+ * @returns {boolean} 是否应显示
+ */
+function shouldShowForCurrentPlatform(platforms) {
+  if (platforms === null || platforms === undefined) return true;
+  if (!Array.isArray(platforms)) return true;
+  
+  const currentPlatform = getCurrentPlatform();
+  return platforms.includes(currentPlatform);
+}
 
 export const EDITOR_BARS_LAYOUT_KEY = 'image-toolbox-editor-bars-layout';
 export const EDITOR_BARS_LAYOUTS = {
@@ -334,19 +357,60 @@ class AccountPage {
     `;
   }
 
-  _renderChangeGroup(record, category) {
-    const items = record.changes?.[category.key] || [];
-    if (items.length === 0) return '';
+   _renderChangeGroup(record, category) {
+     const items = record.changes?.[category.key] || [];
+     if (items.length === 0) return '';
 
-    return `
-      <div class="update-record__group update-record__group--${category.key}">
-        <div class="update-record__group-title">${this._escapeHTML(category.title)}</div>
-        <ul>
-          ${items.map(item => `<li>${this._escapeHTML(item)}</li>`).join('')}
-        </ul>
-      </div>
-    `;
-  }
+     // 过滤出当前平台应显示的项目
+     const visibleItems = items.filter(item => {
+       // 兼容旧格式（字符串）
+       if (typeof item === 'string') return true;
+       // 新格式（对象）- 检查平台限制
+       return shouldShowForCurrentPlatform(item.platforms);
+     });
+
+     if (visibleItems.length === 0) return '';
+
+     return `
+       <div class="update-record__group update-record__group--${category.key}">
+         <div class="update-record__group-title">${this._escapeHTML(category.title)}</div>
+         <ul>
+           ${visibleItems.map(item => this._renderChangeItem(item)).join('')}
+         </ul>
+       </div>
+     `;
+   }
+
+   /**
+    * 渲染单个更新项，处理平台限制标记
+    */
+   _renderChangeItem(item) {
+     // 兼容旧格式（字符串）
+     if (typeof item === 'string') {
+       return `<li>${this._escapeHTML(item)}</li>`;
+     }
+
+     // 新格式（对象）
+     const text = item.text || '';
+     const platforms = item.platforms;
+     const currentPlatform = getCurrentPlatform();
+
+     // 如果有平台限制且当前不是所有平台，添加平台标签
+     let badge = '';
+     if (Array.isArray(platforms) && platforms.length > 0 && platforms.length < 3) {
+       const platformLabels = {
+         'utools': 'uTools',
+         'ztools': 'ZTools',
+         'local': '本地环境'
+       };
+       const labels = platforms.map(p => platformLabels[p] || p).join('/');
+       const isCurrentPlatform = shouldShowForCurrentPlatform(platforms);
+       const badgeClass = isCurrentPlatform ? 'update-item__platform-badge--current' : 'update-item__platform-badge--other';
+       badge = `<span class="update-item__platform-badge ${badgeClass}">${this._escapeHTML(labels)}</span>`;
+     }
+
+     return `<li><span class="update-item__text">${this._escapeHTML(text)}</span>${badge}</li>`;
+   }
 
   _renderAvatar(className) {
     const user = this._getUserView();

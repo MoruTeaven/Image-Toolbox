@@ -1,14 +1,14 @@
 import eventBus from '../../../../core/src/EventBus.js';
-import { getHostName, getHostUser } from '../adapters/host/UtoolsHostAdapter.js';
 
 /**
  * Toolbar UI component.
  * Renders tool buttons and handles tool switching.
  */
 class Toolbar {
-  constructor(containerEl, toolManager) {
+  constructor(containerEl, toolManager, host = null) {
     this._el = containerEl;
     this._tm = toolManager;
+    this._host = host;
     this._currentTool = 'select';
     this._user = this._getHostUser();
 
@@ -157,7 +157,7 @@ class Toolbar {
 
   _renderAccount() {
     const user = this._user || {};
-    const name = user.nickname || user.name || user.userName || user.username || `${getHostName()} 用户`;
+    const name = user.nickname || user.name || user.userName || user.username || `${this._getHostName()} 用户`;
     const avatar = user.avatar || user.avatarUrl || user.photo || '';
     const initial = this._getInitial(name);
     const title = this._escapeAttr(name);
@@ -179,11 +179,23 @@ class Toolbar {
 
   _getHostUser() {
     try {
-      return getHostUser();
+      const result = this._host?.user?.getCurrentUser?.() || this._host?.getHostUser?.() || null;
+      if (result && typeof result.then === 'function') {
+        result.then((user) => {
+          this._user = user;
+          this._render();
+        }).catch((e) => console.warn('[Toolbar] 获取宿主用户信息失败:', e));
+        return null;
+      }
+      return result;
     } catch (e) {
       console.warn('[Toolbar] 获取宿主用户信息失败:', e);
     }
     return null;
+  }
+
+  _getHostName() {
+    return this._host?.platform?.name || this._host?.getHostName?.() || 'uTools';
   }
 
   _getInitial(name) {
