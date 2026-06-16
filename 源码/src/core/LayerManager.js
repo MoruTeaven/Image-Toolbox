@@ -20,6 +20,7 @@ class LayerManager {
 
     const objects = canvas.getObjects();
     const oldLayers = this._layers;   // 保留旧列表用于查找已有元数据
+    const currentObjects = new Set(objects);
     const newLayers = [];
 
     // 先处理非背景图层：从后往前（画布中后面的是上层 → 放在面板顶部）
@@ -37,10 +38,10 @@ class LayerManager {
         meta = oldLayers.find(l => !newLayers.includes(l) && l.fabricObj?.id === obj.id) || null;
       }
       if (!meta) {
-        meta = this._createMeta(obj, false, newLayers);
+        meta = this._createMeta(obj, false, newLayers, currentObjects);
       } else {
         meta.fabricObj = obj;
-        this._setObjectLayerName(obj, meta.name);
+        this._refreshMetaName(meta, obj, false, newLayers, currentObjects);
       }
       meta.zIndex = objects.length - 1 - i;
       newLayers.push(meta);
@@ -50,9 +51,10 @@ class LayerManager {
     if (this._cm.originalImage) {
       let bgMeta = oldLayers.find(l => l.fabricObj === this._cm.originalImage) || null;
       if (!bgMeta) {
-        bgMeta = this._createMeta(this._cm.originalImage, true, newLayers);
+        bgMeta = this._createMeta(this._cm.originalImage, true, newLayers, currentObjects);
       } else {
         bgMeta.fabricObj = this._cm.originalImage;
+        this._refreshMetaName(bgMeta, this._cm.originalImage, true, newLayers, currentObjects);
       }
       bgMeta.zIndex = 0;
       newLayers.push(bgMeta);
@@ -97,10 +99,80 @@ class LayerManager {
     return this._findMeta(obj);
   }
 
-  _createMeta(obj, isBackground = false, newLayers = null) {
+  _createMeta(obj, isBackground = false, newLayers = null, currentObjects = null) {
     const id = ++this._idCounter;
+    const nameInfo = this._resolveLayerName(obj, isBackground, newLayers, null, currentObjects);
+
+    const meta = {
+      id,
+      name: nameInfo.name,
+      visible: obj.visible !== false,
+      locked: isBackground ? true : (!obj.selectable && !obj.evented),
+      fabricObj: obj,
+      zIndex: 0,
+      isBackground,
+    };
+
+    if (!isBackground) {
+      this._setObjectLayerName(obj, meta.name, nameInfo.auto, nameInfo.baseName);
+    }
+
+    return meta;
+  }
+
+  _refreshMetaName(meta, obj, isBackground = false, newLayers = null, currentObjects = null) {
+    const nameInfo = this._resolveLayerName(obj, isBackground, newLayers, meta, currentObjects);
+    meta.name = nameInfo.name;
+
+    if (!isBackground) {
+      this._setObjectLayerName(obj, meta.name, nameInfo.auto, nameInfo.baseName);
+    }
+  }
+
+  _resolveLayerName(obj, isBackground = false, newLayers = null, currentMeta = null, currentObjects = null) {
+    if (isBackground) {
+      return { name: '背景', auto: false, baseName: '背景' };
+    }
 
     const savedName = this._getObjectLayerName(obj);
+    const isAutoName = obj?._layerNameAuto === true
+      || !savedName
+      || (obj?._layerNameAuto !== false && this._isLegacyDefaultLayerName(savedName, obj));
+    if (!isAutoName && savedName) {
+      return { name: savedName, auto: false, baseName: '' };
+    }
+
+    const baseName = this._getDefaultLayerBaseName(obj);
+    if (savedName
+      && obj?._layerBaseName === baseName
+      && !this._isLayerNameUsed(savedName, newLayers, currentMeta, currentObjects)) {
+      return { name: savedName, auto: true, baseName };
+    }
+
+    return {
+      name: this._getUniqueDefaultLayerName(baseName, newLayers, currentMeta, currentObjects),
+      auto: true,
+      baseName,
+    };
+  }
+
+  _getDefaultLayerBaseName(obj) {
+    if (this._isTextLayerObject(obj)) {
+      const text = this._normalizeLayerText(obj.text);
+      return text ? `文字 - ${text}` : '文字';
+    }
+
+    if (this._isBrushLayerObject(obj)) {
+      return this._joinLayerNameParts(
+        '画笔',
+        obj._layerColorPresetName || this._getBrushColorPresetName(obj.stroke),
+        obj._layerWidthPresetName || this._getBrushWidthPresetName(obj.strokeWidth)
+      );
+    }
+
+    if (this._isMosaicLayerObject(obj)) {
+      return this._joinLayerNameParts('马赛克', obj._layerPresetName || this._getMosaicPresetName(obj));
+    }
 
     // 按对象功能命名（不是按 Fabric type 字面翻译）
     const funcLabelMap = {
@@ -113,32 +185,135 @@ class LayerManager {
       'path': '涂鸦',
       'group': '组合',
     };
-    let name = isBackground ? '背景' : savedName;
-    if (!name) {
-      const funcLabel = funcLabelMap[obj.type] || '图层';
 
-      // 同类图层序号：已在旧列表 + 本批次新创建的 = 当前总计
-      // 用 newLayers（本次同步正在构建的列表）计已存在的同类，更准确
-      const countSource = newLayers || this._layers;
-      const sameTypeCount = countSource.filter(l => l.name.startsWith(funcLabel)).length;
-      name = `${funcLabel}-${sameTypeCount + 1}`;
+    return funcLabelMap[obj?.type] || '图层';
+  }
+
+  _getUniqueDefaultLayerName(baseName, newLayers = null, currentMeta = null, currentObjects = null) {
+    let name = baseName;
+    let index = 2;
+
+    while (this._isLayerNameUsed(name, newLayers, currentMeta, currentObjects)) {
+      name = `${baseName} - ${index}`;
+      index++;
     }
 
-    const meta = {
-      id,
-      name,
-      visible: obj.visible !== false,
-      locked: isBackground ? true : (!obj.selectable && !obj.evented),
-      fabricObj: obj,
-      zIndex: 0,
-      isBackground,
+    return name;
+  }
+
+  _isLayerNameUsed(name, newLayers = null, currentMeta = null, currentObjects = null) {
+    const layers = [...(newLayers || []), ...this._layers];
+    return layers.some(layer => {
+      if (!layer || layer === currentMeta || layer.name !== name) return false;
+      if (!currentObjects || !layer.fabricObj) return true;
+      return currentObjects.has(layer.fabricObj);
+    });
+  }
+
+  _isTextLayerObject(obj) {
+    return obj?.type === 'i-text' || obj?.type === 'text' || obj?.type === 'textbox';
+  }
+
+  _isBrushLayerObject(obj) {
+    return obj?._layerKind === 'brush'
+      || (typeof obj?.id === 'string' && obj.id.startsWith('brush_'));
+  }
+
+  _isMosaicLayerObject(obj) {
+    return obj?._layerKind === 'mosaic'
+      || obj?._mosaicDynamic === true
+      || (typeof obj?.id === 'string' && obj.id.startsWith('mosaic_'));
+  }
+
+  _isLegacyDefaultLayerName(name, obj) {
+    const label = this._getLegacyTypeLabel(obj);
+    if (!label) return false;
+
+    return new RegExp(`^${this._escapeRegExp(label)}-\\d+$`).test(name);
+  }
+
+  _getLegacyTypeLabel(obj) {
+    const legacyLabelMap = {
+      'image': '马赛克',
+      'i-text': '文字',
+      'textbox': '文字',
+      'text': '文字',
+      'rect': '矩形',
+      'circle': '圆形',
+      'path': '涂鸦',
+      'group': '组合',
     };
 
-    if (!isBackground) {
-      this._setObjectLayerName(obj, meta.name);
+    return legacyLabelMap[obj?.type] || '图层';
+  }
+
+  _getBrushColorPresetName(color) {
+    const colorMap = {
+      '#d83b31': '红',
+      '#1677ff': '蓝',
+      '#ffd700': '黄',
+      '#2ead4a': '绿',
+      '#ffffff': '白',
+      '#111111': '黑',
+    };
+
+    return colorMap[this._normalizeColor(color)] || '';
+  }
+
+  _getBrushWidthPresetName(width) {
+    const widthMap = {
+      3: '细',
+      6: '中',
+      12: '粗',
+      24: '特粗',
+    };
+
+    return widthMap[Math.round(Number(width))] || '';
+  }
+
+  _getMosaicPresetName(obj) {
+    if ((obj?._mosaicMode || 'mosaic') === 'blur') {
+      const blurMap = {
+        6: '轻模糊',
+        12: '中模糊',
+        18: '强模糊',
+      };
+      return blurMap[Math.round(Number(obj._mosaicBlurRadius))] || '';
     }
 
-    return meta;
+    const mosaicMap = {
+      6: '轻马赛克',
+      12: '中马赛克',
+      24: '重马赛克',
+    };
+    return mosaicMap[Math.round(Number(obj?._mosaicSize))] || '';
+  }
+
+  _normalizeColor(color) {
+    if (typeof color !== 'string') return '';
+
+    const value = color.trim().toLowerCase();
+    if (/^#[0-9a-f]{6}$/i.test(value)) return value;
+    if (/^#[0-9a-f]{3}$/i.test(value)) {
+      return '#' + value.slice(1).split('').map(ch => ch + ch).join('');
+    }
+
+    return '';
+  }
+
+  _escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  _joinLayerNameParts(baseName, ...parts) {
+    return [baseName, ...parts]
+      .map(part => String(part || '').trim())
+      .filter(Boolean)
+      .join(' - ');
+  }
+
+  _normalizeLayerText(text) {
+    return String(text || '').replace(/\s+/g, ' ').trim();
   }
 
   _getObjectLayerName(obj) {
@@ -147,10 +322,12 @@ class LayerManager {
     return obj._layerName.trim() ? obj._layerName : '';
   }
 
-  _setObjectLayerName(obj, name) {
+  _setObjectLayerName(obj, name, auto = false, baseName = '') {
     if (!obj || typeof name !== 'string' || !name.trim()) return;
 
     obj._layerName = name;
+    obj._layerNameAuto = !!auto;
+    obj._layerBaseName = auto ? (baseName || name) : '';
   }
 
   /**
@@ -355,7 +532,7 @@ class LayerManager {
     const meta = this._layers.find(l => l.id === layerId);
     if (!meta) return;
     meta.name = newName;
-    this._setObjectLayerName(meta.fabricObj, newName);
+    this._setObjectLayerName(meta.fabricObj, newName, false);
     eventBus.emit('layers:updated', this._layers);
   }
 

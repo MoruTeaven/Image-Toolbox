@@ -17,7 +17,7 @@ export const CANVAS_DEFAULTS = {
 export const MOSAIC_DEFAULTS = {
   MODE: 'mosaic',
   DRAW_MODE: 'rect',
-  MOSAIC_SIZE: 10,
+  MOSAIC_SIZE: 12,
   BLUR_RADIUS: 8,
   BRUSH_SIZE: 20,
   MIN_MOSAIC_SIZE: 2,

@@ -35,7 +35,7 @@ export function createDynamicMosaicObject(rect, options = {}, maskOptions = {}) 
     dynamicMosaic: true,
     mosaicVersion: 1,
     mosaicEffect: options.mode === 'blur' ? 'blur' : 'mosaic',
-    mosaicSize: Math.max(2, parseInt(options.mosaicSize, 10) || 10),
+    mosaicSize: Math.max(2, parseInt(options.mosaicSize, 10) || 12),
     mosaicBlurRadius: Math.max(1, parseInt(options.blurRadius, 10) || 8),
     mosaicMaskType: maskOptions.type || 'rect',
     mosaicBrushPoints: maskOptions.brushPoints || null,
@@ -109,7 +109,7 @@ export function updateDynamicMosaicObject(canvas, obj, options = {}) {
   if (obj.mosaicEffect === 'blur') {
     blurPixels(effectData, width, height, obj.mosaicBlurRadius || 8, maskData);
   } else {
-    mosaicPixels(effectData, width, height, obj.mosaicSize || 10, maskData);
+    mosaicPixels(effectData, width, height, obj.mosaicSize || 12, maskData);
   }
 
   const output = sample.data;
@@ -272,7 +272,7 @@ function createMaskData(obj, width, height) {
 }
 
 function mosaicPixels(data, width, height, blockSize, mask) {
-  const size = Math.max(2, parseInt(blockSize, 10) || 10);
+  const size = Math.max(2, parseInt(blockSize, 10) || 12);
 
   for (let y = 0; y < height; y += size) {
     for (let x = 0; x < width; x += size) {

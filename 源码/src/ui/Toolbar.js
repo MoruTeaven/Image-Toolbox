@@ -1,4 +1,5 @@
 import eventBus from '../core/EventBus.js';
+import { getHostName, getHostUser } from '../utils/host.js';
 
 /**
  * 工具栏 UI 组件
@@ -9,7 +10,7 @@ class Toolbar {
     this._el = containerEl;
     this._tm = toolManager;
     this._currentTool = 'select';
-    this._user = this._getUtoolsUser();
+    this._user = this._getHostUser();
 
     // SVG 图标模板
     this._icons = {
@@ -156,7 +157,7 @@ class Toolbar {
 
   _renderAccount() {
     const user = this._user || {};
-    const name = user.nickname || user.name || user.userName || user.username || 'uTools 用户';
+    const name = user.nickname || user.name || user.userName || user.username || `${getHostName()} 用户`;
     const avatar = user.avatar || user.avatarUrl || user.photo || '';
     const initial = this._getInitial(name);
     const title = this._escapeAttr(name);
@@ -176,16 +177,11 @@ class Toolbar {
     `;
   }
 
-  _getUtoolsUser() {
+  _getHostUser() {
     try {
-      if (typeof window.getUtoolsUser === 'function') {
-        return window.getUtoolsUser();
-      }
-      if (typeof utools !== 'undefined' && typeof utools.getUser === 'function') {
-        return utools.getUser();
-      }
+      return getHostUser();
     } catch (e) {
-      console.warn('[Toolbar] 获取 uTools 用户信息失败:', e);
+      console.warn('[Toolbar] 获取宿主用户信息失败:', e);
     }
     return null;
   }

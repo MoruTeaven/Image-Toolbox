@@ -20,6 +20,7 @@ import AccountPage, {
   EDITOR_SIDE_PANEL_POSITION_KEY,
   EDITOR_SIDE_PANEL_POSITIONS,
 } from './ui/AccountPage.js';
+import UtoolsHostAdapter from './adapters/host/UtoolsHostAdapter.js';
 import { initTheme } from './utils/theme.js';
 
 // ═══════════════════════════════════════
@@ -75,8 +76,11 @@ class App {
       // 3. 初始化历史记录
       this.historyManager = new HistoryManager(this.canvasManager, 30);
 
-      // 4. 初始化工具管理器（注册所有模块）
-      this.toolManager = new ToolManager(this.canvasManager, this.historyManager);
+      // 4. 初始化工具管理器（注入 host adapter）
+      this.hostAdapter = new UtoolsHostAdapter();
+      this.toolManager = new ToolManager(this.canvasManager, this.historyManager, {
+        host: this.hostAdapter,
+      });
 
       // 5. 初始化 UI 组件
       this.toolbar = new Toolbar(
@@ -171,8 +175,8 @@ class App {
       }
     });
 
-    // 文件选择对话框（uTools API）
-    // ⚠️ utools.showOpenDialog 返回 string[]（文件路径数组），不是 { filePaths: [] }
+    // 文件选择对话框（宿主 API）
+    // ⚠️ uTools/ZTools showOpenDialog 返回 string[]（文件路径数组），不是 { filePaths: [] }
     // ⚠️ 该 API 是同步的，不需要 await
     document.getElementById('welcome-btn')?.addEventListener('click', () => {
       if (typeof window.showOpenImageDialog === 'function') {
@@ -325,31 +329,56 @@ class App {
       this.toolManager?.activateTool(toolName);
     });
 
-    // ═══ 插件重复进入（文件匹配/剪贴板匹配/超级面板等） ═══
-    if (typeof utools !== 'undefined') {
-      utools.onPluginEnter(({ code, type, payload, from }) => {
-        console.log('[App] onPluginEnter:', { code, type, from, payload });
-        if (code === 'image-edit') {
-          // 文件和超级面板图片都优先直接解析 payload，避免和 preload 执行顺序竞争。
-          const source = this._getExternalImageSource(type, payload);
-          console.log('[App] 外部图片源:', source ? 'ok' : 'empty', { type, from });
-          if (source) {
-            if (window.__imageSource === source) {
-              window.__imageSource = null;
-            }
-            this._loadImage(source);
-          } else if (type === 'img' && window.__imageSource) {
-            const source = window.__imageSource;
-            if (source) {
-              window.__imageSource = null;
-              this._loadImage(source);
-            }
-          }
+    // ═══ Toast 提示（ExportModule 等模块通过 eventBus 触发） ═══
+    eventBus.on('toast:show', ({ message, type }) => {
+      this._showToast(message, type);
+    });
 
-          utools.setExpendHeight(560);
+    // ═══ 插件重复进入（文件匹配/剪贴板匹配/超级面板等） ═══
+    this.hostAdapter?.onPluginEnter(({ code, type, payload, from }) => {
+      console.log('[App] onPluginEnter:', { code, type, from, payload });
+      if (code === 'image-edit') {
+        // 文件和超级面板图片都优先直接解析 payload，避免和 preload 执行顺序竞争。
+        const source = this._getExternalImageSource(type, payload);
+        console.log('[App] 外部图片源:', source ? 'ok' : 'empty', { type, from });
+        if (source) {
+          if (window.__imageSource === source) {
+            window.__imageSource = null;
+          }
+          this._loadImage(source);
+        } else if (type === 'img' && window.__imageSource) {
+          const source = window.__imageSource;
+          if (source) {
+            window.__imageSource = null;
+            this._loadImage(source);
+          }
         }
-      });
-    }
+
+        this.hostAdapter?.setWindowHeight(560);
+      }
+    });
+  }
+
+  /**
+   * 显示 Toast 提示
+   */
+  _showToast(message, type = 'success') {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const icons = {
+      success: '<svg class="toast__icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      error: '<svg class="toast__icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v4M8 11h0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast--${type}`;
+    toast.innerHTML = `${icons[type] || ''}<span>${message}</span>`;
+    document.body.appendChild(toast);
+
+    toast.addEventListener('animationend', () => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    });
   }
 
   /**
@@ -371,10 +400,8 @@ class App {
       // 保存初始状态
       this.historyManager.saveState();
 
-      // 调整窗口高度
-      if (typeof utools !== 'undefined') {
-        utools.setExpendHeight(560);
-      }
+      // 调整宿主窗口高度
+      this.hostAdapter?.setWindowHeight(560);
     } catch (err) {
       console.error('[App] 图片加载失败:', err);
       // 加载失败时恢复欢迎界面
@@ -411,7 +438,7 @@ class App {
   }
 
   /**
-   * 检查外部传入的图片源（从 preload.js / uTools payload）
+   * 检查外部传入的图片源（从 preload.js / 宿主 payload）
    */
   _checkExternalSource() {
     let attempts = 0;

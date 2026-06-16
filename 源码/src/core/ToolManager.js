@@ -9,16 +9,46 @@ import ExportModule from '../modules/ExportModule.js';
 
 /**
  * 工具管理器 — 管理工具栏状态和工具切换
+ *
+ * 支持两种使用方式：
+ * 1. 默认：自动注册内置工具（向后兼容）
+ * 2. 注入：通过 tools 数组外部传入工具定义列表
  */
 class ToolManager {
-  constructor(canvasManager, historyManager) {
+  /**
+   * @param {import('./CanvasManager.js').default} canvasManager
+   * @param {import('./HistoryManager.js').default} historyManager
+   * @param {object} [options]
+   * @param {Array} [options.tools] - 外部注入的工具定义列表
+   * @param {import('./interfaces/HostAdapter.js').default} [options.host]
+   */
+  constructor(canvasManager, historyManager, options = {}) {
     this._cm = canvasManager;
     this._hm = historyManager;
     this._modules = {};
     this._currentTool = null;
-    this._tools = []; // 注册的工具列表
+    this._tools = [];
+    this._host = options.host || null;
 
-    this._registerBuiltinModules();
+    if (options.tools) {
+      // 外部注入模式：注册传入的工具，不再硬编码内置模块
+      options.tools.forEach(t => this.registerTool(t));
+    } else {
+      // 默认模式：注册内置模块（向后兼容）
+      this._registerBuiltinModules();
+    }
+
+    // ExportModule 始终单独实例化，不显示在工具栏
+    this._modules['export'] = new ExportModule(this._cm, this._hm, {}, this._host);
+  }
+
+  /**
+   * 注入 host adapter。
+   * @param {import('./interfaces/HostAdapter.js').default} host
+   */
+  setHost(host) {
+    this._host = host;
+    this._modules['export']?.setHost(host);
   }
 
   /**
@@ -41,7 +71,7 @@ class ToolManager {
       group: 'edit',
       shortcut: 'M',
       module: MosaicModule,
-      defaultOptions: { mode: 'mosaic', drawMode: 'rect', mosaicSize: 10, blurRadius: 8, brushSize: 20 },
+      defaultOptions: { mode: 'mosaic', drawMode: 'rect', mosaicSize: 12, blurRadius: 8, brushSize: 20 },
     });
 
     this.registerTool({
@@ -81,9 +111,6 @@ class ToolManager {
       shortcut: 'T',
       module: TextModule,
     });
-
-    // ExportModule 不显示在工具栏，但内部保留供导出功能使用
-    this._modules['export'] = new ExportModule(this._cm, this._hm);
   }
 
   /**

@@ -54,6 +54,9 @@ class LayerPanel {
     eventBus.on('canvas:objectModified', () => {
       this._lm.syncLayers();
     });
+    eventBus.on('canvas:objectMetadataChanged', () => {
+      this._lm.syncLayers();
+    });
 
     // 选择变化 → 高亮对应图层
     eventBus.on('canvas:selectionCreated', () => this._selectLayerFromActiveObject());
@@ -351,12 +354,14 @@ class LayerPanel {
       const lockIcon = layer.locked
         ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>`
         : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>`;
+      const layerName = this._escapeHTML(layer.name);
+      const layerTitle = this._escapeAttr(layer.name);
 
       html += `
         <li class="layer-item ${isSelected ? 'layer-item--selected' : ''} ${isBg ? 'layer-item--background' : ''}" data-layer-id="${layer.id}" draggable="${!isBg}" aria-selected="${isSelected}">
           <span class="layer-item__visibility" title="${layer.visible ? '隐藏' : '显示'}">${eyeIcon}</span>
           <span class="layer-item__thumbnail">${icon}</span>
-          <span class="layer-item__name" title="${layer.name}">${layer.name}</span>
+          <span class="layer-item__name" title="${layerTitle}">${layerName}</span>
           <span class="layer-item__lock ${lockIconClass}" title="${isBg ? '背景图层始终锁定' : (layer.locked ? '解锁' : '锁定')}">${lockIcon}</span>
         </li>
       `;
@@ -368,6 +373,19 @@ class LayerPanel {
 
     listEl.innerHTML = html;
     this._refreshing = false;
+  }
+
+  _escapeHTML(value) {
+    return String(value ?? '').replace(/[&<>"]/g, ch => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+    }[ch]));
+  }
+
+  _escapeAttr(value) {
+    return this._escapeHTML(value).replace(/'/g, '&#39;');
   }
 }
 

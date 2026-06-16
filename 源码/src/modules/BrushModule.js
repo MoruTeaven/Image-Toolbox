@@ -128,7 +128,7 @@ class BrushModule extends BaseModule {
         <input type="range" class="property-range" data-module-prop="width" min="1" max="80" value="${this.options.width}" />
         <span class="property-value">${this.options.width}px</span>
       </div>
-      <div class="property-empty">按住鼠标拖拽即可绘制，生成的涂鸦会作为独立图层。</div>
+      <div class="property-empty">按住鼠标拖拽即可绘制，生成的画笔会作为独立图层。</div>
     `;
   }
 
@@ -184,6 +184,9 @@ class BrushModule extends BaseModule {
       strokeLineJoin: 'round',
       selectable: false,
       evented: false,
+      _layerKind: 'brush',
+      _layerColorPresetName: this._getColorPresetName(this.options.color),
+      _layerWidthPresetName: this._getWidthPresetName(this.options.width),
     });
     path.setCoords();
     this.canvasManager.canvas.discardActiveObject();
@@ -191,6 +194,7 @@ class BrushModule extends BaseModule {
       this.canvasManager.canvas.bringToFront(this._cursorPreview);
     }
     this.canvasManager.canvas.renderAll();
+    eventBus.emit('canvas:objectMetadataChanged', path);
     this._savedBeforeStroke = false;
   }
 
@@ -299,6 +303,30 @@ class BrushModule extends BaseModule {
     }
 
     return fallback;
+  }
+
+  _getColorPresetName(color) {
+    const colorMap = {
+      '#d83b31': '红',
+      '#1677ff': '蓝',
+      '#ffd700': '黄',
+      '#2ead4a': '绿',
+      '#ffffff': '白',
+      '#111111': '黑',
+    };
+
+    return colorMap[this._normalizeColor(color, '')] || '';
+  }
+
+  _getWidthPresetName(width) {
+    const widthMap = {
+      3: '细',
+      6: '中',
+      12: '粗',
+      24: '特粗',
+    };
+
+    return widthMap[Math.round(Number(width))] || '';
   }
 
   _clamp(value, min, max) {

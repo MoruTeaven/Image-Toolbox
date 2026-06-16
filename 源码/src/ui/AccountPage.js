@@ -1,6 +1,7 @@
 import eventBus from '../core/EventBus.js';
 import { SIDE_PANEL_LAYOUT_KEY, SIDE_PANEL_LAYOUTS } from './SidePanelTabs.js';
 import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../utils/theme.js';
+import { getHostAppVersion, getHostName, getHostUser, openHostExternal } from '../utils/host.js';
 import { updateCategories, updateRecords } from '../../updateRecords.js';
 
 export const EDITOR_BARS_LAYOUT_KEY = 'image-toolbox-editor-bars-layout';
@@ -28,14 +29,14 @@ class AccountPage {
     this._editorEl = editorEl;
     this._sidePanelTabs = sidePanelTabs;
     this._activeSection = 'mine';
-    this._user = this._getUtoolsUser();
+    this._user = this._getHostUser();
 
     this._render();
     this._bindEvents();
   }
 
   open() {
-    this._user = this._getUtoolsUser();
+    this._user = this._getHostUser();
     this._render();
     this._editorEl?.classList.add('hidden');
     this._el?.classList.remove('hidden');
@@ -182,13 +183,14 @@ class AccountPage {
 
   _renderMine() {
     const user = this._getUserView();
+    const hostName = getHostName();
     return `
       <div class="account-card account-card--profile">
         <div class="account-card__avatar-wrap">
           ${this._renderAvatar('account-page__avatar account-page__avatar--large')}
         </div>
         <div class="account-card__body">
-          <div class="account-card__label">uTools 账号</div>
+          <div class="account-card__label">${this._escapeHTML(hostName)} 账号</div>
           <h2>${this._escapeHTML(user.name)}</h2>
           <p>${this._escapeHTML(user.status)}</p>
         </div>
@@ -247,7 +249,8 @@ class AccountPage {
 
   _renderAbout() {
     const appVersion = this._getCurrentVersion();
-    const utoolsVersion = this._getUtoolsVersion();
+    const hostName = getHostName();
+    const hostVersion = this._getHostVersion();
 
     return `
       <div class="account-about">
@@ -257,9 +260,9 @@ class AccountPage {
             <img class="account-about__logo" src="../logo.png" alt="图片工具箱" draggable="false">
           </div>
           <div class="account-about__hero-body">
-            <div class="account-about__kicker">Image Toolbox for uTools</div>
+            <div class="account-about__kicker">Image Toolbox for ${this._escapeHTML(hostName)}</div>
             <h2>图片工具箱</h2>
-            <p>一款专注截图和图片快速处理的 uTools 插件，提供打码、裁剪、加字和快速导出能力。</p>
+            <p>一款专注截图和图片快速处理的 ${this._escapeHTML(hostName)} 插件，提供打码、裁剪、加字和快速导出能力。</p>
             <div class="account-about__tags" aria-label="功能标签">
               <span>轻量编辑</span>
               <span>本地处理</span>
@@ -302,7 +305,7 @@ class AccountPage {
 
         <section class="account-about__footer">
           <span>图片工具箱版本：${this._escapeHTML(appVersion)}</span>
-          <span>uTools 版本：${this._escapeHTML(utoolsVersion)}</span>
+          <span>${this._escapeHTML(hostName)} 版本：${this._escapeHTML(hostVersion)}</span>
           <span>Copyright © 抹露茶柒</span>
         </section>
       </div>
@@ -359,13 +362,14 @@ class AccountPage {
 
   _getUserView() {
     const user = this._user || {};
-    const name = user.nickname || user.name || user.userName || user.username || 'uTools 用户';
+    const hostName = getHostName();
+    const name = user.nickname || user.name || user.userName || user.username || `${hostName} 用户`;
     const avatar = user.avatar || user.avatarUrl || user.photo || '';
     return {
       name,
       avatar,
       initial: this._getInitial(name),
-      status: this._user ? '已连接 uTools 用户信息' : '未获取到 uTools 用户信息',
+      status: this._user ? `已连接 ${hostName} 用户信息` : `未获取到 ${hostName} 用户信息`,
     };
   }
 
@@ -388,13 +392,11 @@ class AccountPage {
     return this._formatVersion(version);
   }
 
-  _getUtoolsVersion() {
+  _getHostVersion() {
     try {
-      if (typeof utools !== 'undefined' && typeof utools.getAppVersion === 'function') {
-        return this._formatVersion(utools.getAppVersion());
-      }
+      return this._formatVersion(getHostAppVersion());
     } catch (e) {
-      console.warn('[AccountPage] 获取 uTools 版本失败:', e);
+      console.warn('[AccountPage] 获取宿主版本失败:', e);
     }
 
     return '未知';
@@ -410,12 +412,11 @@ class AccountPage {
     if (!url) return;
 
     try {
-      if (typeof utools !== 'undefined' && typeof utools.shellOpenExternal === 'function') {
-        utools.shellOpenExternal(url);
+      if (openHostExternal(url)) {
         return;
       }
     } catch (e) {
-      console.warn('[AccountPage] 使用 uTools 打开外部链接失败:', e);
+      console.warn('[AccountPage] 使用宿主打开外部链接失败:', e);
     }
 
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -458,16 +459,11 @@ class AccountPage {
     return VALID_EDITOR_SIDE_PANEL_POSITIONS.has(saved) ? saved : EDITOR_SIDE_PANEL_POSITIONS.RIGHT;
   }
 
-  _getUtoolsUser() {
+  _getHostUser() {
     try {
-      if (typeof window.getUtoolsUser === 'function') {
-        return window.getUtoolsUser();
-      }
-      if (typeof utools !== 'undefined' && typeof utools.getUser === 'function') {
-        return utools.getUser();
-      }
+      return getHostUser();
     } catch (e) {
-      console.warn('[AccountPage] 获取 uTools 用户信息失败:', e);
+      console.warn('[AccountPage] 获取宿主用户信息失败:', e);
     }
     return null;
   }

@@ -1,3 +1,5 @@
+import { isHostDarkColors } from './host.js';
+
 export const THEME_STORAGE_KEY = 'image-toolbox-theme';
 export const THEME_VERSION_KEY = 'image-toolbox-theme-version';
 export const THEME_VERSION = 'neutral-teal-light-default-v1';
@@ -52,12 +54,9 @@ function resolveTheme(choice) {
 }
 
 function getSystemTheme() {
-  try {
-    if (typeof utools !== 'undefined' && typeof utools.isDarkColors === 'function') {
-      return utools.isDarkColors() ? THEME_CHOICES.DARK : THEME_CHOICES.LIGHT;
-    }
-  } catch (e) {
-    console.warn('[Theme] 读取 uTools 系统颜色失败:', e);
+  const hostDark = isHostDarkColors();
+  if (hostDark !== null) {
+    return hostDark ? THEME_CHOICES.DARK : THEME_CHOICES.LIGHT;
   }
 
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {

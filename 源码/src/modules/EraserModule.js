@@ -193,6 +193,8 @@ class EraserModule extends BaseModule {
 
       if (layerName) {
         newImg._layerName = layerName;
+        newImg._layerNameAuto = false;
+        newImg._layerBaseName = '';
       }
 
       newImg.setCoords();

@@ -1,49 +1,54 @@
 import BaseModule from './BaseModule.js';
+import eventBus from '../core/EventBus.js';
 
 /**
  * 导出模块 — 将编辑结果导出为图片文件或复制到剪贴板
+ *
+ * 接受可选 host adapter 注入。未注入时降级到浏览器原生行为。
  */
 class ExportModule extends BaseModule {
-  constructor(canvasManager, historyManager, defaultOptions = {}) {
+  /**
+   * @param {import('../core/CanvasManager.js').default} canvasManager
+   * @param {import('../core/HistoryManager.js').default} historyManager
+   * @param {object} [defaultOptions]
+   * @param {import('../core/interfaces/HostAdapter.js').default} [host]
+   */
+  constructor(canvasManager, historyManager, defaultOptions = {}, host = null) {
     super(canvasManager, historyManager, {
       format: 'png',
       quality: 1,
       multiplier: 1,
       ...defaultOptions,
     });
+    this._host = host;
+  }
+
+  /**
+   * 注入 host adapter（可在运行时设置）。
+   * @param {import('../core/interfaces/HostAdapter.js').default} host
+   */
+  setHost(host) {
+    this._host = host;
   }
 
   /**
    * 导出为文件 — 先弹保存对话框，用户选择格式后自动匹配导出
    */
   async exportToFile() {
-    if (typeof window.showSaveImageDialog !== 'function') {
-      // 降级方案：默认 PNG
-      const dataURL = this.exportToDataURL('png');
-      if (!dataURL) return;
-      this._browserDownload(dataURL, 'edited.png');
+    const dataURL = this.exportToDataURL('png');
+    if (!dataURL) return;
+
+    // 优先使用 host adapter
+    if (this._host?.saveImage) {
+      const saved = await this._host.saveImage(dataURL, 'edited.png');
+      if (saved) {
+        this._notifyToast('图片已保存', 'success');
+      }
       return;
     }
 
-    // 1. 弹出保存对话框，用户通过过滤器选择 PNG/JPEG/WebP
-    const filePath = window.showSaveImageDialog('edited');
-    if (!filePath) return; // 用户取消
-
-    // 2. 从文件扩展名推断格式
-    const ext = filePath.split('.').pop().toLowerCase();
-    const formatMap = { png: 'png', jpg: 'jpeg', jpeg: 'jpeg', webp: 'webp' };
-    const fmt = formatMap[ext] || 'png';
-    const q = fmt === 'png' ? 1 : (this.options.quality ?? 1);
-
-    // 3. 按选定格式生成 dataURL
-    const dataURL = this.exportToDataURL(fmt, q);
-    if (!dataURL) return;
-
-    // 4. 写入文件
-    const success = window.writeImageFile(filePath, dataURL);
-    if (success) {
-      this._showToast('图片已保存', 'success');
-    }
+    // 降级：浏览器下载
+    this._browserDownload(dataURL, 'edited.png');
   }
 
   /**
@@ -53,21 +58,23 @@ class ExportModule extends BaseModule {
     const dataURL = this.exportToDataURL('png', 1, { trimToImage: true });
     if (!dataURL) return;
 
-    if (typeof window.copyImageToClipboard === 'function') {
-      window.copyImageToClipboard(dataURL);
-      this._showToast('已复制到剪贴板', 'success');
-    } else {
-      // 降级方案：使用 Clipboard API
-      try {
-        const blob = await (await fetch(dataURL)).blob();
-        await navigator.clipboard.write([
-          new ClipboardItem({ [blob.type]: blob }),
-        ]);
-        this._showToast('已复制到剪贴板', 'success');
-      } catch (err) {
-        console.error('[ExportModule] 剪贴板操作失败:', err);
-        this._showToast('复制失败', 'error');
-      }
+    // 优先使用 host adapter
+    if (this._host?.copyImage) {
+      const ok = await this._host.copyImage(dataURL);
+      this._notifyToast(ok ? '已复制到剪贴板' : '复制失败', ok ? 'success' : 'error');
+      return;
+    }
+
+    // 降级：Clipboard API
+    try {
+      const blob = await (await fetch(dataURL)).blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob }),
+      ]);
+      this._notifyToast('已复制到剪贴板', 'success');
+    } catch (err) {
+      console.error('[ExportModule] 剪贴板操作失败:', err);
+      this._notifyToast('复制失败', 'error');
     }
   }
 
@@ -215,27 +222,12 @@ class ExportModule extends BaseModule {
   }
 
   /**
-   * 显示 Toast 提示
-   * @param {string} message - 提示文字
-   * @param {'success'|'error'} type - 类型
+   * 通过 eventBus 发送 Toast 事件，由 UI 层渲染。
+   * @param {string} message
+   * @param {'success'|'error'} type
    */
-  _showToast(message, type = 'success') {
-    const existing = document.querySelector('.toast');
-    if (existing) existing.remove();
-
-    const icons = {
-      success: '<svg class="toast__icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-      error: '<svg class="toast__icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v4M8 11h0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
-    };
-
-    const toast = document.createElement('div');
-    toast.className = `toast toast--${type}`;
-    toast.innerHTML = `${icons[type] || ''}<span>${message}</span>`;
-    document.body.appendChild(toast);
-
-    toast.addEventListener('animationend', () => {
-      if (toast.parentNode) toast.parentNode.removeChild(toast);
-    });
+  _notifyToast(message, type = 'success') {
+    eventBus.emit('toast:show', { message, type });
   }
 
   activate() {

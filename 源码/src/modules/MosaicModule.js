@@ -17,7 +17,7 @@ class MosaicModule extends BaseModule {
     super(canvasManager, historyManager, {
       mode: 'mosaic',       // 效果类型: 'mosaic' | 'blur'
       drawMode: 'rect',     // 交互方式: 'rect' | 'lasso' | 'brush'
-      mosaicSize: 10,       // 马赛克块大小
+      mosaicSize: 12,       // 马赛克块大小，默认对应“中马赛克”预设
       blurRadius: 8,        // 模糊半径
       brushSize: 20,        // 画笔直径
       ...defaultOptions,
@@ -548,6 +548,8 @@ class MosaicModule extends BaseModule {
     this._liveBrushOverlay._mosaicBrushPoints = brushPoints;
     this._liveBrushOverlay._mosaicBrushSize = this.options.brushSize;
     this._liveBrushOverlay._mosaicMaskCanvas = null;
+    this._liveBrushOverlay._layerKind = 'mosaic';
+    this._liveBrushOverlay._layerPresetName = this._getCurrentLayerPresetName();
     this._liveBrushOverlay.setCoords();
 
     this._refreshDynamicMosaicOverlay(this._liveBrushOverlay, { render: false });
@@ -588,7 +590,7 @@ class MosaicModule extends BaseModule {
    * 只处理蒙版覆盖区域内的像素
    */
   _mosaicPixels(data, w, h, mask = null, mosaicSize = this.options.mosaicSize) {
-    const size = Math.max(1, Math.round(mosaicSize || this.options.mosaicSize || 10));
+    const size = Math.max(1, Math.round(mosaicSize || this.options.mosaicSize || 12));
 
     for (let y = 0; y < h; y += size) {
       for (let x = 0; x < w; x += size) {
@@ -710,6 +712,8 @@ class MosaicModule extends BaseModule {
     img._mosaicBrushPoints = brushPoints;
     img._mosaicBrushSize = brushSize;
     img._mosaicLassoPoints = lassoPoints;
+    img._layerKind = 'mosaic';
+    img._layerPresetName = this._getCurrentLayerPresetName();
 
     this._attachCurrentCropClipPath(img);
     this._refreshDynamicMosaicOverlay(img, { render: false });
@@ -1267,6 +1271,24 @@ class MosaicModule extends BaseModule {
     if (preset.mosaicSize) this.setMosaicSize(preset.mosaicSize);
     if (preset.blurRadius) this.setBlurRadius(preset.blurRadius);
     if (preset.drawMode) this.setDrawMode(preset.drawMode);
+  }
+
+  _getCurrentLayerPresetName() {
+    if (this.options.mode === 'blur') {
+      const blurMap = {
+        6: '轻模糊',
+        12: '中模糊',
+        18: '强模糊',
+      };
+      return blurMap[Math.round(Number(this.options.blurRadius))] || '';
+    }
+
+    const mosaicMap = {
+      6: '轻马赛克',
+      12: '中马赛克',
+      24: '重马赛克',
+    };
+    return mosaicMap[Math.round(Number(this.options.mosaicSize))] || '';
   }
 
   // ═══════════════════════════════════════

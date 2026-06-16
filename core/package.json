@@ -1,0 +1,11 @@
+{
+  "name": "@img-toolbox/core",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "图片工具箱编辑引擎核心 — 平台无关，零 DOM/utools 依赖",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./interfaces/*": "./src/interfaces/*"
+  }
+}

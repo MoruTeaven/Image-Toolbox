@@ -287,6 +287,12 @@ class CanvasManager {
       'strokeLineCap',
       'strokeLineJoin',
       '_layerName',
+      '_layerNameAuto',
+      '_layerBaseName',
+      '_layerKind',
+      '_layerColorPresetName',
+      '_layerWidthPresetName',
+      '_layerPresetName',
       '_mosaicDynamic',
       '_mosaicMode',
       '_mosaicSize',
@@ -396,6 +402,12 @@ class CanvasManager {
 
     // 物件修改
     this.canvas.on('object:modified', (e) => {
+      eventBus.emit('canvas:objectModified', e.target);
+    });
+    this.canvas.on('text:changed', (e) => {
+      eventBus.emit('canvas:objectMetadataChanged', e.target);
+    });
+    this.canvas.on('text:editing:exited', (e) => {
       eventBus.emit('canvas:objectModified', e.target);
     });
 
