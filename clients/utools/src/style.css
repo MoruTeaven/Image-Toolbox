@@ -1024,10 +1024,12 @@ html, body {
 }
 
 .shape-picker-trigger__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 18px;
-  font-size: 16px;
-  line-height: 1;
-  text-align: center;
+  height: 18px;
+  flex: 0 0 18px;
 }
 
 .shape-picker-trigger__arrow {
@@ -1094,13 +1096,76 @@ html, body {
 }
 
 .shape-picker__icon {
-  font-size: 24px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+.shape-icon-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: rgba(47, 127, 134, 0.12);
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
 }
 
 .shape-picker__label {
   font-size: 11px;
   line-height: 1;
+}
+
+.shape-style-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 56px;
+  padding: 4px 7px;
+  line-height: 1;
+}
+
+.shape-style-btn__swatch {
+  position: relative;
+  width: 22px;
+  height: 15px;
+  flex: 0 0 15px;
+  overflow: hidden;
+  border: 2px solid var(--shape-style-stroke);
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.shape-style-btn__swatch::before,
+.shape-style-btn__swatch::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.shape-style-btn__swatch::before {
+  background-image:
+    linear-gradient(45deg, rgba(0, 0, 0, 0.14) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(0, 0, 0, 0.14) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(0, 0, 0, 0.14) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(0, 0, 0, 0.14) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+}
+
+.shape-style-btn__swatch::after {
+  background: var(--shape-style-fill);
+}
+
+.shape-style-btn.active .shape-style-btn__swatch {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.72), 0 0 0 3px rgba(255, 255, 255, 0.18);
 }
 
 .text-preset-btn {
@@ -1426,6 +1491,64 @@ html, body {
 
 .property-item--wide {
   min-width: 132px;
+}
+
+.property-item--stacked {
+  width: 100%;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+}
+
+.property-item--stacked label {
+  text-align: left;
+}
+
+.property-shape-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.property-shape-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  gap: 3px;
+  padding: 5px 3px;
+  color: var(--color-text);
+  background: var(--bg-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 10px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.property-shape-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--color-accent);
+}
+
+.property-shape-btn.active {
+  background: var(--bg-active);
+  border-color: var(--bg-active);
+  color: #ffffff;
+}
+
+.property-shape-btn__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.property-shape-btn__label {
+  line-height: 1;
 }
 
 .property-actions {

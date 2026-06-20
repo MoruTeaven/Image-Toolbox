@@ -254,16 +254,19 @@ class PropertyPanel {
   }
 
   _handleInput(e) {
-    const target = e.target;
+    const target = e.target.closest('[data-prop], [data-module-prop], [data-module-action], [data-module-preset]');
+    if (!target || !this._el.contains(target)) return;
+
     const prop = target.dataset.prop;
     const moduleProp = target.dataset.moduleProp;
     const moduleAction = target.dataset.moduleAction;
-    if (!prop && !moduleProp && !moduleAction) return;
-    if (e.type === 'click' && !moduleAction) return;
+    const modulePreset = target.dataset.modulePreset;
+    if (!prop && !moduleProp && !moduleAction && !modulePreset) return;
+    if (e.type === 'click' && !moduleAction && !modulePreset) return;
 
     const module = this._tm.getCurrentModule();
-    if (moduleProp || moduleAction) {
-      this._handleModuleInput(e, module, moduleProp, moduleAction);
+    if (moduleProp || moduleAction || modulePreset) {
+      this._handleModuleInput(e, module, moduleProp, moduleAction, modulePreset);
       return;
     }
 
@@ -365,10 +368,19 @@ class PropertyPanel {
     }
   }
 
-  _handleModuleInput(e, module, prop, action) {
+  _handleModuleInput(e, module, prop, action, preset) {
     if (!module) return;
 
     const target = e.target;
+    if (preset) {
+      if (typeof module.applyPreset === 'function') {
+        module.applyPreset(preset);
+        this._updateProperties();
+        eventBus.emit('tool:propertiesChanged');
+      }
+      return;
+    }
+
     if (action) {
       if (typeof module.onToolPropertyAction === 'function') {
         module.onToolPropertyAction(action, { eventType: e.type });

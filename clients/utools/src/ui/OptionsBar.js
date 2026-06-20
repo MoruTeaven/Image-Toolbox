@@ -40,6 +40,7 @@ class OptionsBar {
       'canvas:objectModified',
       'canvas:restored',
       'image:loaded',
+      'tool:propertiesChanged',
     ].forEach(eventName => {
       eventBus.on(eventName, () => {
         if (this._currentTool) this._updateControls();

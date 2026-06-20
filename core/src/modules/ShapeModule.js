@@ -6,13 +6,25 @@ import eventBus from '../EventBus.js';
  */
 class ShapeModule extends BaseModule {
   static SHAPE_OPTIONS = [
-    { type: 'rect', preset: 'shape-type-rect', label: '矩形', icon: '▭' },
-    { type: 'circle', preset: 'shape-type-circle', label: '圆形', icon: '●' },
-    { type: 'star', preset: 'shape-type-star', label: '星星', icon: '★' },
-    { type: 'heart', preset: 'shape-type-heart', label: '心形', icon: '♥' },
-    { type: 'trapezoid', preset: 'shape-type-trapezoid', label: '梯形', icon: '⊟' },
-    { type: 'line', preset: 'shape-type-line', label: '直线', icon: '━' },
-    { type: 'arrow', preset: 'shape-type-arrow', label: '箭头', icon: '➜' },
+    { type: 'rect', preset: 'shape-type-rect', label: '矩形', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><rect x="6" y="8" width="20" height="16" rx="2" /></svg>' },
+    { type: 'circle', preset: 'shape-type-circle', label: '椭圆', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="16" rx="11" ry="9" /></svg>' },
+    { type: 'star', preset: 'shape-type-star', label: '星星', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><polygon points="16 4 19.4 12 28 12.6 21.4 18 23.4 26.4 16 21.8 8.6 26.4 10.6 18 4 12.6 12.6 12" /></svg>' },
+    { type: 'heart', preset: 'shape-type-heart', label: '心形', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 27C8.3 20.6 4 16.6 4 11.3C4 7.3 6.9 4.5 10.7 4.5C13 4.5 15 5.8 16 7.8C17 5.8 19 4.5 21.3 4.5C25.1 4.5 28 7.3 28 11.3C28 16.6 23.7 20.6 16 27Z" /></svg>' },
+    { type: 'trapezoid', preset: 'shape-type-trapezoid', label: '梯形', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><polygon points="10 8 22 8 28 24 4 24" /></svg>' },
+    { type: 'line', preset: 'shape-type-line', label: '直线', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><line x1="5" y1="24" x2="27" y2="8" /></svg>' },
+    { type: 'arrow', preset: 'shape-type-arrow', label: '箭头', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 24L25 8" /><path d="M16 7H26V17" /></svg>' },
+  ];
+
+  static SHAPE_STYLE_PRESETS = [
+    { preset: 'shape-style-red', label: '标注红', fill: 'rgba(216, 59, 49, 0.22)', stroke: '#d83b31' },
+    { preset: 'shape-style-blue', label: '标注蓝', fill: 'rgba(22, 119, 255, 0.20)', stroke: '#1677ff' },
+    { preset: 'shape-style-orange', label: '警示橙', fill: 'rgba(255, 122, 0, 0.22)', stroke: '#ff7a00' },
+    { preset: 'shape-style-yellow', label: '标题黄', fill: 'rgba(255, 215, 0, 0.28)', stroke: '#b7791f' },
+    { preset: 'shape-style-green', label: '强调绿', fill: 'rgba(46, 173, 74, 0.20)', stroke: '#2ead4a' },
+    { preset: 'shape-style-purple', label: '重点紫', fill: 'rgba(139, 92, 246, 0.20)', stroke: '#8b5cf6' },
+    { preset: 'shape-style-black', label: '黑白框', fill: 'rgba(17, 17, 17, 0.12)', stroke: '#111111' },
+    { preset: 'shape-style-white', label: '白描边', fill: 'rgba(255, 255, 255, 0.36)', stroke: '#ffffff' },
+    { preset: 'shape-style-outline', label: '仅描边', fill: 'transparent', stroke: '#d83b31' },
   ];
 
   constructor(canvasManager, historyManager, defaultOptions = {}) {
@@ -89,16 +101,14 @@ class ShapeModule extends BaseModule {
   }
 
   applyPreset(presetName) {
+    const stylePreset = ShapeModule.SHAPE_STYLE_PRESETS.find(item => item.preset === presetName);
+    if (stylePreset) {
+      this.setFill(stylePreset.fill);
+      this.setStroke(stylePreset.stroke);
+      return;
+    }
+
     const presets = {
-      'shape-fill-red': { fill: 'rgba(216, 59, 49, 0.3)' },
-      'shape-fill-blue': { fill: 'rgba(22, 119, 255, 0.3)' },
-      'shape-fill-green': { fill: 'rgba(46, 173, 74, 0.3)' },
-      'shape-fill-yellow': { fill: 'rgba(255, 215, 0, 0.3)' },
-      'shape-fill-none': { fill: 'transparent' },
-      'shape-stroke-red': { stroke: '#d83b31' },
-      'shape-stroke-blue': { stroke: '#1677ff' },
-      'shape-stroke-green': { stroke: '#2ead4a' },
-      'shape-stroke-black': { stroke: '#111111' },
       'shape-type-rect': { shapeType: 'rect' },
       'shape-type-circle': { shapeType: 'circle' },
       'shape-type-star': { shapeType: 'star' },
@@ -124,9 +134,13 @@ class ShapeModule extends BaseModule {
   getOptionsBarHTML() {
     const shapeType = this.options.shapeType;
     const currentShape = ShapeModule.SHAPE_OPTIONS.find(item => item.type === shapeType) || ShapeModule.SHAPE_OPTIONS[0];
-    const fill = this._normalizeColor(this.options.fill);
-    const stroke = this._normalizeColor(this.options.stroke);
     const strokeWidth = this.options.strokeWidth;
+    const colorPresets = ShapeModule.SHAPE_STYLE_PRESETS.map(item => `
+        <button class="options-btn options-btn-sm shape-style-btn ${this._isStylePresetActive(item) ? 'active' : ''}" data-preset="${item.preset}" style="--shape-style-fill:${item.fill}; --shape-style-stroke:${item.stroke}" title="${item.label}">
+          <span class="shape-style-btn__swatch"></span>
+          <span>${item.label}</span>
+        </button>
+    `).join('');
 
     return `
       <div class="options-group">
@@ -137,17 +151,7 @@ class ShapeModule extends BaseModule {
         </button>
       </div>
       <div class="options-group">
-        <button class="options-btn options-btn-sm fill-color-btn" data-preset="shape-fill-red" style="--fill-color:rgba(216, 59, 49, 0.3)" title="红色填充">&#9632;</button>
-        <button class="options-btn options-btn-sm fill-color-btn" data-preset="shape-fill-blue" style="--fill-color:rgba(22, 119, 255, 0.3)" title="蓝色填充">&#9632;</button>
-        <button class="options-btn options-btn-sm fill-color-btn" data-preset="shape-fill-green" style="--fill-color:rgba(46, 173, 74, 0.3)" title="绿色填充">&#9632;</button>
-        <button class="options-btn options-btn-sm fill-color-btn" data-preset="shape-fill-yellow" style="--fill-color:rgba(255, 215, 0, 0.3)" title="黄色填充">&#9632;</button>
-        <button class="options-btn options-btn-sm ${this.options.fill === 'transparent' ? 'active' : ''}" data-preset="shape-fill-none" title="无填充">⊘</button>
-      </div>
-      <div class="options-group">
-        <button class="options-btn options-btn-sm" data-preset="shape-stroke-red" style="border-color:#d83b31" title="红色边框">■</button>
-        <button class="options-btn options-btn-sm" data-preset="shape-stroke-blue" style="border-color:#1677ff" title="蓝色边框">■</button>
-        <button class="options-btn options-btn-sm" data-preset="shape-stroke-green" style="border-color:#2ead4a" title="绿色边框">■</button>
-        <button class="options-btn options-btn-sm" data-preset="shape-stroke-black" style="border-color:#111111" title="黑色边框">■</button>
+        ${colorPresets}
       </div>
       <div class="options-group">
         <button class="options-btn options-btn-sm ${strokeWidth === 1 ? 'active' : ''}" data-preset="shape-width-thin">细</button>
@@ -156,6 +160,11 @@ class ShapeModule extends BaseModule {
         <button class="options-btn options-btn-sm ${strokeWidth === 6 ? 'active' : ''}" data-preset="shape-width-heavy">特粗</button>
       </div>
     `;
+  }
+
+  _isStylePresetActive(preset) {
+    return this._normalizeComparableColor(this.options.fill) === this._normalizeComparableColor(preset.fill)
+      && this._normalizeComparableColor(this.options.stroke) === this._normalizeComparableColor(preset.stroke);
   }
 
   getShapePickerHTML() {
@@ -175,9 +184,25 @@ class ShapeModule extends BaseModule {
     `;
   }
 
+  getPropertyShapePickerHTML() {
+    const shapeType = this.options.shapeType;
+    return ShapeModule.SHAPE_OPTIONS.map(item => `
+      <button class="property-shape-btn ${shapeType === item.type ? 'active' : ''}" data-module-preset="${item.preset}" type="button" title="${item.label}">
+        <span class="property-shape-btn__icon">${item.icon}</span>
+        <span class="property-shape-btn__label">${item.label}</span>
+      </button>
+    `).join('');
+  }
+
   getPropertyPanelHTML() {
     return `
       <div class="property-section-title">图形工具</div>
+      <div class="property-item property-item--wide property-item--stacked">
+        <label>图形</label>
+        <div class="property-shape-grid">
+          ${this.getPropertyShapePickerHTML()}
+        </div>
+      </div>
       <div class="property-item">
         <label>填充色</label>
         <input type="color" class="property-color" data-module-prop="fill" value="${this._extractHexColor(this.options.fill)}" />
@@ -191,7 +216,7 @@ class ShapeModule extends BaseModule {
         <input type="range" class="property-range" data-module-prop="strokeWidth" min="1" max="20" value="${this.options.strokeWidth}" />
         <span class="property-value">${this.options.strokeWidth}px</span>
       </div>
-      <div class="property-empty">拖拽鼠标绘制图形，支持矩形、圆形、星星、心形等。</div>
+      <div class="property-empty">拖拽鼠标绘制图形，支持矩形、椭圆、星星、心形等。</div>
     `;
   }
 
@@ -261,9 +286,7 @@ class ShapeModule extends BaseModule {
     const shape = this._createShape(this._startPoint, endPoint);
     if (shape) {
       // 检查形状是否足够大
-      const width = Math.abs(endPoint.x - this._startPoint.x);
-      const height = Math.abs(endPoint.y - this._startPoint.y);
-      if (width > 5 && height > 5) {
+      if (this._isShapeLargeEnough(this._startPoint, endPoint)) {
         shape.set({
           id: 'shape_' + Date.now(),
           selectable: false,
@@ -288,6 +311,17 @@ class ShapeModule extends BaseModule {
       this._removePreviewShape();
       this.canvasManager.canvas?.renderAll();
     }
+  }
+
+  _isShapeLargeEnough(startPoint, endPoint) {
+    const width = Math.abs(endPoint.x - startPoint.x);
+    const height = Math.abs(endPoint.y - startPoint.y);
+
+    if (['line', 'arrow'].includes(this.options.shapeType)) {
+      return Math.sqrt(width * width + height * height) > 5;
+    }
+
+    return width > 5 && height > 5;
   }
 
   _createShape(startPoint, endPoint) {
@@ -315,23 +349,22 @@ class ShapeModule extends BaseModule {
           ...commonProps,
         });
 
-      case 'circle': {
-        const radius = Math.min(width, height) / 2;
-        return new fabric.Circle({
+      case 'circle':
+        return new fabric.Ellipse({
           left: left + width / 2,
           top: top + height / 2,
-          radius,
+          rx: width / 2,
+          ry: height / 2,
           originX: 'center',
           originY: 'center',
           ...commonProps,
         });
-      }
 
       case 'star':
-        return this._createStar(left + width / 2, top + height / 2, Math.min(width, height) / 2, commonProps);
+        return this._createStar(left + width / 2, top + height / 2, width, height, commonProps);
 
       case 'heart':
-        return this._createHeart(left + width / 2, top + height / 2, Math.min(width, height) / 2, commonProps);
+        return this._createHeart(left + width / 2, top + height / 2, width, height, commonProps);
 
       case 'trapezoid':
         return this._createTrapezoid(left, top, width, height, commonProps);
@@ -347,16 +380,19 @@ class ShapeModule extends BaseModule {
     }
   }
 
-  _createStar(cx, cy, radius, props) {
+  _createStar(cx, cy, width, height, props) {
     const points = [];
     const spikes = 5;
-    const outerRadius = radius;
-    const innerRadius = radius * 0.4;
+    const outerX = width / 2;
+    const outerY = height / 2;
+    const innerX = outerX * 0.42;
+    const innerY = outerY * 0.42;
 
     for (let i = 0; i < spikes * 2; i++) {
       const angle = (i * Math.PI) / spikes - Math.PI / 2;
-      const r = i % 2 === 0 ? outerRadius : innerRadius;
-      points.push([r * Math.cos(angle), r * Math.sin(angle)]);
+      const radiusX = i % 2 === 0 ? outerX : innerX;
+      const radiusY = i % 2 === 0 ? outerY : innerY;
+      points.push({ x: radiusX * Math.cos(angle), y: radiusY * Math.sin(angle) });
     }
 
     const path = new fabric.Polygon(points, {
@@ -365,19 +401,20 @@ class ShapeModule extends BaseModule {
       top: cy,
       originX: 'center',
       originY: 'center',
+      strokeLineJoin: 'round',
     });
 
     return path;
   }
 
-  _createHeart(cx, cy, radius, props) {
-    // 使用更精确的心形路径数据
-    const size = radius;
-    const pathData = `M ${cx},${cy + size * 0.35}
-      C ${cx - size * 0.5},${cy - size * 0.3}, ${cx - size},${cy - size * 0.3}, ${cx - size * 0.7},${cy + size * 0.1}
-      C ${cx - size},${cy + size * 0.4}, ${cx - size * 0.3},${cy + size}, ${cx},${cy + size * 1.15}
-      C ${cx + size * 0.3},${cy + size}, ${cx + size},${cy + size * 0.4}, ${cx + size * 0.7},${cy + size * 0.1}
-      C ${cx + size},${cy - size * 0.3}, ${cx + size * 0.5},${cy - size * 0.3}, ${cx},${cy + size * 0.35} Z`;
+  _createHeart(cx, cy, width, height, props) {
+    const pathData = `M 50 96
+      C 17 68 4 55 4 34
+      C 4 17 17 5 32 5
+      C 41 5 47 10 50 18
+      C 53 10 59 5 68 5
+      C 83 5 96 17 96 34
+      C 96 55 83 68 50 96 Z`;
 
     const heart = new fabric.Path(pathData, {
       ...props,
@@ -385,24 +422,28 @@ class ShapeModule extends BaseModule {
       top: cy,
       originX: 'center',
       originY: 'center',
+      scaleX: width / 100,
+      scaleY: height / 100,
     });
 
     return heart;
   }
 
   _createTrapezoid(left, top, width, height, props) {
-    // 更明显的梯形：上窄下宽
+    const centerX = left + width / 2;
+    const centerY = top + height / 2;
+    const topInset = width * 0.22;
     const points = [
-      [left + width * 0.2, top],           // 左上
-      [left + width * 0.8, top],           // 右上
-      [left + width, top + height],        // 右下
-      [left, top + height],                // 左下
+      { x: -width / 2 + topInset, y: -height / 2 },
+      { x: width / 2 - topInset, y: -height / 2 },
+      { x: width / 2, y: height / 2 },
+      { x: -width / 2, y: height / 2 },
     ];
 
     return new fabric.Polygon(points, {
       ...props,
-      left: left + width / 2,
-      top: top + height / 2,
+      left: centerX,
+      top: centerY,
       originX: 'center',
       originY: 'center',
     });
@@ -414,6 +455,7 @@ class ShapeModule extends BaseModule {
       stroke: props.stroke,
       strokeWidth: props.strokeWidth,
       fill: null,
+      strokeLineCap: 'round',
     });
   }
 
@@ -425,43 +467,27 @@ class ShapeModule extends BaseModule {
     if (distance < 10) return null;
 
     const angle = Math.atan2(dy, dx);
-    const headlen = Math.min(distance * 0.25, 25);
+    const headLength = Math.min(Math.max(distance * 0.25, 10), 28);
+    const headAngle = Math.PI / 7;
+    const headPointA = {
+      x: endPoint.x - headLength * Math.cos(angle - headAngle),
+      y: endPoint.y - headLength * Math.sin(angle - headAngle),
+    };
+    const headPointB = {
+      x: endPoint.x - headLength * Math.cos(angle + headAngle),
+      y: endPoint.y - headLength * Math.sin(angle + headAngle),
+    };
+    const pathData = `M ${startPoint.x} ${startPoint.y} L ${endPoint.x} ${endPoint.y}
+      M ${headPointA.x} ${headPointA.y} L ${endPoint.x} ${endPoint.y} L ${headPointB.x} ${headPointB.y}`;
 
-    // 主线条
-    const line = new fabric.Line(
-      [startPoint.x, startPoint.y, endPoint.x, endPoint.y],
-      {
-        stroke: props.stroke,
-        strokeWidth: props.strokeWidth,
-        fill: null,
-      }
-    );
-
-    // 箭头头部（填充三角形）
-    const arrowHeadPoints = [
-      [endPoint.x, endPoint.y],
-      [
-        endPoint.x - headlen * Math.cos(angle - Math.PI / 6),
-        endPoint.y - headlen * Math.sin(angle - Math.PI / 6),
-      ],
-      [
-        endPoint.x - headlen * Math.cos(angle + Math.PI / 6),
-        endPoint.y - headlen * Math.sin(angle + Math.PI / 6),
-      ],
-    ];
-
-    const arrowHead = new fabric.Polygon(arrowHeadPoints, {
-      fill: props.stroke,
-      stroke: 'transparent',
-      strokeWidth: 0,
+    return new fabric.Path(pathData, {
+      ...props,
+      fill: null,
+      stroke: props.stroke,
+      strokeWidth: props.strokeWidth,
+      strokeLineCap: 'round',
+      strokeLineJoin: 'round',
     });
-
-    const group = new fabric.Group([line, arrowHead], {
-      selectable: false,
-      evented: false,
-    });
-
-    return group;
   }
 
   _removePreviewShape() {
@@ -491,6 +517,10 @@ class ShapeModule extends BaseModule {
     }
 
     return fallback;
+  }
+
+  _normalizeComparableColor(color) {
+    return String(color ?? '').replace(/\s+/g, '').toLowerCase();
   }
 
   _extractHexColor(color) {
