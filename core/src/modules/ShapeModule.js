@@ -16,22 +16,22 @@ class ShapeModule extends BaseModule {
   ];
 
   static SHAPE_STYLE_PRESETS = [
-    { preset: 'shape-style-red', label: '标注红', fill: 'rgba(216, 59, 49, 0.22)', stroke: '#d83b31' },
-    { preset: 'shape-style-blue', label: '标注蓝', fill: 'rgba(22, 119, 255, 0.20)', stroke: '#1677ff' },
-    { preset: 'shape-style-orange', label: '警示橙', fill: 'rgba(255, 122, 0, 0.22)', stroke: '#ff7a00' },
-    { preset: 'shape-style-yellow', label: '标题黄', fill: 'rgba(255, 215, 0, 0.28)', stroke: '#b7791f' },
-    { preset: 'shape-style-green', label: '强调绿', fill: 'rgba(46, 173, 74, 0.20)', stroke: '#2ead4a' },
-    { preset: 'shape-style-purple', label: '重点紫', fill: 'rgba(139, 92, 246, 0.20)', stroke: '#8b5cf6' },
-    { preset: 'shape-style-black', label: '黑白框', fill: 'rgba(17, 17, 17, 0.12)', stroke: '#111111' },
-    { preset: 'shape-style-white', label: '白描边', fill: 'rgba(255, 255, 255, 0.36)', stroke: '#ffffff' },
-    { preset: 'shape-style-outline', label: '仅描边', fill: 'transparent', stroke: '#d83b31' },
+    { preset: 'shape-style-outline', label: '仅描边', fill: 'transparent', fillOpacity: 0, stroke: '#d83b31', strokeOpacity: 100 },
+    { preset: 'shape-style-red', label: '标注红', fill: '#d83b31', fillOpacity: 22, stroke: '#d83b31', strokeOpacity: 100 },
+    { preset: 'shape-style-blue', label: '标注蓝', fill: '#1677ff', fillOpacity: 20, stroke: '#1677ff', strokeOpacity: 100 },
+    { preset: 'shape-style-orange', label: '警示橙', fill: '#ff7a00', fillOpacity: 22, stroke: '#ff7a00', strokeOpacity: 100 },
+    { preset: 'shape-style-yellow', label: '标题黄', fill: '#ffd700', fillOpacity: 28, stroke: '#b7791f', strokeOpacity: 100 },
+    { preset: 'shape-style-green', label: '强调绿', fill: '#2ead4a', fillOpacity: 20, stroke: '#2ead4a', strokeOpacity: 100 },
+    { preset: 'shape-style-purple', label: '重点紫', fill: '#8b5cf6', fillOpacity: 20, stroke: '#8b5cf6', strokeOpacity: 100 },
+    { preset: 'shape-style-black', label: '黑白框', fill: '#111111', fillOpacity: 12, stroke: '#111111', strokeOpacity: 100 },
+    { preset: 'shape-style-white', label: '白描边', fill: '#ffffff', fillOpacity: 36, stroke: '#ffffff', strokeOpacity: 100 },
   ];
 
   constructor(canvasManager, historyManager, defaultOptions = {}) {
     super(canvasManager, historyManager, {
       shapeType: 'rect',
-      fill: 'rgba(255, 0, 0, 0.3)',
-      stroke: '#ff0000',
+      fill: 'transparent',
+      stroke: 'rgba(216, 59, 49, 1)',
       strokeWidth: 2,
       ...defaultOptions,
     });
@@ -88,11 +88,17 @@ class ShapeModule extends BaseModule {
   }
 
   setFill(fill) {
-    this.options.fill = this._normalizeColor(fill, this.options.fill, true);
+    const normalized = this._normalizeColor(fill, this.options.fill, true);
+    this.options.fill = this._hasExplicitOpacity(normalized)
+      ? normalized
+      : this._withColorOpacity(normalized, this._getColorOpacity(this.options.fill));
   }
 
   setStroke(stroke) {
-    this.options.stroke = this._normalizeColor(stroke, this.options.stroke, false);
+    const normalized = this._normalizeColor(stroke, this.options.stroke, false);
+    this.options.stroke = this._hasExplicitOpacity(normalized)
+      ? normalized
+      : this._withColorOpacity(normalized, this._getColorOpacity(this.options.stroke));
   }
 
   setStrokeWidth(width) {
@@ -100,11 +106,19 @@ class ShapeModule extends BaseModule {
     this.options.strokeWidth = this._clamp(Number.isFinite(parsed) ? parsed : this.options.strokeWidth, 1, 20);
   }
 
+  setFillOpacity(opacity) {
+    this.options.fill = this._withColorOpacity(this.options.fill, this._parseOpacity(opacity));
+  }
+
+  setStrokeOpacity(opacity) {
+    this.options.stroke = this._withColorOpacity(this.options.stroke, this._parseOpacity(opacity));
+  }
+
   applyPreset(presetName) {
     const stylePreset = ShapeModule.SHAPE_STYLE_PRESETS.find(item => item.preset === presetName);
     if (stylePreset) {
-      this.setFill(stylePreset.fill);
-      this.setStroke(stylePreset.stroke);
+      this.options.fill = this._getPresetColor(stylePreset, 'fill');
+      this.options.stroke = this._getPresetColor(stylePreset, 'stroke');
       return;
     }
 
@@ -135,12 +149,16 @@ class ShapeModule extends BaseModule {
     const shapeType = this.options.shapeType;
     const currentShape = ShapeModule.SHAPE_OPTIONS.find(item => item.type === shapeType) || ShapeModule.SHAPE_OPTIONS[0];
     const strokeWidth = this.options.strokeWidth;
-    const colorPresets = ShapeModule.SHAPE_STYLE_PRESETS.map(item => `
-        <button class="options-btn options-btn-sm shape-style-btn ${this._isStylePresetActive(item) ? 'active' : ''}" data-preset="${item.preset}" style="--shape-style-fill:${item.fill}; --shape-style-stroke:${item.stroke}" title="${item.label}">
+    const colorPresets = ShapeModule.SHAPE_STYLE_PRESETS.map(item => {
+      const fill = this._getPresetColor(item, 'fill');
+      const stroke = this._getPresetColor(item, 'stroke');
+      return `
+        <button class="options-btn options-btn-sm shape-style-btn ${this._isStylePresetActive(item) ? 'active' : ''}" data-preset="${item.preset}" style="--shape-style-fill:${fill}; --shape-style-stroke:${stroke}" title="${item.label}">
           <span class="shape-style-btn__swatch"></span>
           <span>${item.label}</span>
         </button>
-    `).join('');
+      `;
+    }).join('');
 
     return `
       <div class="options-group">
@@ -163,8 +181,13 @@ class ShapeModule extends BaseModule {
   }
 
   _isStylePresetActive(preset) {
-    return this._normalizeComparableColor(this.options.fill) === this._normalizeComparableColor(preset.fill)
-      && this._normalizeComparableColor(this.options.stroke) === this._normalizeComparableColor(preset.stroke);
+    return this._normalizeComparableColor(this.options.fill) === this._normalizeComparableColor(this._getPresetColor(preset, 'fill'))
+      && this._normalizeComparableColor(this.options.stroke) === this._normalizeComparableColor(this._getPresetColor(preset, 'stroke'));
+  }
+
+  _getPresetColor(preset, prop) {
+    const opacity = this._parseOpacity(preset[`${prop}Opacity`]);
+    return this._withColorOpacity(preset[prop], opacity);
   }
 
   getShapePickerHTML() {
@@ -207,9 +230,19 @@ class ShapeModule extends BaseModule {
         <label>填充色</label>
         <input type="color" class="property-color" data-module-prop="fill" value="${this._extractHexColor(this.options.fill)}" />
       </div>
+      <div class="property-item property-item--wide">
+        <label>填充不透明</label>
+        <input type="range" class="property-range" data-module-prop="fillOpacity" data-value-suffix="%" min="0" max="100" value="${this._getColorOpacityPercent(this.options.fill)}" />
+        <span class="property-value">${this._getColorOpacityPercent(this.options.fill)}%</span>
+      </div>
       <div class="property-item">
         <label>边框色</label>
         <input type="color" class="property-color" data-module-prop="stroke" value="${this._extractHexColor(this.options.stroke)}" />
+      </div>
+      <div class="property-item property-item--wide">
+        <label>描边不透明</label>
+        <input type="range" class="property-range" data-module-prop="strokeOpacity" data-value-suffix="%" min="0" max="100" value="${this._getColorOpacityPercent(this.options.stroke)}" />
+        <span class="property-value">${this._getColorOpacityPercent(this.options.stroke)}%</span>
       </div>
       <div class="property-item property-item--wide">
         <label>边框宽度</label>
@@ -227,6 +260,12 @@ class ShapeModule extends BaseModule {
         return true;
       case 'stroke':
         this.setStroke(value);
+        return true;
+      case 'fillOpacity':
+        this.setFillOpacity(value);
+        return true;
+      case 'strokeOpacity':
+        this.setStrokeOpacity(value);
         return true;
       case 'strokeWidth':
         this.setStrokeWidth(value);
@@ -521,6 +560,84 @@ class ShapeModule extends BaseModule {
 
   _normalizeComparableColor(color) {
     return String(color ?? '').replace(/\s+/g, '').toLowerCase();
+  }
+
+  _hasExplicitOpacity(color) {
+    const value = String(color ?? '').trim().toLowerCase();
+    return value === 'transparent' || value.startsWith('rgba');
+  }
+
+  _parseOpacity(value) {
+    const parsed = parseInt(value, 10);
+    return this._clamp(Number.isFinite(parsed) ? parsed : 100, 0, 100) / 100;
+  }
+
+  _getColorOpacityPercent(color) {
+    return Math.round(this._getColorOpacity(color) * 100);
+  }
+
+  _getColorOpacity(color) {
+    const value = String(color ?? '').trim().toLowerCase();
+    if (!value || value === 'transparent') return 0;
+
+    const rgba = value.match(/^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)$/i);
+    if (rgba) {
+      const alpha = parseFloat(rgba[1]);
+      return this._clamp(Number.isFinite(alpha) ? alpha : 1, 0, 1);
+    }
+
+    return 1;
+  }
+
+  _withColorOpacity(color, opacity) {
+    const alpha = this._clamp(Number.isFinite(opacity) ? opacity : 1, 0, 1);
+    const rgb = this._extractRgb(color);
+
+    if (!rgb) {
+      return alpha === 0 ? 'transparent' : color;
+    }
+
+    if (alpha === 0 && String(color ?? '').trim().toLowerCase() === 'transparent') {
+      return 'transparent';
+    }
+
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${this._formatAlpha(alpha)})`;
+  }
+
+  _extractRgb(color) {
+    const value = String(color ?? '').trim().toLowerCase();
+    if (!value || value === 'transparent') return { r: 0, g: 0, b: 0 };
+
+    if (/^#[0-9a-f]{6}$/i.test(value)) {
+      return {
+        r: parseInt(value.slice(1, 3), 16),
+        g: parseInt(value.slice(3, 5), 16),
+        b: parseInt(value.slice(5, 7), 16),
+      };
+    }
+
+    if (/^#[0-9a-f]{3}$/i.test(value)) {
+      return {
+        r: parseInt(value[1] + value[1], 16),
+        g: parseInt(value[2] + value[2], 16),
+        b: parseInt(value[3] + value[3], 16),
+      };
+    }
+
+    const rgb = value.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (rgb) {
+      return {
+        r: this._clamp(parseInt(rgb[1], 10), 0, 255),
+        g: this._clamp(parseInt(rgb[2], 10), 0, 255),
+        b: this._clamp(parseInt(rgb[3], 10), 0, 255),
+      };
+    }
+
+    return null;
+  }
+
+  _formatAlpha(alpha) {
+    return String(Math.round(alpha * 100) / 100);
   }
 
   _extractHexColor(color) {

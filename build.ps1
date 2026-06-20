@@ -1,16 +1,82 @@
-# build.ps1 — Assemble core + uTools client into dist/uTools/
+# build.ps1 — Assemble core + clients into dist/<platform>/
 # Usage: .\build.ps1
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $distRoot = Join-Path $root "dist"
-$target = Join-Path $distRoot "uTools"
+$platforms = @(
+    @{ Client = "utools"; Dist = "uTools" },
+    @{ Client = "ztools"; Dist = "zTools" }
+)
 
-Write-Host "Building dist/uTools/ ..." -ForegroundColor Cyan
+function Update-ImportPaths {
+    param(
+        [string]$Target
+    )
+
+    # Fix import paths in dist/<platform>/src/ files.
+    # From clients/<platform>/src/ the path was ../../../core/src/
+    # From dist/<platform>/src/ the path should be ../core/src/
+    # From dist/<platform>/src/ui/ the path should be ../../core/src/
+    $rootSrcFiles = Get-ChildItem (Join-Path $Target "src\*.js") -File -ErrorAction SilentlyContinue
+    foreach ($file in $rootSrcFiles) {
+        $content = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
+        $newContent = $content -replace "from '\.\./\.\./\.\./core/src/", "from '../core/src/" `
+                               -replace "from '\.\./\.\./\.\./\.\./core/src/", "from '../core/src/"
+        if ($newContent -ne $content) {
+            [System.IO.File]::WriteAllText($file.FullName, $newContent, [System.Text.Encoding]::UTF8)
+        }
+    }
+
+    $nestedSrcFiles = Get-ChildItem (Join-Path $Target "src\ui\*.js"),(Join-Path $Target "src\adapters\host\*.js") -File -ErrorAction SilentlyContinue
+    foreach ($file in $nestedSrcFiles) {
+        $content = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
+        $newContent = $content -replace "from '\.\./\.\./\.\./\.\./core/src/", "from '../../core/src/" `
+                               -replace "from '\.\./\.\./\.\./core/src/", "from '../../core/src/"
+        if ($newContent -ne $content) {
+            [System.IO.File]::WriteAllText($file.FullName, $newContent, [System.Text.Encoding]::UTF8)
+        }
+    }
+
+    # Fix index.html fabric.js path.
+    $htmlFile = Join-Path $Target "src\index.html"
+    $htmlContent = [System.IO.File]::ReadAllText($htmlFile, [System.Text.Encoding]::UTF8)
+    $htmlNew = $htmlContent -replace 'src="\.\./\.\./\.\./core/src/lib/fabric\.min\.js"', 'src="../core/src/lib/fabric.min.js"'
+    if ($htmlNew -ne $htmlContent) {
+        [System.IO.File]::WriteAllText($htmlFile, $htmlNew, [System.Text.Encoding]::UTF8)
+    }
+}
+
+function Test-BuildOutput {
+    param(
+        [string]$Target,
+        [string]$DistName
+    )
+
+    $ok = $true
+    $checkPaths = @(
+        (Join-Path $Target "src\*.js"),
+        (Join-Path $Target "src\ui\*.js"),
+        (Join-Path $Target "src\adapters\host\*.js"),
+        (Join-Path $Target "core\src\*.js"),
+        (Join-Path $Target "core\src\modules\*.js"),
+        (Join-Path $Target "core\src\utils\*.js")
+    )
+
+    Get-ChildItem $checkPaths -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $result = node --check $_.FullName 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  FAIL: $($_.FullName.Replace($Target, "dist/$DistName"))" -ForegroundColor Red
+            Write-Host $result -ForegroundColor Red
+            $ok = $false
+        }
+    }
+
+    return $ok
+}
 
 # Clean + create
 New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
-if (Test-Path $target) { Remove-Item -Recurse -Force $target }
 
 # Remove legacy single-target dist output, but keep other platform folders.
 foreach ($legacyItem in @('src', 'core', 'plugin.json', 'preload.js', 'logo.png')) {
@@ -18,63 +84,42 @@ foreach ($legacyItem in @('src', 'core', 'plugin.json', 'preload.js', 'logo.png'
     if (Test-Path $legacyPath) { Remove-Item -Recurse -Force $legacyPath }
 }
 
-New-Item -ItemType Directory -Path $target -Force | Out-Null
-New-Item -ItemType Directory -Path "$target\src" -Force | Out-Null
-New-Item -ItemType Directory -Path "$target\core\src" -Force | Out-Null
+$allOk = $true
 
-# 1. Copy client files
-Copy-Item "$root\clients\utools\plugin.json" "$target\"
-Copy-Item "$root\clients\utools\preload.js" "$target\"
-Copy-Item "$root\clients\utools\logo.png" "$target\"
-xcopy "$root\clients\utools\src" "$target\src\" /E /I /Q /Y
-xcopy "$root\core\src" "$target\core\src\" /E /I /Q /Y
+foreach ($platform in $platforms) {
+    $clientName = $platform.Client
+    $distName = $platform.Dist
+    $clientRoot = Join-Path $root "clients\$clientName"
+    $target = Join-Path $distRoot $distName
 
-# 3. Fix import paths in dist/uTools/src/ files
-#    From clients/utools/src/ the path was ../../../core/src/
-#    From dist/uTools/src/ the path should be ../core/src/
-#    From dist/uTools/src/ui/ the path should be ../../core/src/
+    Write-Host "Building dist/$distName/ ..." -ForegroundColor Cyan
 
-$rootSrcFiles = Get-ChildItem "$target\src\*.js"
-foreach ($file in $rootSrcFiles) {
-    $content = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
-    $newContent = $content -replace "from '\.\./\.\./\.\./core/src/", "from '../core/src/" `
-                           -replace "from '\.\./\.\./\.\./\.\./core/src/", "from '../core/src/"
-    if ($newContent -ne $content) {
-        [System.IO.File]::WriteAllText($file.FullName, $newContent, [System.Text.Encoding]::UTF8)
+    if (-not (Test-Path $clientRoot)) {
+        throw "Client not found: $clientRoot"
+    }
+
+    if (Test-Path $target) { Remove-Item -Recurse -Force $target }
+
+    New-Item -ItemType Directory -Path $target -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $target "src") -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $target "core\src") -Force | Out-Null
+
+    Copy-Item (Join-Path $clientRoot "plugin.json") $target
+    Copy-Item (Join-Path $clientRoot "preload.js") $target
+    Copy-Item (Join-Path $clientRoot "logo.png") $target
+    xcopy (Join-Path $clientRoot "src") (Join-Path $target "src\") /E /I /Q /Y | Out-Null
+    xcopy (Join-Path $root "core\src") (Join-Path $target "core\src\") /E /I /Q /Y | Out-Null
+
+    Update-ImportPaths -Target $target
+
+    if (Test-BuildOutput -Target $target -DistName $distName) {
+        Write-Host "Build complete: dist/$distName/" -ForegroundColor Green
+    } else {
+        $allOk = $false
     }
 }
 
-$nestedSrcFiles = Get-ChildItem "$target\src\ui\*.js","$target\src\adapters\host\*.js"
-foreach ($file in $nestedSrcFiles) {
-    $content = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
-    $newContent = $content -replace "from '\.\./\.\./\.\./\.\./core/src/", "from '../../core/src/" `
-                           -replace "from '\.\./\.\./\.\./core/src/", "from '../../core/src/"
-    if ($newContent -ne $content) {
-        [System.IO.File]::WriteAllText($file.FullName, $newContent, [System.Text.Encoding]::UTF8)
-    }
-}
-
-# Fix index.html fabric.js path
-$htmlFile = "$target\src\index.html"
-$htmlContent = [System.IO.File]::ReadAllText($htmlFile, [System.Text.Encoding]::UTF8)
-$htmlNew = $htmlContent -replace 'src="\.\./\.\./\.\./core/src/lib/fabric\.min\.js"', 'src="../core/src/lib/fabric.min.js"'
-if ($htmlNew -ne $htmlContent) {
-    [System.IO.File]::WriteAllText($htmlFile, $htmlNew, [System.Text.Encoding]::UTF8)
-}
-
-# 4. Verify
-$ok = $true
-Get-ChildItem "$target\src\*.js","$target\src\ui\*.js","$target\src\adapters\host\*.js","$target\core\src\*.js","$target\core\src\modules\*.js","$target\core\src\utils\*.js" | ForEach-Object {
-    $result = node --check $_.FullName 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  FAIL: $($_.FullName.Replace($target, 'dist/uTools'))" -ForegroundColor Red
-        $ok = $false
-    }
-}
-
-if ($ok) {
-    Write-Host "Build complete: dist/uTools/" -ForegroundColor Green
-} else {
+if (-not $allOk) {
     Write-Host "Build failed!" -ForegroundColor Red
     exit 1
 }

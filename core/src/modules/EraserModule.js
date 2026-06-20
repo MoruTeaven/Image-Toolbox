@@ -13,9 +13,14 @@ class EraserModule extends BaseModule {
 
     this._targetObject = null;
     this._strokeTarget = null;
-    this._savedBeforeStroke = false;
+    this._isDrawing = false;
+    this._lastPointer = null;
+    this._previewImage = null;
+    this._previewCtx = null;
+    this._previewBounds = null;
     this._boundMouseDown = this._onMouseDown.bind(this);
-    this._boundPathCreated = this._onPathCreated.bind(this);
+    this._boundMouseMove = this._onMouseMove.bind(this);
+    this._boundMouseUp = this._onMouseUp.bind(this);
     this._boundLayerSelected = this._onLayerSelected.bind(this);
   }
 
@@ -28,13 +33,12 @@ class EraserModule extends BaseModule {
 
     this._targetObject = initialTarget;
     canvas.discardActiveObject();
-    canvas.isDrawingMode = true;
+    canvas.isDrawingMode = false;
     canvas.defaultCursor = 'crosshair';
     canvas.freeDrawingCursor = 'crosshair';
-    this._ensureBrush();
-    this._applyBrushOptions();
     canvas.on('mouse:down', this._boundMouseDown);
-    canvas.on('path:created', this._boundPathCreated);
+    canvas.on('mouse:move', this._boundMouseMove);
+    canvas.on('mouse:up', this._boundMouseUp);
     eventBus.on('layer:selected', this._boundLayerSelected);
 
     eventBus.emit('module:activated', 'eraser');
@@ -44,12 +48,15 @@ class EraserModule extends BaseModule {
     const canvas = this.canvasManager.canvas;
     if (canvas) {
       canvas.off('mouse:down', this._boundMouseDown);
-      canvas.off('path:created', this._boundPathCreated);
+      canvas.off('mouse:move', this._boundMouseMove);
+      canvas.off('mouse:up', this._boundMouseUp);
+      this._commitLivePreview();
       canvas.isDrawingMode = false;
       canvas.freeDrawingCursor = 'crosshair';
       this._targetObject = null;
       this._strokeTarget = null;
-      this._savedBeforeStroke = false;
+      this._isDrawing = false;
+      this._lastPointer = null;
     }
     eventBus.off('layer:selected', this._boundLayerSelected);
 
@@ -111,55 +118,60 @@ class EraserModule extends BaseModule {
   _onMouseDown(e) {
     const nativeEvent = e?.e;
     if (nativeEvent && typeof nativeEvent.button === 'number' && nativeEvent.button !== 0) return;
+    if (this._isDrawing) return;
 
     const target = this._getStrokeTarget(e);
     this._strokeTarget = target;
     if (!target) return;
 
     this.history.saveState();
-    this._savedBeforeStroke = true;
-  }
-
-  _onPathCreated(e) {
-    const path = e.path;
-    if (!path) return;
 
     const canvas = this.canvasManager.canvas;
-    const target = this._strokeTarget;
-
-    // 移除临时绘制路径，不保留为独立图层
-    path.set({ excludeFromLayer: true, excludeFromExport: true });
-    canvas.remove(path);
-
-    if (!target || !this._isErasableObject(target)) {
+    const pointer = canvas.getPointer(e.e);
+    if (!this._beginLivePreview(target)) {
       this._resetStrokeState();
-      canvas.renderAll();
       return;
     }
 
-    // 栅格化合并：将擦除效果直接烧入目标图层像素
-    this._rasterizeErasedLayer(target, path);
-    canvas.discardActiveObject();
-    canvas.renderAll();
+    this._isDrawing = true;
+    this._lastPointer = pointer;
+    this._drawErasePoint(pointer);
+    this._refreshPreview();
+  }
+
+  _onMouseMove(e) {
+    if (!this._isDrawing || !this._lastPointer) return;
+    if (typeof e?.e?.buttons === 'number' && e.e.buttons === 0) {
+      this._onMouseUp();
+      return;
+    }
+
+    const canvas = this.canvasManager.canvas;
+    const pointer = canvas.getPointer(e.e);
+    this._drawEraseSegment(this._lastPointer, pointer);
+    this._lastPointer = pointer;
+    this._refreshPreview();
+  }
+
+  _onMouseUp() {
+    if (!this._isDrawing) return;
+
+    this._commitLivePreview();
     this._resetStrokeState();
   }
 
   _onLayerSelected(meta) {
     if (!this.active) return;
+    if (this._isDrawing) return;
 
     this._targetObject = this._getErasableObject(meta?.fabricObj || null);
     const canvas = this.canvasManager.canvas;
     if (canvas) canvas.discardActiveObject();
   }
 
-  /**
-   * 将擦除效果栅格化合并到目标图层
-   * @param {fabric.Object} target - 目标图层对象
-   * @param {fabric.Path} erasePath - 擦除路径
-   */
-  _rasterizeErasedLayer(target, erasePath) {
+  _beginLivePreview(target) {
     const canvas = this.canvasManager.canvas;
-    if (!canvas || !erasePath?.path?.length) return;
+    if (!canvas || !this._isErasableObject(target)) return false;
 
     try {
       target.setCoords();
@@ -172,48 +184,115 @@ class EraserModule extends BaseModule {
       const cropHeight = Math.max(1, cropBottom - cropTop);
       const rasterCanvas = this._renderTargetRegion(target, cropLeft, cropTop, cropWidth, cropHeight);
       const rasterCtx = rasterCanvas.getContext('2d');
-      this._drawErasePathToContext(rasterCtx, erasePath, cropLeft, cropTop);
-      const layerName = typeof target._layerName === 'string' ? target._layerName : '';
-
-      const newImg = new fabric.Image(rasterCanvas, {
-        left: cropLeft,
-        top: cropTop,
-        width: rasterCanvas.width,
-        height: rasterCanvas.height,
-        scaleX: 1,
-        scaleY: 1,
-        angle: 0,
-        originX: 'left',
-        originY: 'top',
-        opacity: 1,
-        id: target.id,
-        selectable: false,
-        evented: false,
-      });
-
-      if (layerName) {
-        newImg._layerName = layerName;
-        newImg._layerNameAuto = false;
-        newImg._layerBaseName = '';
-      }
-
-      newImg.setCoords();
-
+      const previewImage = this._createRasterImage(target, rasterCanvas, cropLeft, cropTop);
       const targetIndex = canvas.getObjects().indexOf(target);
+
       canvas.remove(target);
       if (targetIndex >= 0) {
-        canvas.insertAt(newImg, targetIndex);
+        canvas.insertAt(previewImage, targetIndex);
       } else {
-        canvas.add(newImg);
+        canvas.add(previewImage);
       }
 
-      if (this._targetObject === target || this._strokeTarget === target) {
-        this._targetObject = newImg;
-      }
-
-      canvas.renderAll();
+      this._previewImage = previewImage;
+      this._previewCtx = rasterCtx;
+      this._previewBounds = { left: cropLeft, top: cropTop };
+      this._targetObject = previewImage;
+      this._strokeTarget = previewImage;
+      canvas.discardActiveObject();
+      canvas.requestRenderAll?.();
+      return true;
     } catch (err) {
-      console.error('[EraserModule] 栅格化擦除失败:', err);
+      console.error('[EraserModule] 创建实时擦除预览失败:', err);
+      return false;
+    }
+  }
+
+  _createRasterImage(target, rasterCanvas, left, top) {
+    const layerName = typeof target._layerName === 'string' ? target._layerName : '';
+    const image = new fabric.Image(rasterCanvas, {
+      left,
+      top,
+      width: rasterCanvas.width,
+      height: rasterCanvas.height,
+      scaleX: 1,
+      scaleY: 1,
+      angle: 0,
+      originX: 'left',
+      originY: 'top',
+      opacity: 1,
+      id: target.id,
+      selectable: false,
+      evented: false,
+      objectCaching: false,
+    });
+
+    if (layerName) {
+      image._layerName = layerName;
+      image._layerNameAuto = false;
+      image._layerBaseName = '';
+    }
+
+    image.setCoords();
+    return image;
+  }
+
+  _drawErasePoint(point) {
+    const ctx = this._previewCtx;
+    const bounds = this._previewBounds;
+    if (!ctx || !bounds) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.arc(point.x - bounds.left, point.y - bounds.top, this.options.width / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  _drawEraseSegment(from, to) {
+    const ctx = this._previewCtx;
+    const bounds = this._previewBounds;
+    if (!ctx || !bounds) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = this.options.width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#000000';
+    ctx.beginPath();
+    ctx.moveTo(from.x - bounds.left, from.y - bounds.top);
+    ctx.lineTo(to.x - bounds.left, to.y - bounds.top);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  _refreshPreview() {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas || !this._previewImage) return;
+
+    this._previewImage.dirty = true;
+    canvas.requestRenderAll?.();
+  }
+
+  _commitLivePreview() {
+    if (!this._previewImage) return;
+
+    const canvas = this.canvasManager.canvas;
+    this._previewImage.setCoords();
+    this._targetObject = this._previewImage;
+    this._strokeTarget = this._previewImage;
+    this._previewCtx = null;
+    this._previewBounds = null;
+    this._previewImage = null;
+    this._isDrawing = false;
+    this._lastPointer = null;
+
+    if (canvas) {
+      canvas.discardActiveObject();
+      canvas.renderAll();
     }
   }
 
@@ -251,64 +330,6 @@ class EraserModule extends BaseModule {
       canvas.calcViewportBoundaries?.();
       canvas.requestRenderAll?.();
     }
-  }
-
-  _drawErasePathToContext(ctx, erasePath, cropLeft, cropTop) {
-    const pathData = fabric.util.transformPath
-      ? fabric.util.transformPath(erasePath.path, erasePath.calcTransformMatrix(), erasePath.pathOffset)
-      : this._clonePathData(erasePath.path);
-
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.lineWidth = erasePath.strokeWidth || this.options.width;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#000000';
-    ctx.beginPath();
-
-    pathData.forEach(command => {
-      this._drawPathCommand(ctx, command, -cropLeft, -cropTop);
-    });
-
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  _drawPathCommand(ctx, command, offsetX, offsetY) {
-    switch (command[0]) {
-      case 'M':
-        ctx.moveTo(command[1] + offsetX, command[2] + offsetY);
-        break;
-      case 'L':
-        ctx.lineTo(command[1] + offsetX, command[2] + offsetY);
-        break;
-      case 'Q':
-        ctx.quadraticCurveTo(
-          command[1] + offsetX,
-          command[2] + offsetY,
-          command[3] + offsetX,
-          command[4] + offsetY
-        );
-        break;
-      case 'C':
-        ctx.bezierCurveTo(
-          command[1] + offsetX,
-          command[2] + offsetY,
-          command[3] + offsetX,
-          command[4] + offsetY,
-          command[5] + offsetX,
-          command[6] + offsetY
-        );
-        break;
-      case 'Z':
-      case 'z':
-        ctx.closePath();
-        break;
-    }
-  }
-
-  _clonePathData(pathData) {
-    return pathData.map(command => command.slice());
   }
 
   _getStrokeTarget(e) {
@@ -387,24 +408,12 @@ class EraserModule extends BaseModule {
 
   _resetStrokeState() {
     this._strokeTarget = null;
-    this._savedBeforeStroke = false;
-  }
-
-  _ensureBrush() {
-    const canvas = this.canvasManager.canvas;
-    if (!canvas) return;
-
-    if (!canvas.freeDrawingBrush || !(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
-      canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-    }
+    this._isDrawing = false;
+    this._lastPointer = null;
   }
 
   _applyBrushOptions() {
-    const canvas = this.canvasManager.canvas;
-    if (!canvas?.freeDrawingBrush) return;
-
-    canvas.freeDrawingBrush.color = '#ffffff';
-    canvas.freeDrawingBrush.width = this.options.width;
+    // 实时橡皮擦直接写入预览 canvas，宽度在下一段轨迹生效。
   }
 
   _clamp(value, min, max) {

@@ -120,7 +120,7 @@ class ToolManager {
       group: 'annotate',
       shortcut: 'S',
       module: ShapeModule,
-      defaultOptions: { shapeType: 'rect', fill: 'rgba(255, 0, 0, 0.3)', stroke: '#ff0000', strokeWidth: 2 },
+      defaultOptions: { shapeType: 'rect', fill: 'transparent', stroke: 'rgba(216, 59, 49, 1)', strokeWidth: 2 },
     });
   }
 

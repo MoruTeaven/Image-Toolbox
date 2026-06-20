@@ -1,5 +1,29 @@
 export const updateRecords = [
   {
+    version: '2.2.1',
+    date: '2026-06-20',
+    changes: {
+      added: [
+        { text: '图形工具组新增属性面板入口，支持在预设栏和属性面板同步切换图形', platforms: null },
+        { text: '图形属性栏支持分别设置填充不透明度和描边不透明度', platforms: null }
+      ],
+      fixed: [
+        { text: '修复星形、心形、梯形、箭头等图形绘制偏移、畸形或显示不准确的问题', platforms: null },
+        { text: '修复直线和箭头在水平或垂直拖拽时可能无法创建的问题', platforms: null }
+      ],
+      improved: [
+        { text: '优化图形工具组选型窗口，改用 SVG 缩略图显示真实图形效果', platforms: null },
+        { text: '优化图形预设栏颜色，合并填充色和边框色为一套样式预设并改为上图案下文字布局', platforms: null },
+        { text: '图形颜色预设会同时应用填充不透明度和描边不透明度', platforms: null },
+        { text: '优化橡皮擦工具，拖动过程中实时显示擦除效果', platforms: null }
+      ],
+      adjusted: [
+        { text: '图形工具将仅描边预设调整为首位并作为默认样式', platforms: null }
+      ],
+      removed: []
+    }
+  },
+  {
     version: '2.2',
     date: '2026-06-19',
     changes: {

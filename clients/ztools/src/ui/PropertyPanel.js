@@ -232,9 +232,19 @@ class PropertyPanel {
           <label>填充</label>
           <input type="color" class="property-color" data-prop="fill" value="${this._toColorValue(active.fill, '#000000')}"${editDisabled} />
         </div>
+        <div class="property-item property-item--wide">
+          <label>填充不透明</label>
+          <input type="range" class="property-range" data-prop="fillOpacity" min="0" max="100" value="${this._getColorOpacityPercent(active.fill)}"${editDisabled} />
+          <span class="property-value">${this._getColorOpacityPercent(active.fill)}%</span>
+        </div>
         <div class="property-item">
           <label>描边</label>
           <input type="color" class="property-color" data-prop="stroke" value="${this._toColorValue(active.stroke, '#000000')}"${editDisabled} />
+        </div>
+        <div class="property-item property-item--wide">
+          <label>描边不透明</label>
+          <input type="range" class="property-range" data-prop="strokeOpacity" min="0" max="100" value="${this._getColorOpacityPercent(active.stroke)}"${editDisabled} />
+          <span class="property-value">${this._getColorOpacityPercent(active.stroke)}%</span>
         </div>
         <div class="property-item">
           <label>描边宽</label>
@@ -318,6 +328,17 @@ class PropertyPanel {
         }
         break;
       }
+      case 'fillOpacity':
+      case 'strokeOpacity': {
+        const percent = this._clamp(parseInt(value, 10), 0, 100);
+        const paintProp = prop === 'fillOpacity' ? 'fill' : 'stroke';
+        propertyValue = percent / 100;
+        active.set(paintProp, this._withColorOpacity(active[paintProp], propertyValue));
+        if (target.nextElementSibling) {
+          target.nextElementSibling.textContent = percent + '%';
+        }
+        break;
+      }
       case 'text':
         active.set('text', value);
         break;
@@ -335,7 +356,7 @@ class PropertyPanel {
       }
       case 'fill':
       case 'stroke':
-        active.set(prop, value);
+        active.set(prop, this._withColorOpacity(value, this._getColorOpacity(active[prop], 1)));
         break;
       case 'fontWeight':
         propertyValue = value ? 'bold' : 'normal';
@@ -394,7 +415,7 @@ class PropertyPanel {
     const handled = module.onToolPropertyChange(prop, value, { eventType: e.type });
 
     if (target.type === 'range' && target.nextElementSibling) {
-      target.nextElementSibling.textContent = `${value}px`;
+      target.nextElementSibling.textContent = `${value}${target.dataset.valueSuffix || 'px'}`;
     }
 
     if (handled !== false && target.dataset.refreshProperty === 'true') {
@@ -538,6 +559,70 @@ class PropertyPanel {
     }
 
     return fallback;
+  }
+
+  _getColorOpacityPercent(color) {
+    return Math.round(this._getColorOpacity(color, 0) * 100);
+  }
+
+  _getColorOpacity(color, fallback = 1) {
+    const value = String(color ?? '').trim().toLowerCase();
+    if (!value) return fallback;
+    if (value === 'transparent') return 0;
+
+    const rgba = value.match(/^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)$/i);
+    if (rgba) {
+      const alpha = parseFloat(rgba[1]);
+      return this._clamp(Number.isFinite(alpha) ? alpha : fallback, 0, 1);
+    }
+
+    return 1;
+  }
+
+  _withColorOpacity(color, opacity) {
+    const alpha = this._clamp(Number.isFinite(opacity) ? opacity : 1, 0, 1);
+    const rgb = this._extractRgb(color);
+
+    if (!rgb) return color;
+    if (alpha === 0 && String(color ?? '').trim().toLowerCase() === 'transparent') return 'transparent';
+
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${this._formatAlpha(alpha)})`;
+  }
+
+  _extractRgb(color) {
+    const value = String(color ?? '').trim().toLowerCase();
+    if (!value || value === 'transparent') return { r: 0, g: 0, b: 0 };
+
+    if (/^#[0-9a-f]{6}$/i.test(value)) {
+      return {
+        r: parseInt(value.slice(1, 3), 16),
+        g: parseInt(value.slice(3, 5), 16),
+        b: parseInt(value.slice(5, 7), 16),
+      };
+    }
+
+    if (/^#[0-9a-f]{3}$/i.test(value)) {
+      return {
+        r: parseInt(value[1] + value[1], 16),
+        g: parseInt(value[2] + value[2], 16),
+        b: parseInt(value[3] + value[3], 16),
+      };
+    }
+
+    const rgb = value.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (rgb) {
+      return {
+        r: this._clamp(parseInt(rgb[1], 10), 0, 255),
+        g: this._clamp(parseInt(rgb[2], 10), 0, 255),
+        b: this._clamp(parseInt(rgb[3], 10), 0, 255),
+      };
+    }
+
+    return null;
+  }
+
+  _formatAlpha(alpha) {
+    return String(Math.round(alpha * 100) / 100);
   }
 
   _formatNumber(value) {
