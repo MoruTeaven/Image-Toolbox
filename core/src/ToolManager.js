@@ -5,6 +5,7 @@ import CropModule from './modules/CropModule.js';
 import BrushModule from './modules/BrushModule.js';
 import EraserModule from './modules/EraserModule.js';
 import TextModule from './modules/TextModule.js';
+import ShapeModule from './modules/ShapeModule.js';
 import ExportModule from './modules/ExportModule.js';
 
 /**
@@ -66,7 +67,7 @@ class ToolManager {
 
     this.registerTool({
       name: 'mosaic',
-      label: '打码',
+      label: '马赛克',
       icon: 'mosaic',
       group: 'edit',
       shortcut: 'M',
@@ -110,6 +111,16 @@ class ToolManager {
       group: 'annotate',
       shortcut: 'T',
       module: TextModule,
+    });
+
+    this.registerTool({
+      name: 'shape',
+      label: '图形',
+      icon: 'shape',
+      group: 'annotate',
+      shortcut: 'S',
+      module: ShapeModule,
+      defaultOptions: { shapeType: 'rect', fill: 'rgba(255, 0, 0, 0.3)', stroke: '#ff0000', strokeWidth: 2 },
     });
   }
 

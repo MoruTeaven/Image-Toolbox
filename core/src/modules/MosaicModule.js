@@ -6,11 +6,11 @@ const SELECTION_STROKE = '#2f7f86';
 const SELECTION_STROKE_SOFT = 'rgba(47,127,134,0.52)';
 
 /**
- * 打码模块 — 矩形/自由选区/画笔三种交互方式，马赛克 + 模糊两种效果
+ * 马赛克模块 — 矩形/自由选区/画笔三种交互方式，马赛克 + 模糊两种效果
  *
- * 框选模式 (rect)：拖拽矩形选区打码
- * 自由选区 (lasso)：拖拽闭合非矩形选区打码
- * 画笔模式 (brush)：自由涂抹打码，释放时对涂抹覆盖区域（包围盒+画笔半径）应用效果
+ * 框选模式 (rect)：拖拽矩形选区应用马赛克/模糊
+ * 自由选区 (lasso)：拖拽闭合非矩形选区应用马赛克/模糊
+ * 画笔模式 (brush)：自由涂抹马赛克/模糊，释放时对涂抹覆盖区域（包围盒+画笔半径）应用效果
  */
 class MosaicModule extends BaseModule {
   constructor(canvasManager, historyManager, defaultOptions = {}) {
@@ -30,7 +30,7 @@ class MosaicModule extends BaseModule {
     this._lassoPreview = null;    // 自由选区预览轮廓
     this._brushPoints = [];       // 画笔模式的轨迹点
     this._brushPreview = null;    // 画笔预览圆圈
-    this._liveBrushOverlay = null; // 画笔模式拖动中的实时打码层
+    this._liveBrushOverlay = null; // 画笔模式拖动中的实时马赛克层
     this._detachedCanvasClipPath = null;
     this._clipPathDetached = false;
     this._objectClipPathBackups = null;
@@ -590,15 +590,19 @@ class MosaicModule extends BaseModule {
    * 只处理蒙版覆盖区域内的像素
    */
   _mosaicPixels(data, w, h, mask = null, mosaicSize = this.options.mosaicSize) {
-    const size = Math.max(1, Math.round(mosaicSize || this.options.mosaicSize || 12));
+    const defaultSize = this.options.mosaicSize || 12;
+    const rawSizeX = typeof mosaicSize === 'object' ? mosaicSize?.width : mosaicSize;
+    const rawSizeY = typeof mosaicSize === 'object' ? mosaicSize?.height : mosaicSize;
+    const sizeX = Math.max(1, Math.round(Number(rawSizeX) || defaultSize));
+    const sizeY = Math.max(1, Math.round(Number(rawSizeY) || defaultSize));
 
-    for (let y = 0; y < h; y += size) {
-      for (let x = 0; x < w; x += size) {
+    for (let y = 0; y < h; y += sizeY) {
+      for (let x = 0; x < w; x += sizeX) {
         // 检查该块是否有蒙版区域；矩形模式没有蒙版时整块处理。
         let hasMask = !mask;
         if (mask) {
-          for (let dy = 0; dy < size && y + dy < h && !hasMask; dy++) {
-            for (let dx = 0; dx < size && x + dx < w && !hasMask; dx++) {
+          for (let dy = 0; dy < sizeY && y + dy < h && !hasMask; dy++) {
+            for (let dx = 0; dx < sizeX && x + dx < w && !hasMask; dx++) {
               const mi = ((y + dy) * w + (x + dx)) * 4;
               if (mask[mi + 3] > 0) hasMask = true;
             }
@@ -607,8 +611,8 @@ class MosaicModule extends BaseModule {
         if (!hasMask) continue;
 
         let r = 0, g = 0, b = 0, a = 0, count = 0;
-        for (let dy = 0; dy < size && y + dy < h; dy++) {
-          for (let dx = 0; dx < size && x + dx < w; dx++) {
+        for (let dy = 0; dy < sizeY && y + dy < h; dy++) {
+          for (let dx = 0; dx < sizeX && x + dx < w; dx++) {
             const idx = ((y + dy) * w + (x + dx)) * 4;
             r += data[idx];
             g += data[idx + 1];
@@ -622,8 +626,8 @@ class MosaicModule extends BaseModule {
         b = Math.round(b / count);
         a = Math.round(a / count);
 
-        for (let dy = 0; dy < size && y + dy < h; dy++) {
-          for (let dx = 0; dx < size && x + dx < w; dx++) {
+        for (let dy = 0; dy < sizeY && y + dy < h; dy++) {
+          for (let dx = 0; dx < sizeX && x + dx < w; dx++) {
             const idx = ((y + dy) * w + (x + dx)) * 4;
             if (!mask || mask[idx + 3] > 0) {
               data[idx] = r;
@@ -673,11 +677,11 @@ class MosaicModule extends BaseModule {
   }
 
   // ═══════════════════════════════════════
-  // 核心打码方法
+  // 核心马赛克方法
   // ═══════════════════════════════════════
 
   /**
-   * 对指定矩形区域打码（框选模式使用）
+   * 对指定矩形区域应用马赛克/模糊（框选模式使用）
    */
   applyMosaic(rect) {
     rect = this._clipRectToEditableImage(rect);
@@ -805,9 +809,9 @@ class MosaicModule extends BaseModule {
     const maskData = this._getDynamicMosaicMaskData(obj, width, height);
 
     if ((obj._mosaicMode || 'mosaic') === 'mosaic') {
-      this._mosaicPixels(imgData.data, width, height, maskData, obj._mosaicSize);
+      this._mosaicPixels(imgData.data, width, height, maskData, this._getLocalMosaicBlockSize(obj));
     } else {
-      this._blurPixels(imgData.data, imgData, width, height, maskData, obj._mosaicBlurRadius);
+      this._blurPixels(imgData.data, imgData, width, height, maskData, this._getLocalBlurRadius(obj));
     }
 
     if (maskData) {
@@ -865,6 +869,22 @@ class MosaicModule extends BaseModule {
     sampleCanvas.height = height;
     const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
 
+    const matrix = this._getDynamicMosaicSamplingMatrix(obj, width, height);
+    const inverse = matrix ? this._invertTransform(matrix) : null;
+
+    if (inverse) {
+      sampleCtx.save();
+      sampleCtx.setTransform(inverse[0], inverse[1], inverse[2], inverse[3], inverse[4], inverse[5]);
+      sampleCtx.drawImage(sourceCanvas, 0, 0);
+      sampleCtx.restore();
+    } else {
+      this._captureDynamicMosaicSourceFallback(sampleCtx, sourceCanvas, obj, width, height);
+    }
+
+    return sampleCtx.getImageData(0, 0, width, height);
+  }
+
+  _captureDynamicMosaicSourceFallback(sampleCtx, sourceCanvas, obj, width, height) {
     const left = Math.round(obj.left || 0);
     const top = Math.round(obj.top || 0);
     const sampleWidth = Math.max(1, Math.round(width * Math.abs(obj.scaleX || 1)));
@@ -876,21 +896,98 @@ class MosaicModule extends BaseModule {
     const sw = Math.max(0, ex - sx);
     const sh = Math.max(0, ey - sy);
 
-    if (sw > 0 && sh > 0) {
-      sampleCtx.drawImage(
-        sourceCanvas,
-        sx,
-        sy,
-        sw,
-        sh,
-        (sx - left) * width / sampleWidth,
-        (sy - top) * height / sampleHeight,
-        sw * width / sampleWidth,
-        sh * height / sampleHeight
-      );
+    if (sw <= 0 || sh <= 0) return;
+
+    sampleCtx.drawImage(
+      sourceCanvas,
+      sx,
+      sy,
+      sw,
+      sh,
+      (sx - left) * width / sampleWidth,
+      (sy - top) * height / sampleHeight,
+      sw * width / sampleWidth,
+      sh * height / sampleHeight
+    );
+  }
+
+  _getDynamicMosaicSamplingMatrix(obj, width, height) {
+    const matrix = this._getObjectTransformMatrix(obj);
+    if (!matrix) return null;
+
+    return this._multiplyTransformMatrices(matrix, [1, 0, 0, 1, -width / 2, -height / 2]);
+  }
+
+  _getObjectTransformMatrix(obj) {
+    if (typeof obj?.calcTransformMatrix === 'function') {
+      const matrix = obj.calcTransformMatrix();
+      if (this._isValidTransformMatrix(matrix)) return matrix;
     }
 
-    return sampleCtx.getImageData(0, 0, width, height);
+    return null;
+  }
+
+  _getLocalMosaicBlockSize(obj) {
+    const baseSize = Math.max(1, Math.round(obj._mosaicSize || this.options.mosaicSize || 12));
+    const scale = this._getDynamicMosaicTransformScale(obj);
+
+    return {
+      width: Math.max(1, Math.round(baseSize / scale.x)),
+      height: Math.max(1, Math.round(baseSize / scale.y)),
+    };
+  }
+
+  _getLocalBlurRadius(obj) {
+    const radius = Math.max(1, Math.round(obj._mosaicBlurRadius || this.options.blurRadius || 8));
+    const scale = this._getDynamicMosaicTransformScale(obj);
+    const averageScale = Math.max(0.0001, Math.sqrt(scale.x * scale.y));
+    return Math.max(1, radius / averageScale);
+  }
+
+  _getDynamicMosaicTransformScale(obj) {
+    const matrix = this._getObjectTransformMatrix(obj);
+    if (!matrix) {
+      return {
+        x: Math.max(0.0001, Math.abs(obj?.scaleX || 1)),
+        y: Math.max(0.0001, Math.abs(obj?.scaleY || 1)),
+      };
+    }
+
+    return {
+      x: Math.max(0.0001, Math.sqrt(matrix[0] * matrix[0] + matrix[1] * matrix[1])),
+      y: Math.max(0.0001, Math.sqrt(matrix[2] * matrix[2] + matrix[3] * matrix[3])),
+    };
+  }
+
+  _isValidTransformMatrix(matrix) {
+    return Array.isArray(matrix)
+      && matrix.length >= 6
+      && matrix.slice(0, 6).every(value => Number.isFinite(value));
+  }
+
+  _multiplyTransformMatrices(a, b) {
+    return [
+      a[0] * b[0] + a[2] * b[1],
+      a[1] * b[0] + a[3] * b[1],
+      a[0] * b[2] + a[2] * b[3],
+      a[1] * b[2] + a[3] * b[3],
+      a[0] * b[4] + a[2] * b[5] + a[4],
+      a[1] * b[4] + a[3] * b[5] + a[5],
+    ];
+  }
+
+  _invertTransform(matrix) {
+    const determinant = matrix[0] * matrix[3] - matrix[1] * matrix[2];
+    if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-8) return null;
+
+    return [
+      matrix[3] / determinant,
+      -matrix[1] / determinant,
+      -matrix[2] / determinant,
+      matrix[0] / determinant,
+      (matrix[2] * matrix[5] - matrix[3] * matrix[4]) / determinant,
+      (matrix[1] * matrix[4] - matrix[0] * matrix[5]) / determinant,
+    ];
   }
 
   _renderObjectsBelow(obj) {
@@ -1239,7 +1336,7 @@ class MosaicModule extends BaseModule {
   }
 
   /**
-   * 清除所有打码覆盖层
+   * 清除所有马赛克覆盖层
    */
   clearAllMosaics() {
     const canvas = this.canvasManager.canvas;
@@ -1325,7 +1422,7 @@ class MosaicModule extends BaseModule {
     const effectMode = this.options.mode;
     const drawMode = this.options.drawMode || 'rect';
     let html = `
-      <div class="property-section-title">打码工具</div>
+      <div class="property-section-title">马赛克工具</div>
       <div class="property-item property-item--wide">
         <label>选区</label>
         <select class="property-select" data-module-prop="drawMode" data-refresh-property="true">

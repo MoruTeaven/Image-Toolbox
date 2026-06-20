@@ -4,21 +4,14 @@ export const updateRecords = [
     date: '2026-06-19',
     changes: {
       added: [
+        { text: '新增 ZTools 客户端，可按 ZTools 插件规范独立加载图片工具箱', platforms: ['ztools'] },
         { text: '新增图形工具，支持绘制矩形、圆形、星星、心形、梯形、直线、箭头等多种图形', platforms: null },
         { text: '图形工具支持自定义填充色、边框色、边框宽度，拖拽绘制即可创建图形', platforms: null }
       ],
-      fixed: [],
-      improved: [],
-      adjusted: [],
-      removed: []
-    }
-  },
-  {
-    version: '2.2',
-    date: '2026-06-16',
-    changes: {
-      added: [],
-      fixed: [],
+      fixed: [
+        { text: '修复马赛克图层旋转后马赛克范围不准确的问题', platforms: null },
+        { text: '修复马赛克图层拉伸后马赛克块大小被错误拉伸或压缩的问题', platforms: null }
+      ],
       improved: [],
       adjusted: [],
       removed: []
@@ -35,7 +28,7 @@ export const updateRecords = [
         { text: '修复橡皮擦擦除画笔图层后，图层名称被错误重置为马赛克的问题', platforms: null }
       ],
       improved: [
-        { text: '优化打码画笔模式，鼠标悬停/涂抹时显示画笔位置，涂抹过程中实时显示打码效果', platforms: null },
+        { text: '优化马赛克画笔模式，鼠标悬停/涂抹时显示画笔位置，涂抹过程中实时显示马赛克效果', platforms: null },
         { text: '优化图层默认名称展示，文字/画笔/马赛克图层会按内容和预设生成更清晰的名称', platforms: null }
       ],
       adjusted: [
@@ -78,7 +71,7 @@ export const updateRecords = [
         { text: '修复首次裁剪后再次剪切时，裁剪框被上一轮裁剪范围裁掉的问题', platforms: null },
         { text: '修复第二次裁剪被错误重置为原图范围、未基于首次裁剪继续裁剪的问题', platforms: null },
         { text: '修复旋转裁剪框后应用剪切仍按未旋转矩形生效的问题', platforms: null },
-        { text: '修复裁剪后打码拖选框被错误裁掉、不能显示到图像外的问题', platforms: null }
+        { text: '修复裁剪后马赛克拖选框被错误裁掉、不能显示到图像外的问题', platforms: null }
       ],
       improved: [],
       adjusted: [
@@ -96,7 +89,7 @@ export const updateRecords = [
     date: '2026-06-10',
     changes: {
       added: [
-        { text: '发布了第一个可用版本，支持图片导入、打码、裁切、文字标注和导出', platforms: null },
+        { text: '发布了第一个可用版本，支持图片导入、马赛克、裁切、文字标注和导出', platforms: null },
         { text: '搭建五区编辑器布局：工具栏、选项栏、画布区、属性/图层面板和状态栏', platforms: null }
       ],
       fixed: [],

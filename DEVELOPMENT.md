@@ -16,9 +16,10 @@
    - [6.1 画布管理器](#61-画布管理器-canvasmanager)
    - [6.2 打码模块](#62-打码模块-mosaicmodule)
    - [6.3 剪切模块](#63-剪切模块-cropmodule)
-   - [6.4 加字模块](#64-加字模块-textmodule)
-   - [6.5 导出模块](#65-导出模块-exportmodule)
-   - [6.6 历史记录模块](#66-历史记录模块-historymodule)
+    - [6.4 加字模块](#64-加字模块-textmodule)
+    - [6.5 图形工具](#65-图形工具-shapemodule)
+    - [6.6 导出模块](#66-导出模块-exportmodule)
+    - [6.7 历史记录模块](#67-历史记录模块-historymodule)
 7. [plugin.json 配置](#7-pluginjson-配置)
 8. [preload.js 设计](#8-preloadjs-设计)
 9. [UI 布局设计](#9-ui-布局设计)
@@ -446,7 +447,80 @@ const DEFAULT_TEXT_STYLE = {
 
 ---
 
-### 6.5 导出模块 (ExportModule)
+### 6.5 图形工具 (ShapeModule)
+
+在图片上绘制多种几何图形，支持矩形、圆形、星星、心形、梯形、直线和箭头等。
+
+```js
+class ShapeModule extends BaseModule {
+  constructor(canvasManager, historyManager, defaultOptions) { /* ... */ }
+
+  // ── 核心方法 ──
+  activate(options)              // 激活图形绘制模式
+  deactivate()                   // 退出图形绘制模式
+
+  // ── 图形配置 ──
+  setShapeType(type)             // 设置图形类型
+  setFill(color)                 // 设置填充色（支持 rgba）
+  setStroke(color)               // 设置边框色
+  setStrokeWidth(width)          // 设置边框宽度（1-20px）
+
+  // ── 预设快捷 ──
+  applyPreset(presetName)        // 应用预设样式
+
+  // ── UI 生成 ──
+  getOptionsBarHTML()            // 选项栏 HTML
+  getPropertyPanelHTML()         // 属性面板 HTML
+}
+```
+
+#### 支持的图形类型
+
+| 类型 | 说明 | 使用场景 |
+|------|------|---------|
+| `rect` | 矩形 | 标注区域、划重点 |
+| `circle` | 圆形 | 圆形高亮、标注关键点 |
+| `star` | 五角星 | 重要标记、评级标注 |
+| `heart` | 心形 | 个性标注、收藏标记 |
+| `trapezoid` | 梯形 | 特殊形状标注 |
+| `line` | 直线 | 指向箭头前驱、分割线 |
+| `arrow` | 箭头 | 指示方向、重点突出 |
+
+#### 默认图形样式
+
+```js
+const DEFAULT_SHAPE_OPTIONS = {
+  shapeType: 'rect',             // 默认图形类型
+  fill: 'rgba(255, 0, 0, 0.3)',  // 半透明红色填充
+  stroke: '#ff0000',             // 红色边框
+  strokeWidth: 2,                // 2px 边框
+}
+```
+
+#### 绘制交互
+
+- **拖拽绘制**：鼠标按下 → 移动 → 释放，完成图形绘制
+- **实时预览**：拖拽过程中实时显示将要生成的图形轮廓
+- **自动保存**：释放鼠标时自动保存到历史记录，支持撤销/重做
+- **最小尺寸**：宽度和高度均需大于 5px，过小的图形会被忽略
+
+#### 预设快捷按钮
+
+**图形类型快捷**：
+- `shape-type-rect` / `shape-type-circle` / `shape-type-star` / 等
+
+**填充色快捷**：
+- `shape-fill-red` / `shape-fill-blue` / `shape-fill-green` / `shape-fill-yellow` / `shape-fill-none`
+
+**边框色快捷**：
+- `shape-stroke-red` / `shape-stroke-blue` / `shape-stroke-green` / `shape-stroke-black`
+
+**边框宽度快捷**：
+- `shape-width-thin` (1px) / `shape-width-medium` (2px) / `shape-width-thick` (4px) / `shape-width-heavy` (6px)
+
+---
+
+### 6.6 导出模块 (ExportModule)
 
 将编辑结果导出为图片文件或复制到剪贴板。
 

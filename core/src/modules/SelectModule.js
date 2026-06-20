@@ -74,6 +74,7 @@ class SelectModule extends BaseModule {
     this.history.saveState();
     targets.forEach(obj => this._setObjectTransform(obj, { angle: nextAngle }));
     this._refreshActiveSelection(targets);
+    this._refreshDynamicMosaics();
     this._requestRender();
   }
 
@@ -81,6 +82,7 @@ class SelectModule extends BaseModule {
     this.history.saveState();
     targets.forEach(obj => this._setObjectTransform(obj, { [prop]: !obj[prop] }));
     this._refreshActiveSelection(targets);
+    this._refreshDynamicMosaics();
     this._requestRender();
   }
 
@@ -105,6 +107,10 @@ class SelectModule extends BaseModule {
     canvas.discardActiveObject();
     const selection = new fabric.ActiveSelection(targets, { canvas });
     canvas.setActiveObject(selection);
+  }
+
+  _refreshDynamicMosaics() {
+    this.canvasManager.refreshDynamicMosaics?.({ render: false });
   }
 
   _getTransformTargets() {

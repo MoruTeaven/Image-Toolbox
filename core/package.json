@@ -2,10 +2,12 @@
   "name": "@img-toolbox/core",
   "version": "0.1.0",
   "type": "module",
-  "description": "图片工具箱编辑引擎核心 — 平台无关，零 DOM/utools 依赖",
+  "description": "图片工具箱共享编辑核心：公共入口保持平台无关，Fabric/browser 运行时单独导出",
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
+    "./fabric": "./src/runtime/fabric.js",
+    "./runtime/fabric": "./src/runtime/fabric.js",
     "./interfaces/*": "./src/interfaces/*"
   }
 }

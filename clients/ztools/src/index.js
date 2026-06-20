@@ -22,7 +22,7 @@ import AccountPage, {
   EDITOR_SIDE_PANEL_POSITION_KEY,
   EDITOR_SIDE_PANEL_POSITIONS,
 } from './ui/AccountPage.js';
-import UtoolsHostAdapter from './adapters/host/UtoolsHostAdapter.js';
+import ZtoolsHostAdapter from './adapters/host/ZtoolsHostAdapter.js';
 import { initTheme } from '../../../core/src/utils/theme.js';
 
 // ═══════════════════════════════════════
@@ -79,7 +79,7 @@ class App {
       this.historyManager = new HistoryManager(this.canvasManager, 30);
 
       // 4. 初始化工具管理器（注入 host adapter）
-      this.hostAdapter = new UtoolsHostAdapter();
+      this.hostAdapter = new ZtoolsHostAdapter();
       this.toolManager = new ToolManager(this.canvasManager, this.historyManager, {
         host: this.hostAdapter,
       });

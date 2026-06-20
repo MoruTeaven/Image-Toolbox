@@ -13,7 +13,7 @@ export const CANVAS_DEFAULTS = {
   FIRE_RIGHT_CLICK: true,
 };
 
-// 打码默认值
+// 马赛克默认值
 export const MOSAIC_DEFAULTS = {
   MODE: 'mosaic',
   DRAW_MODE: 'rect',

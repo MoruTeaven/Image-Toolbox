@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════
-// @img-toolbox/core — 统一导出
-// 平台无关的图片编辑引擎，零 DOM / utools / fabric 依赖
+// @img-toolbox/core — 公共无环境依赖入口
+// 这里只导出平台无关的状态和接口；Fabric/browser 运行时见 ./runtime/fabric.js
 // ═══════════════════════════════════════════════════════
 
 // ── 基础设施 ──
-export { EventBus } from './EventBus.js';
+export { default as eventBus, EventBus } from './EventBus.js';
 export { default as EditorContext } from './EditorContext.js';
 
 // ── 状态存储 ──

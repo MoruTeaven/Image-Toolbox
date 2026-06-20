@@ -1,20 +1,15 @@
 {
-  "name": "image-toolbox",
+  "name": "image-toolbox-ztools",
   "title": "图片工具箱",
   "description": "马赛克、剪切、加字等图片编辑功能",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "main": "src/index.html",
   "logo": "logo.png",
   "preload": "preload.js",
-  "pluginSetting": {
-    "single": true,
-    "height": 560
-  },
   "features": [
     {
       "code": "image-edit",
-      "explain": "图片工具箱 — 马赛克、剪切、加字等图片编辑功能",
-      "icon": "logo.png",
+      "explain": "图片工具箱 - 马赛克、剪切、加字等图片编辑功能",
       "cmds": [
         "图片工具箱",
         "图片编辑",
