@@ -1,3 +1,9 @@
 /dist/
 /node_modules/
 /agents.md
+/.workbuddy/
+
+# Architecture documents (not tracked)
+CORE_ARCHITECTURE.md
+DEVELOPMENT.md
+PLATFORM_ADAPTERS.md
