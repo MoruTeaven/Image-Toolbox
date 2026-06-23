@@ -13,6 +13,7 @@ class ShapeModule extends BaseModule {
     { type: 'trapezoid', preset: 'shape-type-trapezoid', label: '梯形', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><polygon points="10 8 22 8 28 24 4 24" /></svg>' },
     { type: 'line', preset: 'shape-type-line', label: '直线', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><line x1="5" y1="24" x2="27" y2="8" /></svg>' },
     { type: 'arrow', preset: 'shape-type-arrow', label: '箭头', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 24L25 8" /><path d="M16 7H26V17" /></svg>' },
+    { type: 'double-arrow', preset: 'shape-type-double-arrow', label: '双箭头', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 24L27 8" /><path d="M18 7H28V17" /><path d="M14 25H4V15" /></svg>' },
   ];
 
   static SHAPE_STYLE_PRESETS = [
@@ -82,7 +83,7 @@ class ShapeModule extends BaseModule {
   }
 
   setShapeType(type) {
-    if (['rect', 'circle', 'star', 'heart', 'trapezoid', 'line', 'arrow'].includes(type)) {
+    if (['rect', 'circle', 'star', 'heart', 'trapezoid', 'line', 'arrow', 'double-arrow'].includes(type)) {
       this.options.shapeType = type;
     }
   }
@@ -130,6 +131,7 @@ class ShapeModule extends BaseModule {
       'shape-type-trapezoid': { shapeType: 'trapezoid' },
       'shape-type-line': { shapeType: 'line' },
       'shape-type-arrow': { shapeType: 'arrow' },
+      'shape-type-double-arrow': { shapeType: 'double-arrow' },
       'shape-width-thin': { strokeWidth: 1 },
       'shape-width-medium': { strokeWidth: 2 },
       'shape-width-thick': { strokeWidth: 4 },
@@ -356,7 +358,7 @@ class ShapeModule extends BaseModule {
     const width = Math.abs(endPoint.x - startPoint.x);
     const height = Math.abs(endPoint.y - startPoint.y);
 
-    if (['line', 'arrow'].includes(this.options.shapeType)) {
+    if (['line', 'arrow', 'double-arrow'].includes(this.options.shapeType)) {
       return Math.sqrt(width * width + height * height) > 5;
     }
 
@@ -413,6 +415,9 @@ class ShapeModule extends BaseModule {
 
       case 'arrow':
         return this._createArrow(startPoint, endPoint, commonProps);
+
+      case 'double-arrow':
+        return this._createDoubleArrow(startPoint, endPoint, commonProps);
 
       default:
         return null;
@@ -518,6 +523,49 @@ class ShapeModule extends BaseModule {
     };
     const pathData = `M ${startPoint.x} ${startPoint.y} L ${endPoint.x} ${endPoint.y}
       M ${headPointA.x} ${headPointA.y} L ${endPoint.x} ${endPoint.y} L ${headPointB.x} ${headPointB.y}`;
+
+    return new fabric.Path(pathData, {
+      ...props,
+      fill: null,
+      stroke: props.stroke,
+      strokeWidth: props.strokeWidth,
+      strokeLineCap: 'round',
+      strokeLineJoin: 'round',
+    });
+  }
+
+  _createDoubleArrow(startPoint, endPoint, props) {
+    const dx = endPoint.x - startPoint.x;
+    const dy = endPoint.y - startPoint.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < 10) return null;
+
+    const angle = Math.atan2(dy, dx);
+    const headLength = Math.min(Math.max(distance * 0.25, 10), 28);
+    const headAngle = Math.PI / 7;
+
+    const headPointA1 = {
+      x: endPoint.x - headLength * Math.cos(angle - headAngle),
+      y: endPoint.y - headLength * Math.sin(angle - headAngle),
+    };
+    const headPointA2 = {
+      x: endPoint.x - headLength * Math.cos(angle + headAngle),
+      y: endPoint.y - headLength * Math.sin(angle + headAngle),
+    };
+    const reverseAngle = angle + Math.PI;
+    const headPointB1 = {
+      x: startPoint.x - headLength * Math.cos(reverseAngle - headAngle),
+      y: startPoint.y - headLength * Math.sin(reverseAngle - headAngle),
+    };
+    const headPointB2 = {
+      x: startPoint.x - headLength * Math.cos(reverseAngle + headAngle),
+      y: startPoint.y - headLength * Math.sin(reverseAngle + headAngle),
+    };
+
+    const pathData = `M ${startPoint.x} ${startPoint.y} L ${endPoint.x} ${endPoint.y}
+      M ${headPointA1.x} ${headPointA1.y} L ${endPoint.x} ${endPoint.y} L ${headPointA2.x} ${headPointA2.y}
+      M ${headPointB1.x} ${headPointB1.y} L ${startPoint.x} ${startPoint.y} L ${headPointB2.x} ${headPointB2.y}`;
 
     return new fabric.Path(pathData, {
       ...props,
