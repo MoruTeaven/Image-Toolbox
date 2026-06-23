@@ -5,7 +5,8 @@ export const updateRecords = [
     changes: {
       added: [],
       fixed: [
-        { text: '修复 fromJSON 无法正确识别原始背景图的问题，因 loadImage 未设置 _originalImage 标记', platforms: null }
+        { text: '修复 fromJSON 无法正确识别原始背景图的问题，因 loadImage 未设置 _originalImage 标记', platforms: null },
+        { text: '修复撤销/重做时异步恢复画布状态导致历史记录损坏的问题，确保 _isRestoring 标志在 fromJSON 完成后才重置', platforms: null }
       ],
       improved: [],
       adjusted: [],
