@@ -1,5 +1,18 @@
 export const updateRecords = [
   {
+    version: '2.2.1',
+    date: '2026-06-23',
+    changes: {
+      added: [],
+      fixed: [
+        { text: '修复 fromJSON 无法正确识别原始背景图的问题，因 loadImage 未设置 _originalImage 标记', platforms: null }
+      ],
+      improved: [],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
     version: '2.2',
     date: '2026-06-23',
     changes: {

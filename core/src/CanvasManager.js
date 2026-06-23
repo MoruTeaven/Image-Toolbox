@@ -96,6 +96,7 @@ class CanvasManager {
           fabricImg.width, fabricImg.height, fabricImg.type);
 
         this.originalImage = fabricImg;
+        fabricImg._originalImage = true;
         this.canvas.clear();
         this.canvas.add(fabricImg);
         this.canvas.renderAll();
@@ -148,6 +149,7 @@ class CanvasManager {
           this.canvas.remove(this.originalImage);
         }
         this.originalImage = fabricImg;
+        fabricImg._originalImage = true;
         this.canvas.insertAt(fabricImg, 1); // 放到最底层但保留背景
         this.canvas.renderAll();
         resolve(fabricImg);
@@ -303,6 +305,7 @@ class CanvasManager {
       '_mosaicBrushPoints',
       '_mosaicBrushSize',
       '_mosaicLassoPoints',
+      '_originalImage',
     ]);
     // 手动序列化 canvas.clipPath（Fabric.js canvas.toJSON 不包含此属性）
     if (this.canvas.clipPath) {
