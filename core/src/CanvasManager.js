@@ -146,11 +146,16 @@ class CanvasManager {
           return;
         }
         if (this.originalImage) {
+          const index = this.canvas.getObjects().indexOf(this.originalImage);
           this.canvas.remove(this.originalImage);
+          this.originalImage = fabricImg;
+          fabricImg._originalImage = true;
+          this.canvas.insertAt(fabricImg, index >= 0 ? index : 0);
+        } else {
+          this.originalImage = fabricImg;
+          fabricImg._originalImage = true;
+          this.canvas.insertAt(fabricImg, 0);
         }
-        this.originalImage = fabricImg;
-        fabricImg._originalImage = true;
-        this.canvas.insertAt(fabricImg, 1); // 放到最底层但保留背景
         this.canvas.renderAll();
         resolve(fabricImg);
       }, undefined, 'anonymous');

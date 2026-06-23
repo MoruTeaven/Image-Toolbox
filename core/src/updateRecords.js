@@ -5,9 +5,11 @@ export const updateRecords = [
     changes: {
       added: [],
       fixed: [
+        { text: '修复首次进入文字工具时界面卡顿数秒的问题，改为异步加载系统字体列表', platforms: ['utools'] },
         { text: '修复 fromJSON 无法正确识别原始背景图的问题，因 loadImage 未设置 _originalImage 标记', platforms: null },
         { text: '修复撤销/重做时异步恢复画布状态导致历史记录损坏的问题，确保 _isRestoring 标志在 fromJSON 完成后才重置', platforms: null },
-        { text: '修复切换/停用工具时锁定图层和背景图层被错误解锁的问题，改为保存并恢复各对象原始交互状态', platforms: null }
+        { text: '修复切换/停用工具时锁定图层和背景图层被错误解锁的问题，改为保存并恢复各对象原始交互状态', platforms: null },
+        { text: '修复 replaceImage 硬编码 insertAt(1) 可能导致层级混乱的问题，改为动态获取原图索引位置替换', platforms: null }
       ],
       improved: [],
       adjusted: [],

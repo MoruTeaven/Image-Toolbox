@@ -309,6 +309,13 @@ class UtoolsHostAdapter {
     return [];
   }
 
+  getSystemFontsAsync() {
+    if (typeof window !== 'undefined' && typeof window.getSystemFontsAsync === 'function') {
+      return window.getSystemFontsAsync();
+    }
+    return Promise.resolve([]);
+  }
+
   openHostExternal(url) {
     return openExternal(url, this._api);
   }

@@ -1,6 +1,6 @@
 ﻿import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
-import { getFontOptionsHTML, recordFontUsage } from '../utils/fonts.js';
+import { getFontOptionsHTML, recordFontUsage, isSystemFontsLoaded, onSystemFontsLoaded } from '../utils/fonts.js';
 
 /**
  * 加字模块 — 在图片上添加文字标注
@@ -404,7 +404,16 @@ class TextModule extends BaseModule {
   }
 
   _getFontOptionsHTML(current) {
-    return getFontOptionsHTML(current);
+    if (isSystemFontsLoaded()) {
+      return getFontOptionsHTML(current);
+    }
+
+    // 异步加载字体，完成后触发属性面板更新
+    onSystemFontsLoaded(() => {
+      eventBus.emit('tool:propertiesChanged');
+    });
+
+    return '<option value="" disabled selected>加载字体中...</option>';
   }
 
   _getSelectOption(value, label, current) {
