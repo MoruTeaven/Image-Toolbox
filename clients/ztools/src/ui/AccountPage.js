@@ -316,7 +316,7 @@ class AccountPage {
                 <em>me@moruteaven.com</em>
               </span>
             </a>
-            <a class="account-about__contact" href="https://qm.qq.com/q/Nzn12S22e6" data-external-url="https://qm.qq.com/q/Nzn12S22e6">
+            <a class="account-about__contact" href="https://qm.qq.com/q/xdx9hstuGA" data-external-url="https://qm.qq.com/q/xdx9hstuGA">
               <span class="account-about__contact-icon">Q</span>
               <span>
                 <strong>QQ 交流群</strong>

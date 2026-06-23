@@ -1,13 +1,18 @@
 export const updateRecords = [
   {
-    version: '2.2.1',
-    date: '2026-06-20',
+    version: '2.2',
+    date: '2026-06-23',
     changes: {
       added: [
+        { text: '新增 ZTools 客户端，可按 ZTools 插件规范独立加载图片工具箱', platforms: ['ztools'] },
+        { text: '新增图形工具，支持绘制矩形、圆形、星星、心形、梯形、直线、箭头等多种图形', platforms: null },
+        { text: '图形工具支持自定义填充色、边框色、边框宽度，拖拽绘制即可创建图形', platforms: null },
         { text: '图形工具组新增属性面板入口，支持在预设栏和属性面板同步切换图形', platforms: null },
         { text: '图形属性栏支持分别设置填充不透明度和描边不透明度', platforms: null }
       ],
       fixed: [
+        { text: '修复马赛克图层旋转后马赛克范围不准确的问题', platforms: null },
+        { text: '修复马赛克图层拉伸后马赛克块大小被错误拉伸或压缩的问题', platforms: null },
         { text: '修复星形、心形、梯形、箭头等图形绘制偏移、畸形或显示不准确的问题', platforms: null },
         { text: '修复直线和箭头在水平或垂直拖拽时可能无法创建的问题', platforms: null }
       ],
@@ -20,24 +25,6 @@ export const updateRecords = [
       adjusted: [
         { text: '图形工具将仅描边预设调整为首位并作为默认样式', platforms: null }
       ],
-      removed: []
-    }
-  },
-  {
-    version: '2.2',
-    date: '2026-06-19',
-    changes: {
-      added: [
-        { text: '新增 ZTools 客户端，可按 ZTools 插件规范独立加载图片工具箱', platforms: ['ztools'] },
-        { text: '新增图形工具，支持绘制矩形、圆形、星星、心形、梯形、直线、箭头等多种图形', platforms: null },
-        { text: '图形工具支持自定义填充色、边框色、边框宽度，拖拽绘制即可创建图形', platforms: null }
-      ],
-      fixed: [
-        { text: '修复马赛克图层旋转后马赛克范围不准确的问题', platforms: null },
-        { text: '修复马赛克图层拉伸后马赛克块大小被错误拉伸或压缩的问题', platforms: null }
-      ],
-      improved: [],
-      adjusted: [],
       removed: []
     }
   },
