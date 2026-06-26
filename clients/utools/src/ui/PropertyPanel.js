@@ -206,6 +206,14 @@ class PropertyPanel {
           <input type="number" class="property-input" data-prop="strokeWidth" value="${active.strokeWidth || 0}" min="0" max="20"${editDisabled} />
         </div>
         <div class="property-item">
+          <label>描边位</label>
+          <select class="property-select property-select--short" data-prop="strokePosition"${editDisabled}>
+            ${this._getSelectOption('outside', '外部', active.paintFirst === 'fill' ? 'inside' : 'outside')}
+            ${this._getSelectOption('center', '中间', active.paintFirst === 'fill' ? 'inside' : 'outside')}
+            ${this._getSelectOption('inside', '内部', active.paintFirst === 'fill' ? 'inside' : 'outside')}
+          </select>
+        </div>
+        <div class="property-item">
           <label>粗体</label>
           <input type="checkbox" class="property-checkbox" data-prop="fontWeight" ${active.fontWeight === 'bold' ? 'checked' : ''}${editDisabled} />
         </div>
@@ -371,6 +379,9 @@ class PropertyPanel {
         break;
       case 'textAlign':
         active.set('textAlign', value);
+        break;
+      case 'strokePosition':
+        active.set('paintFirst', value === 'inside' ? 'fill' : 'stroke');
         break;
       default:
         return;

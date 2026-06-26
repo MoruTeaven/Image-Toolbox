@@ -14,6 +14,7 @@ class TextModule extends BaseModule {
       fill: '#d83b31',
       stroke: null,
       strokeWidth: 0,
+      strokePosition: 'outside',
       fontWeight: 'normal',
       fontStyle: 'normal',
       underline: false,
@@ -80,6 +81,7 @@ class TextModule extends BaseModule {
       fill: opts.fill,
       stroke: opts.stroke,
       strokeWidth: opts.strokeWidth,
+      paintFirst: opts.strokePosition === 'inside' ? 'fill' : 'stroke',
       fontWeight: opts.fontWeight,
       fontStyle: opts.fontStyle,
       underline: opts.underline,
@@ -136,6 +138,11 @@ class TextModule extends BaseModule {
     this.options.strokeWidth = width;
     this._updateActiveTextStyle('stroke', color);
     this._updateActiveTextStyle('strokeWidth', width);
+  }
+
+  setStrokePosition(position) {
+    this.options.strokePosition = position;
+    this._updateActiveTextStyle('paintFirst', position === 'inside' ? 'fill' : 'stroke');
   }
 
   setUnderline(underline) {
@@ -299,6 +306,14 @@ class TextModule extends BaseModule {
           <input type="number" class="property-input" data-module-prop="strokeWidth" value="${opts.strokeWidth || 0}" min="0" max="20" />
         </div>
         <div class="property-item">
+          <label>描边位</label>
+          <select class="property-select property-select--short" data-module-prop="strokePosition">
+            ${this._getSelectOption('outside', '外部', opts.strokePosition)}
+            ${this._getSelectOption('center', '中间', opts.strokePosition)}
+            ${this._getSelectOption('inside', '内部', opts.strokePosition)}
+          </select>
+        </div>
+        <div class="property-item">
           <label>粗体</label>
           <input type="checkbox" class="property-checkbox" data-module-prop="fontWeight" ${opts.fontWeight === 'bold' ? 'checked' : ''} />
         </div>
@@ -357,6 +372,9 @@ class TextModule extends BaseModule {
       case 'stroke':
         active.set('stroke', value);
         break;
+      case 'strokePosition':
+        active.set('paintFirst', value === 'inside' ? 'fill' : 'stroke');
+        break;
       case 'opacity':
         // value 已被 _handleInput 转换为 0-1 区间，直接使用
         active.set('opacity', value);
@@ -383,6 +401,9 @@ class TextModule extends BaseModule {
         break;
       case 'strokeWidth':
         this.options.strokeWidth = Math.max(0, parseInt(value, 10) || 0);
+        break;
+      case 'strokePosition':
+        this.options.strokePosition = value;
         break;
       case 'fontWeight':
         this.options.fontWeight = value ? 'bold' : 'normal';

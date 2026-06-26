@@ -7,6 +7,7 @@ import eventBus from '../EventBus.js';
 class ShapeModule extends BaseModule {
   static SHAPE_OPTIONS = [
     { type: 'rect', preset: 'shape-type-rect', label: '矩形', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><rect x="6" y="8" width="20" height="16" rx="2" /></svg>' },
+    { type: 'triangle', preset: 'shape-type-triangle', label: '三角形', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><polygon points="16 5 28 27 4 27" /></svg>' },
     { type: 'circle', preset: 'shape-type-circle', label: '椭圆', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="16" rx="11" ry="9" /></svg>' },
     { type: 'star', preset: 'shape-type-star', label: '星星', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><polygon points="16 4 19.4 12 28 12.6 21.4 18 23.4 26.4 16 21.8 8.6 26.4 10.6 18 4 12.6 12.6 12" /></svg>' },
     { type: 'heart', preset: 'shape-type-heart', label: '心形', icon: '<svg class="shape-icon-svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 27C8.3 20.6 4 16.6 4 11.3C4 7.3 6.9 4.5 10.7 4.5C13 4.5 15 5.8 16 7.8C17 5.8 19 4.5 21.3 4.5C25.1 4.5 28 7.3 28 11.3C28 16.6 23.7 20.6 16 27Z" /></svg>' },
@@ -83,7 +84,7 @@ class ShapeModule extends BaseModule {
   }
 
   setShapeType(type) {
-    if (['rect', 'circle', 'star', 'heart', 'trapezoid', 'line', 'arrow', 'double-arrow'].includes(type)) {
+    if (['rect', 'triangle', 'circle', 'star', 'heart', 'trapezoid', 'line', 'arrow', 'double-arrow'].includes(type)) {
       this.options.shapeType = type;
     }
   }
@@ -125,6 +126,7 @@ class ShapeModule extends BaseModule {
 
     const presets = {
       'shape-type-rect': { shapeType: 'rect' },
+      'shape-type-triangle': { shapeType: 'triangle' },
       'shape-type-circle': { shapeType: 'circle' },
       'shape-type-star': { shapeType: 'star' },
       'shape-type-heart': { shapeType: 'heart' },
@@ -251,7 +253,7 @@ class ShapeModule extends BaseModule {
         <input type="range" class="property-range" data-module-prop="strokeWidth" min="1" max="20" value="${this.options.strokeWidth}" />
         <span class="property-value">${this.options.strokeWidth}px</span>
       </div>
-      <div class="property-empty">拖拽鼠标绘制图形，支持矩形、椭圆、星星、心形等。</div>
+      <div class="property-empty">拖拽鼠标绘制图形，支持矩形、三角形、椭圆、星星、心形等。</div>
     `;
   }
 
@@ -390,6 +392,9 @@ class ShapeModule extends BaseModule {
           ...commonProps,
         });
 
+      case 'triangle':
+        return this._createTriangle(left, top, width, height, commonProps);
+
       case 'circle':
         return new fabric.Ellipse({
           left: left + width / 2,
@@ -480,6 +485,24 @@ class ShapeModule extends BaseModule {
     const points = [
       { x: -width / 2 + topInset, y: -height / 2 },
       { x: width / 2 - topInset, y: -height / 2 },
+      { x: width / 2, y: height / 2 },
+      { x: -width / 2, y: height / 2 },
+    ];
+
+    return new fabric.Polygon(points, {
+      ...props,
+      left: centerX,
+      top: centerY,
+      originX: 'center',
+      originY: 'center',
+    });
+  }
+
+  _createTriangle(left, top, width, height, props) {
+    const centerX = left + width / 2;
+    const centerY = top + height / 2;
+    const points = [
+      { x: 0, y: -height / 2 },
       { x: width / 2, y: height / 2 },
       { x: -width / 2, y: height / 2 },
     ];

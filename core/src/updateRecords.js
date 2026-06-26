@@ -1,11 +1,29 @@
 export const updateRecords = [
   {
+    version: '2.2.2',
+    date: '2026-06-26',
+    changes: {
+      added: [
+        { text: '图形工具新增三角形图形，支持拖拽绘制任意大小的三角形', platforms: null }
+      ],
+      fixed: [
+        { text: '修复橡皮擦工具激活时切换图层后，橡皮擦仍作用在原图层的问题', platforms: null }
+      ],
+      improved: [],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
     version: '2.2.1',
     date: '2026-06-23',
     changes: {
-      added: [],
+      added: [
+        { text: '图形工具新增双箭头图形，支持两端箭头的直线标注', platforms: null },
+        { text: '文字描边新增位置参数，支持外部、中间、内部三种描边位置', platforms: null }
+      ],
       fixed: [
-        { text: '修复首次进入文字工具时界面卡顿数秒的问题，改为异步加载系统字体列表', platforms: ['utools'] },
+        { text: '修复首次进入文字工具时界面卡顿数秒的问题，改为异步加载系统字体列表', platforms: null },
         { text: '修复 fromJSON 无法正确识别原始背景图的问题，因 loadImage 未设置 _originalImage 标记', platforms: null },
         { text: '修复撤销/重做时异步恢复画布状态导致历史记录损坏的问题，确保 _isRestoring 标志在 fromJSON 完成后才重置', platforms: null },
         { text: '修复切换/停用工具时锁定图层和背景图层被错误解锁的问题，改为保存并恢复各对象原始交互状态', platforms: null },
@@ -74,13 +92,13 @@ export const updateRecords = [
         { text: '新增画笔工具，支持自由涂鸦、颜色预设和粗细调整', platforms: null },
         { text: '新增橡皮擦工具，支持大小预设和撤销/重做', platforms: null },
         { text: '新增非矩形裁剪工具', platforms: null },
-        { text: '文字字体列表支持读取并显示用户系统中已安装的字体', platforms: ['utools'] },
+        { text: '文字字体列表支持读取并显示用户系统中已安装的字体', platforms: null },
         { text: '移动/框选预设栏新增旋转0°/90/180/270与左右/前后翻转快捷操作', platforms: null }
       ],
       fixed: [],
       improved: [
         { text: '优化了裁剪工具的使用体验', platforms: null },
-        { text: '字体列表按用户实际使用频率自动排序', platforms: ['utools'] }
+        { text: '字体列表按用户实际使用频率自动排序', platforms: null }
       ],
       adjusted: [],
       removed: []
