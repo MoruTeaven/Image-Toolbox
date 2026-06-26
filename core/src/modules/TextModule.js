@@ -82,6 +82,7 @@ class TextModule extends BaseModule {
       stroke: opts.stroke,
       strokeWidth: opts.strokeWidth,
       paintFirst: opts.strokePosition === 'inside' ? 'fill' : 'stroke',
+      _strokePosition: opts.strokePosition || 'outside',
       fontWeight: opts.fontWeight,
       fontStyle: opts.fontStyle,
       underline: opts.underline,
@@ -89,6 +90,8 @@ class TextModule extends BaseModule {
       editable: true,
       id: 'text_' + Date.now(),
     });
+
+    this.history.saveState();
 
     canvas.add(textObj);
     canvas.setActiveObject(textObj);
@@ -100,8 +103,6 @@ class TextModule extends BaseModule {
       textObj.enterEditing();
       textObj.selectAll();
     }, 50);
-
-    this.history.saveState();
     return textObj;
   }
 
@@ -309,7 +310,6 @@ class TextModule extends BaseModule {
           <label>描边位</label>
           <select class="property-select property-select--short" data-module-prop="strokePosition">
             ${this._getSelectOption('outside', '外部', opts.strokePosition)}
-            ${this._getSelectOption('center', '中间', opts.strokePosition)}
             ${this._getSelectOption('inside', '内部', opts.strokePosition)}
           </select>
         </div>
@@ -374,6 +374,7 @@ class TextModule extends BaseModule {
         break;
       case 'strokePosition':
         active.set('paintFirst', value === 'inside' ? 'fill' : 'stroke');
+        active.set('_strokePosition', value);
         break;
       case 'opacity':
         // value 已被 _handleInput 转换为 0-1 区间，直接使用

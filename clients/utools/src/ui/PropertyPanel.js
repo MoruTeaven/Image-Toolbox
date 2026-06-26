@@ -208,9 +208,8 @@ class PropertyPanel {
         <div class="property-item">
           <label>描边位</label>
           <select class="property-select property-select--short" data-prop="strokePosition"${editDisabled}>
-            ${this._getSelectOption('outside', '外部', active.paintFirst === 'fill' ? 'inside' : 'outside')}
-            ${this._getSelectOption('center', '中间', active.paintFirst === 'fill' ? 'inside' : 'outside')}
-            ${this._getSelectOption('inside', '内部', active.paintFirst === 'fill' ? 'inside' : 'outside')}
+            ${this._getSelectOption('outside', '外部', active._strokePosition || 'outside')}
+            ${this._getSelectOption('inside', '内部', active._strokePosition || 'outside')}
           </select>
         </div>
         <div class="property-item">
@@ -382,6 +381,7 @@ class PropertyPanel {
         break;
       case 'strokePosition':
         active.set('paintFirst', value === 'inside' ? 'fill' : 'stroke');
+        active.set('_strokePosition', value);
         break;
       default:
         return;

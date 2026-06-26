@@ -3,11 +3,9 @@ export const updateRecords = [
     version: '2.2.2',
     date: '2026-06-26',
     changes: {
-      added: [
-        { text: '图形工具新增三角形图形，支持拖拽绘制任意大小的三角形', platforms: null }
-      ],
+      added: [],
       fixed: [
-        { text: '修复橡皮擦工具激活时切换图层后，橡皮擦仍作用在原图层的问题', platforms: null }
+        { text: '修复文字工具添加文字后才保存历史记录，导致第一次撤销无反应的问题', platforms: null }
       ],
       improved: [],
       adjusted: [],
@@ -16,18 +14,17 @@ export const updateRecords = [
   },
   {
     version: '2.2.1',
-    date: '2026-06-23',
+    date: '2026-06-26',
     changes: {
       added: [
-        { text: '图形工具新增双箭头图形，支持两端箭头的直线标注', platforms: null },
-        { text: '文字描边新增位置参数，支持外部、中间、内部三种描边位置', platforms: null }
+        { text: '图形工具新增三角形和双箭头图形', platforms: null },
+        { text: '文字描边新增位置参数，支持外部和内部两种描边位置', platforms: null }
       ],
       fixed: [
+        { text: '修复橡皮擦工具激活时切换图层后，橡皮擦仍作用在原图层的问题', platforms: null },
         { text: '修复首次进入文字工具时界面卡顿数秒的问题，改为异步加载系统字体列表', platforms: null },
-        { text: '修复 fromJSON 无法正确识别原始背景图的问题，因 loadImage 未设置 _originalImage 标记', platforms: null },
-        { text: '修复撤销/重做时异步恢复画布状态导致历史记录损坏的问题，确保 _isRestoring 标志在 fromJSON 完成后才重置', platforms: null },
-        { text: '修复切换/停用工具时锁定图层和背景图层被错误解锁的问题，改为保存并恢复各对象原始交互状态', platforms: null },
-        { text: '修复 replaceImage 硬编码 insertAt(1) 可能导致层级混乱的问题，改为动态获取原图索引位置替换', platforms: null }
+        { text: '修复撤销/重做时历史记录损坏导致画布状态异常的问题', platforms: null },
+        { text: '修复切换/停用工具时图层被意外解锁的问题', platforms: null }
       ],
       improved: [],
       adjusted: [],
