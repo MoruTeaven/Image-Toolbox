@@ -327,6 +327,7 @@ class MosaicModule extends BaseModule {
 
     if (!rect || rect.width < 5 || rect.height < 5) return;
 
+    this._saveStateWithCanvasClipPath();
     this._createDynamicMosaicOverlay({
       rect,
       maskType: 'lasso',
@@ -335,7 +336,6 @@ class MosaicModule extends BaseModule {
         y: Math.round(p.y - rect.top),
       })),
     });
-    this._saveStateWithCanvasClipPath();
   }
 
   _appendLassoPoint(pointer) {
@@ -419,6 +419,7 @@ class MosaicModule extends BaseModule {
     this._isDrawing = true;
     this._brushPoints = [{ x: pointer.x, y: pointer.y }];
 
+    this._saveStateWithCanvasClipPath();
     this._updateLiveBrushOverlay();
     this._updateBrushPreview(pointer);
   }
@@ -504,7 +505,6 @@ class MosaicModule extends BaseModule {
     if (!this._liveBrushOverlay) return;
 
     this._liveBrushOverlay = null;
-    this._saveStateWithCanvasClipPath();
   }
 
   _updateLiveBrushOverlay() {
@@ -687,8 +687,8 @@ class MosaicModule extends BaseModule {
     rect = this._clipRectToEditableImage(rect);
     if (!rect || rect.width < 1 || rect.height < 1) return;
 
-    this._createDynamicMosaicOverlay({ rect, maskType: 'rect' });
     this._saveStateWithCanvasClipPath();
+    this._createDynamicMosaicOverlay({ rect, maskType: 'rect' });
   }
 
   _createDynamicMosaicOverlay({ rect, maskType, brushPoints = null, brushSize = null, lassoPoints = null }) {

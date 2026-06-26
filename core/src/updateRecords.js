@@ -5,7 +5,8 @@ export const updateRecords = [
     changes: {
       added: [],
       fixed: [
-        { text: '修复文字工具添加文字后才保存历史记录，导致第一次撤销无反应的问题', platforms: null }
+        { text: '修复文字工具添加文字后才保存历史记录，导致第一次撤销无反应的问题', platforms: null },
+        { text: '修复马赛克工具创建覆盖层后才保存历史记录，导致第一次撤销无反应的问题', platforms: null }
       ],
       improved: [],
       adjusted: [],
