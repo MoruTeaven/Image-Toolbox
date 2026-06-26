@@ -23,6 +23,7 @@ class CanvasManager {
     this.zoomLevel = 1;
     this._historySaveTimer = null;
     this._isCropMode = false;
+    this._resizeObserver = null;
   }
 
   // ── 生命周期 ──
@@ -48,6 +49,10 @@ class CanvasManager {
    * 销毁画布，释放内存
    */
   destroy() {
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
     if (this._historySaveTimer) {
       clearTimeout(this._historySaveTimer);
     }
@@ -448,10 +453,10 @@ class CanvasManager {
     // 使用 ResizeObserver 监听容器变化
     const container = this.canvas.wrapperEl?.parentElement;
     if (container && window.ResizeObserver) {
-      const observer = new ResizeObserver(() => {
+      this._resizeObserver = new ResizeObserver(() => {
         this._updateCanvasSize();
       });
-      observer.observe(container);
+      this._resizeObserver.observe(container);
     }
   }
 }
