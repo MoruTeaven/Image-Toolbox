@@ -12,7 +12,8 @@ export const updateRecords = [
         { text: '修复选择 JPEG/WebP 保存时实际仍写入 PNG 数据的问题', platforms: null },
         { text: '修复 ZTools 端选中文字后缺少描边位置设置的问题', platforms: ['ztools'] },
         { text: '修复裁剪撤销/重做时裁剪范围恢复存在异步竞态的问题', platforms: null },
-        { text: '修复切换移动/框选工具后，属性面板位置/大小/旋转等参数显示为只读无法直接编辑的问题', platforms: null }
+        { text: '修复切换移动/框选工具后，属性面板位置/大小/旋转等参数显示为只读无法直接编辑的问题', platforms: null },
+        { text: '修复清除所有马赛克后无法撤销恢复的问题', platforms: null }
       ],
       improved: [],
       adjusted: [],

@@ -1,4 +1,4 @@
-﻿import BaseModule from './BaseModule.js';
+import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { clamp, requestRender as _requestRender, createClipPathFromSource, normalizeBounds, intersectBounds, getPointsBounds } from '../utils/helpers.js';
 
@@ -1282,9 +1282,12 @@ class MosaicModule extends BaseModule {
     const overlays = canvas.getObjects().filter(
       o => o.id && o.id.startsWith('mosaic_')
     );
+    if (overlays.length === 0) return;
+
+    // 先保存当前状态（含马赛克覆盖层），以便用户撤销清除操作
+    this._saveStateWithCanvasClipPath();
     overlays.forEach(o => canvas.remove(o));
     canvas.renderAll();
-    this._saveStateWithCanvasClipPath();
   }
 
   applyPreset(presetName) {
