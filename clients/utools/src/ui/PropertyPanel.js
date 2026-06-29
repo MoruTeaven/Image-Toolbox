@@ -225,6 +225,10 @@ class PropertyPanel {
           <input type="checkbox" class="property-checkbox" data-prop="underline" ${active.underline ? 'checked' : ''}${editDisabled} />
         </div>
         <div class="property-item">
+          <label>删除线</label>
+          <input type="checkbox" class="property-checkbox" data-prop="linethrough" ${active.linethrough ? 'checked' : ''}${editDisabled} />
+        </div>
+        <div class="property-item">
           <label>对齐</label>
           <select class="property-select property-select--short" data-prop="textAlign"${editDisabled}>
             ${this._getSelectOption('left', '左', active.textAlign)}
@@ -375,6 +379,9 @@ class PropertyPanel {
         break;
       case 'underline':
         active.set('underline', value);
+        break;
+      case 'linethrough':
+        active.set('linethrough', value);
         break;
       case 'textAlign':
         active.set('textAlign', value);

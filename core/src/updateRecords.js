@@ -3,7 +3,9 @@ export const updateRecords = [
     version: '2.2.2',
     date: '2026-06-29',
     changes: {
-      added: [],
+      added: [
+        { text: '图形工具新增平行四边形图形', platforms: null }
+      ],
       fixed: [
         { text: '修复文字工具添加文字后才保存历史记录，导致第一次撤销无反应的问题', platforms: null },
         { text: '修复马赛克工具创建覆盖层后才保存历史记录，导致第一次撤销无反应的问题', platforms: null },
