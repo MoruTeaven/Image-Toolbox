@@ -75,9 +75,9 @@ class BaseModule {
       const saved = this._savedInteractivity.get(obj);
       if (saved) {
         obj.set({ selectable: saved.selectable, evented: saved.evented });
-      } else {
-        obj.set({ selectable: true, evented: true });
       }
+      // 不在保存映射中的对象（如工具激活期间新增的图层）保持原样，
+      // 不做任何修改，避免错误地解锁被用户主动锁定的图层
     });
     this._savedInteractivity.clear();
   }

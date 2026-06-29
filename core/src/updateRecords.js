@@ -1,5 +1,20 @@
 export const updateRecords = [
   {
+    version: '2.3',
+    date: '2026-06-29',
+    changes: {
+      added: [],
+      fixed: [
+        { text: '修复添加文字后第一次撤销无反应的问题：将历史状态保存提前到文字对象添加到画布之前，与画笔/图形工具的操作前保存模式保持一致，避免 undoStack 栈顶存储当前状态导致撤销失效', platforms: null },
+        { text: '修复切换/停用工具时被用户锁定的图层被错误解锁的问题：移除 _restoreObjectsInteractivity 中对未知对象的盲切 fallback，只恢复已保存的交互状态，不在保存映射中的对象保持原样', platforms: null },
+        { text: '修复撤销/重做时画布异步恢复期间可能错误触发历史保存的问题：undo() 和 redo() 现在等待 fromJSON 异步完成后再重置 _isRestoring 状态，避免画布物件加载期间触发的事件错误调用 saveState() 写入重复或损坏的快照', platforms: null }
+      ],
+      improved: [],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
     version: '2.2.2',
     date: '2026-06-29',
     changes: {
