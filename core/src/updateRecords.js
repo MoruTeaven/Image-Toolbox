@@ -1,7 +1,7 @@
 export const updateRecords = [
   {
     version: '2.2.2',
-    date: '2026-06-27',
+    date: '2026-06-29',
     changes: {
       added: [],
       fixed: [
