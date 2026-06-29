@@ -24,6 +24,7 @@ class CanvasManager {
     this._historySaveTimer = null;
     this._isCropMode = false;
     this._resizeObserver = null;
+    this._boundResize = null;
   }
 
   // ── 生命周期 ──
@@ -52,6 +53,10 @@ class CanvasManager {
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
+    }
+    if (this._boundResize) {
+      window.removeEventListener('resize', this._boundResize);
+      this._boundResize = null;
     }
     if (this._historySaveTimer) {
       clearTimeout(this._historySaveTimer);
@@ -298,10 +303,12 @@ class CanvasManager {
       'objectCaching',
       'strokeLineCap',
       'strokeLineJoin',
+      '_strokePosition',
       '_layerName',
       '_layerNameAuto',
       '_layerBaseName',
       '_layerKind',
+      '_layerShapeType',
       '_layerColorPresetName',
       '_layerWidthPresetName',
       '_layerPresetName',
@@ -331,31 +338,34 @@ class CanvasManager {
         return;
       }
 
-      // 提取 canvas 级别的 clipPath
+      // 提取 canvas 级别的 clipPath，避免修改历史栈里的原始快照对象。
       const canvasClipPathData = json._canvasClipPath;
-      delete json._canvasClipPath;
+      const snapshot = { ...json };
+      delete snapshot._canvasClipPath;
 
-      this.canvas.loadFromJSON(json, () => {
-        // 恢复 canvas.clipPath
+      this.canvas.loadFromJSON(snapshot, () => {
+        const finishRestore = () => {
+          // 恢复 originalImage 引用
+          const objs = this.canvas.getObjects();
+          this.originalImage = objs.find(o => o.type === 'image' && o._originalImage) || objs[0];
+          this.canvas.renderAll();
+          eventBus.emit('canvas:restored');
+          resolve();
+        };
+
         if (canvasClipPathData) {
           fabric.util.enlivenObjects([canvasClipPathData], (objects) => {
             this.canvas.clipPath = objects[0] || null;
             if (this.canvas.clipPath) {
               this.canvas.clipPath.absolutePositioned = true;
             }
-            this.canvas.renderAll();
+            finishRestore();
           });
         } else {
           // 快照中没有 clipPath → 清除画布上已有的（撤消裁切的关键）
           this.canvas.clipPath = null;
+          finishRestore();
         }
-
-        // 恢复 originalImage 引用
-        const objs = this.canvas.getObjects();
-        this.originalImage = objs.find(o => o.type === 'image' && o._originalImage) || objs[0];
-        this.canvas.renderAll();
-        eventBus.emit('canvas:restored');
-        resolve();
       });
     });
   }
@@ -446,9 +456,8 @@ class CanvasManager {
     });
 
     // 窗口大小变化
-    window.addEventListener('resize', () => {
-      this._updateCanvasSize();
-    });
+    this._boundResize = () => this._updateCanvasSize();
+    window.addEventListener('resize', this._boundResize);
 
     // 使用 ResizeObserver 监听容器变化
     const container = this.canvas.wrapperEl?.parentElement;

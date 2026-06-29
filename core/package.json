@@ -7,7 +7,6 @@
   "exports": {
     ".": "./src/index.js",
     "./fabric": "./src/runtime/fabric.js",
-    "./runtime/fabric": "./src/runtime/fabric.js",
-    "./interfaces/*": "./src/interfaces/*"
+    "./runtime/fabric": "./src/runtime/fabric.js"
   }
 }

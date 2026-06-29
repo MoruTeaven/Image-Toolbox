@@ -1,5 +1,6 @@
 import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
+import { clamp, escapeAttr, normalizeColor } from '../utils/helpers.js';
 
 /**
  * 图形绘制模块 - 支持矩形、椭圆、星星、心形、梯形、直线、箭头等多种图形
@@ -90,14 +91,14 @@ class ShapeModule extends BaseModule {
   }
 
   setFill(fill) {
-    const normalized = this._normalizeColor(fill, this.options.fill, true);
+    const normalized = normalizeColor(fill, this.options.fill, true);
     this.options.fill = this._hasExplicitOpacity(normalized)
       ? normalized
       : this._withColorOpacity(normalized, this._getColorOpacity(this.options.fill));
   }
 
   setStroke(stroke) {
-    const normalized = this._normalizeColor(stroke, this.options.stroke, false);
+    const normalized = normalizeColor(stroke, this.options.stroke, false);
     this.options.stroke = this._hasExplicitOpacity(normalized)
       ? normalized
       : this._withColorOpacity(normalized, this._getColorOpacity(this.options.stroke));
@@ -611,22 +612,7 @@ class ShapeModule extends BaseModule {
   }
 
   _normalizeColor(color, fallback = '#000000', allowTransparent = false) {
-    if (allowTransparent && color === 'transparent') return 'transparent';
-
-    if (typeof color !== 'string') return fallback;
-
-    const value = color.trim().toLowerCase();
-
-    // 处理 rgba 格式
-    if (value.startsWith('rgba')) return value;
-
-    // 处理 hex 格式
-    if (/^#[0-9a-f]{6}$/i.test(value)) return value;
-    if (/^#[0-9a-f]{3}$/i.test(value)) {
-      return '#' + value.slice(1).split('').map(ch => ch + ch).join('');
-    }
-
-    return fallback;
+    return normalizeColor(color, fallback, allowTransparent);
   }
 
   _normalizeComparableColor(color) {
@@ -730,16 +716,11 @@ class ShapeModule extends BaseModule {
   }
 
   _clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
+    return clamp(value, min, max);
   }
 
   _escapeAttr(value) {
-    return String(value ?? '').replace(/[&<>"]/g, ch => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-    }[ch]));
+    return escapeAttr(value);
   }
 }
 
