@@ -7,21 +7,14 @@ export const updateRecords = [
       fixed: [
         { text: '修复文字工具添加文字后才保存历史记录，导致第一次撤销无反应的问题', platforms: null },
         { text: '修复马赛克工具创建覆盖层后才保存历史记录，导致第一次撤销无反应的问题', platforms: null },
-        { text: '修复 ResizeObserver 未在画布销毁时断开连接导致内存泄漏的问题', platforms: null },
-        { text: '修复画布窗口大小变化事件监听器未在销毁时移除导致内存泄漏的问题', platforms: null },
-        { text: '修复马赛克模块画布对象事件（移动/缩放/旋转）未在工具切换时清理导致内存泄漏的问题', platforms: null },
-        { text: '修复属性面板、图层面板、预设栏、工具栏、状态栏、账户页的事件监听未在销毁时清理导致内存泄漏的问题', platforms: null },
         { text: '修复打开新图片后撤销可能恢复上一张图片的问题', platforms: null },
         { text: '修复部分编辑操作第一次撤销无反应的问题', platforms: null },
         { text: '修复选择 JPEG/WebP 保存时实际仍写入 PNG 数据的问题', platforms: null },
         { text: '修复 ZTools 端选中文字后缺少描边位置设置的问题', platforms: ['ztools'] },
         { text: '修复裁剪撤销/重做时裁剪范围恢复存在异步竞态的问题', platforms: null },
-        { text: '修复 Toast 提示内容未转义带来的潜在显示风险', platforms: null }
+        { text: '修复切换移动/框选工具后，属性面板位置/大小/旋转等参数显示为只读无法直接编辑的问题', platforms: null }
       ],
-      improved: [
-        { text: '清理未使用的代码文件（约1400行），减小项目体积', platforms: null },
-        { text: '提取各模块重复的工具函数（clamp、escapeHTML、normalizeColor等）为公共模块，消除约300行重复代码', platforms: null }
-      ],
+      improved: [],
       adjusted: [],
       removed: []
     }

@@ -14,6 +14,9 @@ class SelectModule extends BaseModule {
 
     canvas.selection = true;
     canvas.defaultCursor = 'default';
+
+    // 恢复所有对象的交互性，确保属性面板可以编辑（而非只读）
+    this._restoreObjectsInteractivity();
   }
 
   deactivate() {
