@@ -1,7 +1,6 @@
 import { eventBus } from '../../../../core/src/index.js';
 import { getFontOptionsHTML, recordFontUsage, isSystemFontsLoaded, onSystemFontsLoaded } from '../../../../core/src/utils/fonts.js';
 import { clamp, escapeHTML, escapeAttr } from '../../../../core/src/utils/helpers.js';
-import { FILTER_RANGES, getFilterUiValue, setFilter, clearFilters } from '../../../../core/src/utils/filters.js';
 
 /**
  * Property panel UI component.
@@ -178,11 +177,6 @@ class PropertyPanel {
       </div>
     `;
 
-    // 调色（仅图片图层；即使锁定/背景图层也允许调整滤镜，因为滤镜仅改变外观）
-    if (active.type === 'image') {
-      html += this._getColorAdjustHTML(active, '');
-    }
-
     if (isText) {
       html += `
         <div class="property-item property-item--wide">
@@ -280,43 +274,6 @@ class PropertyPanel {
     }
   }
 
-  /**
-   * 生成图片图层的调色属性区块 HTML
-   * @param {fabric.Image} active
-   * @param {string} editDisabled - 编辑禁用属性字符串
-   * @returns {string}
-   */
-  _getColorAdjustHTML(active, editDisabled) {
-    const items = [
-      { type: 'brightness', label: '亮度' },
-      { type: 'contrast', label: '对比' },
-      { type: 'saturation', label: '饱和' },
-      { type: 'hue', label: '色相' },
-      { type: 'blur', label: '模糊' },
-    ];
-
-    const sliders = items.map(({ type, label }) => {
-      const range = FILTER_RANGES[type];
-      const value = getFilterUiValue(active, type);
-      return `
-        <div class="property-item property-item--wide">
-          <label>${label}</label>
-          <input type="range" class="property-range" data-prop="filter:${type}"
-                 min="${range.min}" max="${range.max}" step="${range.step}" value="${value}"${editDisabled} />
-          <span class="property-value">${value}</span>
-        </div>
-      `;
-    }).join('');
-
-    return `
-      <div class="property-section-title">调色</div>
-      ${sliders}
-      <div class="property-item property-item--wide property-item--actions">
-        <button type="button" class="property-btn" data-prop="filter:reset"${editDisabled}>重置调色</button>
-      </div>
-    `;
-  }
-
   _handleInput(e) {
     const target = e.target.closest('[data-prop], [data-module-prop], [data-module-action], [data-module-preset]');
     if (!target || !this._el.contains(target)) return;
@@ -326,8 +283,8 @@ class PropertyPanel {
     const moduleAction = target.dataset.moduleAction;
     const modulePreset = target.dataset.modulePreset;
     if (!prop && !moduleProp && !moduleAction && !modulePreset) return;
-    // 普通属性控件只在 input/change 事件中处理；click 事件仅放行模块动作/预设/调色重置按钮
-    if (e.type === 'click' && !moduleAction && !modulePreset && prop !== 'filter:reset') return;
+    // 普通属性控件只在 input/change 事件中处理；click 事件仅放行模块动作/预设
+    if (e.type === 'click' && !moduleAction && !modulePreset) return;
 
     const module = this._tm.getCurrentModule();
     if (moduleProp || moduleAction || modulePreset) {
@@ -340,12 +297,6 @@ class PropertyPanel {
 
     let value = target.type === 'checkbox' ? target.checked : target.value;
     let propertyValue = value;
-
-    // 调色滤镜滑块 / 重置按钮
-    if (prop && prop.startsWith('filter:')) {
-      this._handleFilterInput(prop, value, active, target, e.type);
-      return;
-    }
 
     switch (prop) {
       case 'layerName':
@@ -453,48 +404,6 @@ class PropertyPanel {
     }
 
     if (e.type === 'change' && !active.excludeFromHistory) {
-      this._notifyObjectChanged(active);
-    }
-  }
-
-  /**
-   * 处理调色滤镜滑块输入与重置按钮点击
-   * @param {string} prop - 形如 'filter:brightness' 或 'filter:reset'
-   * @param {string|boolean} value
-   * @param {fabric.Image} active
-   * @param {HTMLElement} target
-   * @param {string} eventType - 'input' | 'change' | 'click'
-   */
-  _handleFilterInput(prop, value, active, target, eventType) {
-    // 重置按钮：仅在 click 时触发
-    if (prop === 'filter:reset') {
-      if (eventType !== 'click') return;
-      clearFilters(active);
-      active.dirty = true;
-      active.setCoords();
-      this._requestRender();
-      this._notifyObjectChanged(active);
-      this._updateProperties();
-      return;
-    }
-
-    const type = prop.slice('filter:'.length);
-    const uiValue = parseInt(value, 10);
-    if (!Number.isFinite(uiValue)) return;
-
-    setFilter(active, type, uiValue);
-    active.dirty = true;
-    active.setCoords();
-
-    // 实时更新滑块右侧数值
-    if (target.nextElementSibling && target.nextElementSibling.classList.contains('property-value')) {
-      target.nextElementSibling.textContent = String(uiValue);
-    }
-
-    this._requestRender();
-
-    // change 事件（释放滑块）写入历史；input 事件不写入，避免历史栈被频繁污染
-    if (eventType === 'change') {
       this._notifyObjectChanged(active);
     }
   }

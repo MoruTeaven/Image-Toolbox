@@ -14,6 +14,7 @@ import Toolbar from './ui/Toolbar.js';
 import OptionsBar from './ui/OptionsBar.js';
 import SidePanelTabs from './ui/SidePanelTabs.js';
 import PropertyPanel from './ui/PropertyPanel.js';
+import ColorPanel from './ui/ColorPanel.js';
 import LayerPanel from './ui/LayerPanel.js';
 import StatusBar from './ui/StatusBar.js';
 import AccountPage, {
@@ -40,6 +41,7 @@ class App {
     this.optionsBar = null;
     this.sidePanelTabs = null;
     this.propertyPanel = null;
+    this.colorPanel = null;
     this.layerPanel = null;
     this.statusBar = null;
     this.accountPage = null;
@@ -113,6 +115,11 @@ class App {
       this.layerPanel = new LayerPanel(
         document.getElementById('layer-panel'),
         this.layerManager
+      );
+
+      this.colorPanel = new ColorPanel(
+        document.getElementById('color-panel'),
+        this.canvasManager
       );
 
       this.statusBar = new StatusBar(
@@ -380,6 +387,7 @@ class App {
       this.optionsBar,
       this.sidePanelTabs,
       this.propertyPanel,
+      this.colorPanel,
       this.layerPanel,
       this.statusBar,
     ].forEach(component => component?.destroy?.());
