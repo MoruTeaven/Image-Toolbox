@@ -1,5 +1,7 @@
-﻿import BaseModule from './BaseModule.js';
+import BaseModule from './BaseModule.js';
+import eventBus from '../EventBus.js';
 import { requestRender as _requestRender } from '../utils/helpers.js';
+import { FILTER_PRESETS, applyFilterPreset, isPresetActive } from '../utils/filters.js';
 
 /**
  * 移动/框选模块 - 保持 Fabric 默认选择行为，并提供常用变换预设。
@@ -30,6 +32,16 @@ class SelectModule extends BaseModule {
     const flipX = targets.length > 0 && targets.every(obj => !!obj.flipX);
     const flipY = targets.length > 0 && targets.every(obj => !!obj.flipY);
 
+    // 滤镜预设仅对单一图片图层生效
+    const imageTarget = this._getSingleImageTarget();
+    const filterDisabled = imageTarget ? '' : ' disabled title="选中一个图片图层以应用滤镜"';
+    const filterButtons = FILTER_PRESETS.map(preset => {
+      const active = imageTarget && isPresetActive(imageTarget, preset.preset);
+      return `
+        <button class="options-btn options-btn-sm filter-preset-btn ${active ? 'active' : ''}" data-preset="${preset.preset}"${filterDisabled}>${preset.label}</button>
+      `;
+    }).join('');
+
     return `
       <div class="options-group">
         <button class="options-btn options-btn-sm ${angle === 0 ? 'active' : ''}" data-preset="select-rotate-0"${disabled}>旋转0°</button>
@@ -41,10 +53,26 @@ class SelectModule extends BaseModule {
         <button class="options-btn options-btn-sm ${flipX ? 'active' : ''}" data-preset="select-flip-x"${disabled}>左右翻转</button>
         <button class="options-btn options-btn-sm ${flipY ? 'active' : ''}" data-preset="select-flip-y"${disabled}>前后翻转</button>
       </div>
+      <div class="options-group">
+        ${filterButtons}
+      </div>
     `;
   }
 
   applyPreset(presetName) {
+    // 滤镜预设：仅作用于单一图片图层
+    if (presetName && presetName.startsWith('filter-')) {
+      const imageTarget = this._getSingleImageTarget();
+      if (!imageTarget) return;
+      this.history.saveState();
+      applyFilterPreset(imageTarget, presetName);
+      imageTarget.dirty = true;
+      imageTarget.setCoords();
+      this._requestRender();
+      eventBus.emit('canvas:objectModified', imageTarget);
+      return;
+    }
+
     const targets = this._getTransformTargets();
     if (targets.length === 0) return;
 
@@ -122,11 +150,28 @@ class SelectModule extends BaseModule {
     const active = canvas?.getActiveObject();
     if (!active) return [];
 
+    // 背景图不可变换（旋转/翻转），排除之
+    const originalImage = this.canvasManager.originalImage;
+
     if (active.type === 'activeSelection' && typeof active.getObjects === 'function') {
-      return active.getObjects().filter(obj => !obj.excludeFromHistory);
+      return active.getObjects().filter(obj => !obj.excludeFromHistory && obj !== originalImage);
     }
 
-    return active.excludeFromHistory ? [] : [active];
+    if (active.excludeFromHistory || active === originalImage) return [];
+    return [active];
+  }
+
+  /**
+   * 获取当前选中的单一图片图层（用于滤镜预设）
+   * 多选或非图片类型返回 null。
+   * 注意：此方法独立于 _getTransformTargets，背景图虽不可变换但可应用滤镜。
+   * @returns {fabric.Image|null}
+   */
+  _getSingleImageTarget() {
+    const canvas = this.canvasManager.canvas;
+    const active = canvas?.getActiveObject();
+    if (!active || active.type === 'activeSelection') return null;
+    return active.type === 'image' ? active : null;
   }
 
   _getCommonAngle(targets) {

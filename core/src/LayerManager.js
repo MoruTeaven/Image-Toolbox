@@ -1,4 +1,4 @@
-﻿import eventBus from './EventBus.js';
+import eventBus from './EventBus.js';
 
 /**
  * 图层管理器 — 管理 Fabric.js 物件的 z-order、显隐、锁定
@@ -398,9 +398,10 @@ class LayerManager {
     const meta = this._layers.find(l => l.id === layerId);
     if (!meta) return;
 
-    // 即使图层被锁定也触发事件（让橡皮擦等工具能响应图层切换），
-    // 但不调用 setActiveObject（避免误操作锁定图层）。
-    if (!meta.locked) {
+    // 即使图层被锁定也触发事件（让橡皮擦等工具能响应图层切换）。
+    // 普通锁定图层不调用 setActiveObject（避免误操作）；
+    // 但背景图层允许选中，以便在属性面板中调整滤镜（背景已通过 lock* 属性禁止变换）。
+    if (!meta.locked || meta.isBackground) {
       this._cm.canvas.setActiveObject(meta.fabricObj);
       this._cm.canvas.renderAll();
     }

@@ -1,5 +1,19 @@
 export const updateRecords = [
   {
+    version: '2.4',
+    date: '2026-06-30',
+    changes: {
+      added: [
+        { text: '新增图片调色功能：选中任意图片图层后，属性面板会出现「调色」区块，提供亮度、对比度、饱和度、色相、模糊五个滑块和一键重置按钮，实时调整图片外观', platforms: null },
+        { text: '移动/框选预设栏新增滤镜预设组：选中图片图层时显示原图、暖色、冷色、复古、黑白、鲜艳、柔光、锐利 8 个一键滤镜按钮，匹配当前状态时自动高亮', platforms: null }
+      ],
+      fixed: [],
+      improved: [],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
     version: '2.3',
     date: '2026-06-29',
     changes: {

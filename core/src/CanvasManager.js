@@ -1,4 +1,4 @@
-﻿import eventBus from './EventBus.js';
+import eventBus from './EventBus.js';
 
 const CLIP_PATH_SERIALIZED_PROPS = ['clipPath', 'absolutePositioned', 'inverted'];
 
@@ -106,7 +106,7 @@ class CanvasManager {
           fabricImg.width, fabricImg.height, fabricImg.type);
 
         this.originalImage = fabricImg;
-        fabricImg._originalImage = true;
+        this._applyBackgroundImageProps(fabricImg);
         this.canvas.clear();
         this.canvas.add(fabricImg);
         this.canvas.renderAll();
@@ -159,16 +159,36 @@ class CanvasManager {
           const index = this.canvas.getObjects().indexOf(this.originalImage);
           this.canvas.remove(this.originalImage);
           this.originalImage = fabricImg;
-          fabricImg._originalImage = true;
+          this._applyBackgroundImageProps(fabricImg);
           this.canvas.insertAt(fabricImg, index >= 0 ? index : 0);
         } else {
           this.originalImage = fabricImg;
-          fabricImg._originalImage = true;
+          this._applyBackgroundImageProps(fabricImg);
           this.canvas.insertAt(fabricImg, 0);
         }
         this.canvas.renderAll();
         resolve(fabricImg);
       }, undefined, 'anonymous');
+    });
+  }
+
+  /**
+   * 给作为背景的 fabric.Image 设置通用属性：
+   * - 标记为 _originalImage（序列化/恢复时识别）
+   * - 隐藏选中控制点与边框（避免背景被误操作视觉干扰）
+   * - 锁定移动/旋转/缩放（背景不可变换，但仍可被选中以应用调色滤镜）
+   * @param {fabric.Image} fabricImg
+   */
+  _applyBackgroundImageProps(fabricImg) {
+    fabricImg._originalImage = true;
+    fabricImg.set({
+      hasControls: false,
+      hasBorders: false,
+      lockMovementX: true,
+      lockMovementY: true,
+      lockRotation: true,
+      lockScalingX: true,
+      lockScalingY: true,
     });
   }
 
@@ -298,6 +318,13 @@ class CanvasManager {
       'id',
       'selectable',
       'evented',
+      'hasControls',
+      'hasBorders',
+      'lockMovementX',
+      'lockMovementY',
+      'lockRotation',
+      'lockScalingX',
+      'lockScalingY',
       'absolutePositioned',
       'inverted',
       'objectCaching',

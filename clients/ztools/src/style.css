@@ -1188,6 +1188,16 @@ html, body {
   border-color: #7c878d;
 }
 
+/* 滤镜预设按钮（选项栏） */
+.filter-preset-btn {
+  min-width: 44px;
+}
+
+.filter-preset-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .brush-color-btn {
   display: inline-flex;
   align-items: center;
@@ -1584,6 +1594,17 @@ html, body {
 
 .property-btn--primary:hover {
   opacity: 0.88;
+}
+
+/* 调色重置按钮行 */
+.property-item--actions {
+  justify-content: flex-end;
+  padding: 4px 6px;
+}
+
+.property-item--actions .property-btn {
+  flex: 0 0 auto;
+  padding: 4px 12px;
 }
 
 .property-item label {
