@@ -1015,6 +1015,13 @@ html, body {
   line-height: 1.2;
 }
 
+.options-hint {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .shape-picker-trigger {
   display: inline-flex;
   align-items: center;
@@ -1420,6 +1427,7 @@ html, body {
 .side-tabs--split .side-tabs__pane[data-panel-pane="layer"] {
   flex: 3;
   height: auto;
+  border-top: 1px solid var(--color-border);
 }
 
 .panel {

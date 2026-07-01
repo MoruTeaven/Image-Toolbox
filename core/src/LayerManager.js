@@ -7,6 +7,7 @@ import eventBus from './EventBus.js';
 class LayerManager {
   constructor(canvasManager) {
     this._cm = canvasManager;
+    this._cm.layerManager = this;
     this._layers = [];           // 图层元数据 [{ id, name, visible, locked, fabricObj }]
     this._idCounter = 0;
   }
@@ -43,6 +44,7 @@ class LayerManager {
         meta.fabricObj = obj;
         this._refreshMetaName(meta, obj, false, newLayers, currentObjects);
       }
+      this._refreshMetaState(meta, obj, false);
       meta.zIndex = objects.length - 1 - i;
       newLayers.push(meta);
     }
@@ -56,6 +58,7 @@ class LayerManager {
         bgMeta.fabricObj = this._cm.originalImage;
         this._refreshMetaName(bgMeta, this._cm.originalImage, true, newLayers, currentObjects);
       }
+      this._refreshMetaState(bgMeta, this._cm.originalImage, true);
       bgMeta.zIndex = 0;
       newLayers.push(bgMeta);
     }
@@ -106,18 +109,35 @@ class LayerManager {
     const meta = {
       id,
       name: nameInfo.name,
-      visible: obj.visible !== false,
-      locked: isBackground ? true : (!obj.selectable && !obj.evented),
+      visible: true,
+      locked: false,
       fabricObj: obj,
       zIndex: 0,
       isBackground,
     };
+
+    this._refreshMetaState(meta, obj, isBackground);
 
     if (!isBackground) {
       this._setObjectLayerName(obj, meta.name, nameInfo.auto, nameInfo.baseName);
     }
 
     return meta;
+  }
+
+  _refreshMetaState(meta, obj, isBackground = false) {
+    meta.visible = obj.visible !== false;
+    meta.locked = this._resolveLockedState(obj, isBackground);
+    meta.isBackground = !!isBackground;
+  }
+
+  _resolveLockedState(obj, isBackground = false) {
+    if (isBackground) return true;
+    if (typeof obj?._layerLocked === 'boolean') return obj._layerLocked;
+
+    // 旧版本把工具激活期间创建的图层也标成 selectable/evented=false。
+    // 没有明确锁定标记时按未锁定处理，避免移动/框选工具无法选中这些图层。
+    return false;
   }
 
   _refreshMetaName(meta, obj, isBackground = false, newLayers = null, currentObjects = null) {
@@ -378,6 +398,7 @@ class LayerManager {
     if (!meta || meta.isBackground) return;
 
     meta.locked = !!locked;
+    meta.fabricObj._layerLocked = meta.locked;
     meta.fabricObj.set({
       selectable: !meta.locked,
       evented: !meta.locked,

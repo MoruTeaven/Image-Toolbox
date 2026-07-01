@@ -339,6 +339,7 @@ class CanvasManager {
       '_layerColorPresetName',
       '_layerWidthPresetName',
       '_layerPresetName',
+      '_layerLocked',
       '_mosaicDynamic',
       '_mosaicMode',
       '_mosaicSize',

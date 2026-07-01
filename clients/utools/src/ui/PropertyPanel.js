@@ -68,6 +68,15 @@ class PropertyPanel {
     const module = this._tm.getCurrentModule();
     const active = this._getActiveObject();
 
+    // 模块可声明 overridePropertyPanel 接管属性面板（即使有选中对象）
+    if (module?.overridePropertyPanel && typeof module.getPropertyPanelHTML === 'function') {
+      const html = module.getPropertyPanelHTML();
+      if (html) {
+        bodyEl.innerHTML = html;
+        return;
+      }
+    }
+
     if (active?.excludeFromProperty && module && typeof module.getPropertyPanelHTML === 'function') {
       const html = module.getPropertyPanelHTML();
       if (html) {
@@ -434,7 +443,8 @@ class PropertyPanel {
     const handled = module.onToolPropertyChange(prop, value, { eventType: e.type });
 
     if (target.type === 'range' && target.nextElementSibling) {
-      target.nextElementSibling.textContent = `${value}${target.dataset.valueSuffix || 'px'}`;
+      const suffix = target.dataset.valueSuffix != null ? target.dataset.valueSuffix : 'px';
+      target.nextElementSibling.textContent = `${value}${suffix}`;
     }
 
     if (handled !== false && target.dataset.refreshProperty === 'true') {

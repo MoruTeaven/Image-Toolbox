@@ -7,7 +7,7 @@ export const SIDE_PANEL_LAYOUTS = {
   SPLIT: 'split',
 };
 
-const VALID_TABS = new Set(['property', 'layer', 'color']);
+const VALID_TABS = new Set(['property', 'layer']);
 const VALID_LAYOUTS = new Set(Object.values(SIDE_PANEL_LAYOUTS));
 
 /**
@@ -36,9 +36,6 @@ class SidePanelTabs {
           <button class="side-tabs__tab" type="button" role="tab" data-panel-tab="property" aria-controls="side-pane-property">
             属性
           </button>
-          <button class="side-tabs__tab" type="button" role="tab" data-panel-tab="color" aria-controls="side-pane-color">
-            调色
-          </button>
           <button class="side-tabs__tab" type="button" role="tab" data-panel-tab="layer" aria-controls="side-pane-layer">
             图层 <span class="side-tabs__badge" id="side-layer-count">0</span>
           </button>
@@ -46,9 +43,6 @@ class SidePanelTabs {
         <div class="side-tabs__content">
           <div class="side-tabs__pane" id="side-pane-property" role="tabpanel" data-panel-pane="property">
             <div id="property-panel"></div>
-          </div>
-          <div class="side-tabs__pane" id="side-pane-color" role="tabpanel" data-panel-pane="color">
-            <div id="color-panel"></div>
           </div>
           <div class="side-tabs__pane" id="side-pane-layer" role="tabpanel" data-panel-pane="layer">
             <div id="layer-panel"></div>

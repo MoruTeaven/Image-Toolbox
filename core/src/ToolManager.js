@@ -2,6 +2,7 @@
 import SelectModule from './modules/SelectModule.js';
 import MosaicModule from './modules/MosaicModule.js';
 import CropModule from './modules/CropModule.js';
+import ColorModule from './modules/ColorModule.js';
 import BrushModule from './modules/BrushModule.js';
 import EraserModule from './modules/EraserModule.js';
 import TextModule from './modules/TextModule.js';
@@ -69,7 +70,7 @@ class ToolManager {
       name: 'mosaic',
       label: '马赛克',
       icon: 'mosaic',
-      group: 'edit',
+      group: 'redact',
       shortcut: 'M',
       module: MosaicModule,
       defaultOptions: { mode: 'mosaic', drawMode: 'rect', mosaicSize: 12, blurRadius: 8, brushSize: 20 },
@@ -82,6 +83,15 @@ class ToolManager {
       group: 'edit',
       shortcut: 'C',
       module: CropModule,
+    });
+
+    this.registerTool({
+      name: 'color',
+      label: '调色',
+      icon: 'color',
+      group: 'adjust',
+      shortcut: 'A',
+      module: ColorModule,
     });
 
     this.registerTool({

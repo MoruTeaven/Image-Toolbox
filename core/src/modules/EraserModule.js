@@ -228,6 +228,10 @@ class EraserModule extends BaseModule {
       objectCaching: false,
     });
 
+    if (typeof target._layerLocked === 'boolean') {
+      image._layerLocked = target._layerLocked;
+    }
+
     if (layerName) {
       image._layerName = layerName;
       image._layerNameAuto = false;

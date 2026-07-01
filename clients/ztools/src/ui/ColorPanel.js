@@ -1,15 +1,17 @@
 import { eventBus } from '../../../../core/src/index.js';
-import { FILTER_RANGES, getFilterUiValue, setFilter, clearFilters } from '../../../../core/src/utils/filters.js';
+import { FILTER_RANGES, FILTER_PRESETS, getFilterUiValue, setFilter, clearFilters, applyFilterPreset, isPresetActive } from '../../../../core/src/utils/filters.js';
 
 /**
  * 调色面板 — 侧栏「调色」Tab
- * 选中图片图层时显示亮度/对比度/饱和度/色相/模糊滑块与重置按钮。
+ * 选中图片图层时显示滤镜预设、亮度/对比度/饱和度/色相/模糊滑块与重置按钮。
  * 非图片图层或未选中时显示提示文本。
  */
 class ColorPanel {
-  constructor(containerEl, canvasManager) {
+  constructor(containerEl, canvasManager, historyManager) {
     this._el = containerEl;
     this._cm = canvasManager;
+    this._hm = historyManager;
+    this._filterScope = 'current';
     this._eventBusUnsubscribers = [];
 
     this._render();
@@ -46,11 +48,14 @@ class ColorPanel {
     const bodyEl = this._el.querySelector('#color-panel-body');
     if (!bodyEl) return;
 
-    const active = this._getActiveObject();
-    if (active && active.type === 'image') {
-      bodyEl.innerHTML = this._getColorAdjustHTML(active);
+    const reference = this._getReferenceImage();
+    if (reference) {
+      bodyEl.innerHTML = this._getColorAdjustHTML(reference);
     } else {
-      bodyEl.innerHTML = '<div class="property-empty">选中图片图层以调色</div>';
+      const hint = this._getAllImages().length > 0
+        ? '选中图片图层，或将作用范围切换为全部图片图层'
+        : '当前画布没有可调色的图片图层';
+      bodyEl.innerHTML = `${this._getScopeControlHTML()}<div class="property-empty">${hint}</div>`;
     }
   }
 
@@ -83,8 +88,23 @@ class ColorPanel {
       `;
     }).join('');
 
+    const filterPresets = FILTER_PRESETS.map(preset => {
+      const targets = this._getTargetImages();
+      const isActive = this._filterScope === 'all'
+        ? targets.length > 0 && targets.every(image => isPresetActive(image, preset.preset))
+        : isPresetActive(active, preset.preset);
+      return `<button type="button" class="options-btn options-btn-sm filter-preset-btn ${isActive ? 'active' : ''}" data-preset="${preset.preset}">${preset.label}</button>`;
+    }).join('');
+
+    const scopeTitle = this._filterScope === 'all'
+      ? `调色 (${this._getTargetImages().length} 个图片图层)`
+      : '调色';
+
     return `
-      <div class="property-section-title">调色</div>
+      ${this._getScopeControlHTML()}
+      <div class="property-section-title">滤镜</div>
+      <div class="filter-presets">${filterPresets}</div>
+      <div class="property-section-title">${scopeTitle}</div>
       ${sliders}
       <div class="property-item property-item--wide property-item--actions">
         <button type="button" class="property-btn" data-prop="filter:reset">重置调色</button>
@@ -93,25 +113,46 @@ class ColorPanel {
   }
 
   _handleEvent(e) {
+    // 滤镜预设按钮（一键应用）
+    const presetTarget = e.target.closest('[data-preset]');
+    if (presetTarget && this._el.contains(presetTarget)) {
+      const preset = presetTarget.dataset.preset;
+      if (preset && preset.startsWith('filter-')) {
+        if (e.type !== 'click') return;
+        this._applyFilterPreset(preset);
+        return;
+      }
+    }
+
+    // 调色滑块 / 重置
     const target = e.target.closest('[data-prop]');
     if (!target || !this._el.contains(target)) return;
 
     const prop = target.dataset.prop;
-    if (!prop || !prop.startsWith('filter:')) return;
+    if (!prop) return;
 
-    const active = this._getActiveObject();
-    if (!active) return;
+    if (prop === 'filterScope') {
+      if (e.type !== 'change') return;
+      this._filterScope = target.value === 'all' ? 'all' : 'current';
+      this._update();
+      return;
+    }
+
+    if (!prop.startsWith('filter:')) return;
+
+    const targets = this._getTargetImages();
+    if (targets.length === 0) return;
 
     const value = target.value;
 
     // 重置按钮
     if (prop === 'filter:reset') {
       if (e.type !== 'click') return;
-      clearFilters(active);
-      active.dirty = true;
-      active.setCoords();
+      this._hm?.saveState?.();
+      targets.forEach(image => clearFilters(image));
+      this._markImagesChanged(targets);
       this._requestRender();
-      this._notifyObjectChanged(active);
+      this._notifyObjectChanged(targets[0]);
       this._update();
       return;
     }
@@ -121,9 +162,8 @@ class ColorPanel {
     const uiValue = parseInt(value, 10);
     if (!Number.isFinite(uiValue)) return;
 
-    setFilter(active, type, uiValue);
-    active.dirty = true;
-    active.setCoords();
+    targets.forEach(image => setFilter(image, type, uiValue));
+    this._markImagesChanged(targets);
 
     if (target.nextElementSibling && target.nextElementSibling.classList.contains('property-value')) {
       target.nextElementSibling.textContent = String(uiValue);
@@ -132,8 +172,69 @@ class ColorPanel {
     this._requestRender();
 
     if (e.type === 'change') {
-      this._notifyObjectChanged(active);
+      this._notifyObjectChanged(targets[0]);
     }
+  }
+
+  _applyFilterPreset(presetName) {
+    const targets = this._getTargetImages();
+    if (targets.length === 0) return;
+    this._hm?.saveState?.();
+    targets.forEach(image => applyFilterPreset(image, presetName));
+    this._markImagesChanged(targets);
+    this._requestRender();
+    this._notifyObjectChanged(targets[0]);
+    this._update();
+  }
+
+  _getScopeControlHTML() {
+    return `
+      <div class="property-section-title">作用范围</div>
+      <div class="property-item property-item--wide">
+        <label>范围</label>
+        <select class="property-select" data-prop="filterScope">
+          <option value="current" ${this._filterScope === 'current' ? 'selected' : ''}>当前图层</option>
+          <option value="all" ${this._filterScope === 'all' ? 'selected' : ''}>全部图片图层</option>
+        </select>
+      </div>
+    `;
+  }
+
+  _getTargetImages() {
+    if (this._filterScope === 'all') {
+      return this._getAllImages();
+    }
+
+    const active = this._getActiveObject();
+    return active && active.type === 'image' && active.type !== 'activeSelection' ? [active] : [];
+  }
+
+  _getReferenceImage() {
+    if (this._filterScope === 'all') {
+      const active = this._getActiveObject();
+      return active?.type === 'image' ? active : this._getAllImages()[0] || null;
+    }
+
+    const active = this._getActiveObject();
+    return active?.type === 'image' ? active : null;
+  }
+
+  _getAllImages() {
+    const canvas = this._cm?.canvas;
+    if (!canvas) return [];
+    return canvas.getObjects().filter(obj => (
+      obj &&
+      obj.type === 'image' &&
+      !obj.excludeFromLayer &&
+      !obj.excludeFromHistory
+    ));
+  }
+
+  _markImagesChanged(images) {
+    images.forEach(image => {
+      image.dirty = true;
+      image.setCoords();
+    });
   }
 
   _getActiveObject() {

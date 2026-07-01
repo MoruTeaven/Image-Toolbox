@@ -83,6 +83,26 @@ class BaseModule {
   }
 
   /**
+   * 启用可编辑图层的交互性，保留用户主动锁定的图层和临时辅助对象状态。
+   */
+  _enableEditableLayerInteractivity() {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) return;
+
+    const layerManager = this.canvasManager.layerManager;
+    const objects = canvas.getObjects();
+    objects.forEach(obj => {
+      if (obj.excludeFromLayer || obj.excludeFromHistory) return;
+
+      const meta = layerManager?.getLayerByObject?.(obj) || null;
+      const locked = meta ? meta.locked : obj._layerLocked === true;
+      if (locked && !meta?.isBackground && obj !== this.canvasManager.originalImage && !obj._originalImage) return;
+
+      obj.set({ selectable: true, evented: true });
+    });
+  }
+
+  /**
    * 获取属性面板 HTML（子类可选实现）
    * @returns {string}
    */
