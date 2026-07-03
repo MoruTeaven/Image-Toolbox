@@ -122,15 +122,14 @@ class SelectModule extends BaseModule {
     const canvas = this.canvasManager.canvas;
     const active = canvas?.getActiveObject();
     if (!active) return [];
-
-    // 背景图不可变换（旋转/翻转），排除之
     const originalImage = this.canvasManager.originalImage;
 
     if (active.type === 'activeSelection' && typeof active.getObjects === 'function') {
+      // 多选时排除背景，避免框选覆盖层时误带上整张底图；单独选中背景仍可变换。
       return active.getObjects().filter(obj => !obj.excludeFromHistory && obj !== originalImage);
     }
 
-    if (active.excludeFromHistory || active === originalImage) return [];
+    if (active.excludeFromHistory) return [];
     return [active];
   }
 

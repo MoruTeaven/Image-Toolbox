@@ -4,31 +4,20 @@ export const updateRecords = [
     date: '2026-06-30',
     changes: {
       added: [
-        { text: '左侧工具栏新增「调色」工具（快捷键 A）：点击后选中图片图层，顶部预设栏显示滤镜预设（原图/暖色/冷色/复古/黑白/鲜艳/柔光/锐利），右侧属性面板显示调色滑块（亮度/对比/饱和/色相/模糊）和重置按钮，支持当前图层或全部图片图层调色与撤销', platforms: null }
+        { text: '新增「调色」工具，支持滤镜预设以及亮度、对比度、饱和度、色相、模糊等参数调整', platforms: null }
       ],
       fixed: [
-        { text: '修复使用画笔、图形、马赛克等工具新建图层后，切回移动/框选工具无法直接选中图层的问题', platforms: null }
+        { text: '修复添加文字后第一次撤销无反应的问题', platforms: null },
+        { text: '修复撤销/重做时偶尔出现画布状态异常的问题', platforms: null },
+        { text: '修复切换或停用工具后，已锁定图层可能被意外解锁的问题', platforms: null },
+        { text: '修复使用画笔、图形、马赛克等工具新建图层后，切回移动/框选工具无法直接选中图层的问题', platforms: null },
+        { text: '修复移动/框选工具选中背景图片后，无法调整宽高、位置、旋转或拖拽变换的问题', platforms: null }
       ],
       improved: [],
       adjusted: [
         { text: '工具栏分组调整：移动/框选与剪切归为同一组并相邻，调色单独成组，马赛克单独成组', platforms: null },
         { text: '右侧侧栏恢复为属性/图层两个 Tab，移除了调色 Tab（调色功能改为左侧工具栏的调色工具）', platforms: null }
       ],
-      removed: []
-    }
-  },
-  {
-    version: '2.3',
-    date: '2026-06-29',
-    changes: {
-      added: [],
-      fixed: [
-        { text: '修复添加文字后第一次撤销无反应的问题：将历史状态保存提前到文字对象添加到画布之前，与画笔/图形工具的操作前保存模式保持一致，避免 undoStack 栈顶存储当前状态导致撤销失效', platforms: null },
-        { text: '修复切换/停用工具时被用户锁定的图层被错误解锁的问题：移除 _restoreObjectsInteractivity 中对未知对象的盲切 fallback，只恢复已保存的交互状态，不在保存映射中的对象保持原样', platforms: null },
-        { text: '修复撤销/重做时画布异步恢复期间可能错误触发历史保存的问题：undo() 和 redo() 现在等待 fromJSON 异步完成后再重置 _isRestoring 状态，避免画布物件加载期间触发的事件错误调用 saveState() 写入重复或损坏的快照', platforms: null }
-      ],
-      improved: [],
-      adjusted: [],
       removed: []
     }
   },

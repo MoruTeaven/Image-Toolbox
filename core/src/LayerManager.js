@@ -51,6 +51,7 @@ class LayerManager {
 
     // 背景图层始终在列表末尾（面板最底部）
     if (this._cm.originalImage) {
+      this._ensureBackgroundSelectable(this._cm.originalImage);
       let bgMeta = oldLayers.find(l => l.fabricObj === this._cm.originalImage) || null;
       if (!bgMeta) {
         bgMeta = this._createMeta(this._cm.originalImage, true, newLayers, currentObjects);
@@ -138,6 +139,24 @@ class LayerManager {
     // 旧版本把工具激活期间创建的图层也标成 selectable/evented=false。
     // 没有明确锁定标记时按未锁定处理，避免移动/框选工具无法选中这些图层。
     return false;
+  }
+
+  _ensureBackgroundSelectable(obj) {
+    if (!obj) return;
+
+    obj._originalImage = true;
+    obj.set({
+      selectable: true,
+      evented: true,
+      hasControls: true,
+      hasBorders: true,
+      lockMovementX: false,
+      lockMovementY: false,
+      lockRotation: false,
+      lockScalingX: false,
+      lockScalingY: false,
+    });
+    obj.setCoords();
   }
 
   _refreshMetaName(meta, obj, isBackground = false, newLayers = null, currentObjects = null) {
@@ -421,8 +440,11 @@ class LayerManager {
 
     // 即使图层被锁定也触发事件（让橡皮擦等工具能响应图层切换）。
     // 普通锁定图层不调用 setActiveObject（避免误操作）；
-    // 但背景图层允许选中，以便在属性面板中调整滤镜（背景已通过 lock* 属性禁止变换）。
+    // 但背景图层允许选中和变换；图层锁定只限制删除、改名和排序。
     if (!meta.locked || meta.isBackground) {
+      if (meta.isBackground) {
+        this._ensureBackgroundSelectable(meta.fabricObj);
+      }
       this._cm.canvas.setActiveObject(meta.fabricObj);
       this._cm.canvas.renderAll();
     }

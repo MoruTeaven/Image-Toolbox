@@ -362,7 +362,7 @@ class LayerPanel {
           <span class="layer-item__visibility" title="${layer.visible ? '隐藏' : '显示'}">${eyeIcon}</span>
           <span class="layer-item__thumbnail">${icon}</span>
           <span class="layer-item__name" title="${layerTitle}">${layerName}</span>
-          <span class="layer-item__lock ${lockIconClass}" title="${isBg ? '背景图层始终锁定' : (layer.locked ? '解锁' : '锁定')}">${lockIcon}</span>
+          <span class="layer-item__lock ${lockIconClass}" title="${isBg ? '背景图层固定在底部' : (layer.locked ? '解锁' : '锁定')}">${lockIcon}</span>
         </li>
       `;
     }

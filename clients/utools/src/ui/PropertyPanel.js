@@ -112,7 +112,8 @@ class PropertyPanel {
     const isText = this._isTextObject(active);
     const isBackground = !!meta?.isBackground;
     const locked = meta ? meta.locked : (active.selectable === false && active.evented === false);
-    const editDisabled = (isBackground || locked) ? ' disabled' : '';
+    // 背景图层的锁定只限制删除、改名和排序，仍允许显式编辑几何参数。
+    const editDisabled = (locked && !isBackground) ? ' disabled' : '';
     const renameDisabled = (!meta || isBackground) ? ' disabled' : '';
     const lockDisabled = isBackground ? ' disabled' : '';
     const opacity = active.opacity == null ? 1 : active.opacity;

@@ -175,21 +175,24 @@ class CanvasManager {
   /**
    * 给作为背景的 fabric.Image 设置通用属性：
    * - 标记为 _originalImage（序列化/恢复时识别）
-   * - 隐藏选中控制点与边框（避免背景被误操作视觉干扰）
-   * - 锁定移动/旋转/缩放（背景不可变换，但仍可被选中以应用调色滤镜）
+   * - 允许选中/接收事件（用于图层面板和调色工具定位背景图层）
+   * - 显示变换控制点，允许像普通图层一样拖拽移动、缩放、旋转
    * @param {fabric.Image} fabricImg
    */
   _applyBackgroundImageProps(fabricImg) {
     fabricImg._originalImage = true;
     fabricImg.set({
-      hasControls: false,
-      hasBorders: false,
-      lockMovementX: true,
-      lockMovementY: true,
-      lockRotation: true,
-      lockScalingX: true,
-      lockScalingY: true,
+      selectable: true,
+      evented: true,
+      hasControls: true,
+      hasBorders: true,
+      lockMovementX: false,
+      lockMovementY: false,
+      lockRotation: false,
+      lockScalingX: false,
+      lockScalingY: false,
     });
+    fabricImg.setCoords();
   }
 
   /**
@@ -227,6 +230,7 @@ class CanvasManager {
       left: (cw - img.width * scale) / 2,
       top: (ch - img.height * scale) / 2,
     });
+    img.setCoords();
     this.canvas.renderAll();
   }
 
@@ -376,6 +380,9 @@ class CanvasManager {
           // 恢复 originalImage 引用
           const objs = this.canvas.getObjects();
           this.originalImage = objs.find(o => o.type === 'image' && o._originalImage) || objs[0];
+          if (this.originalImage?.type === 'image') {
+            this._applyBackgroundImageProps(this.originalImage);
+          }
           this.canvas.renderAll();
           eventBus.emit('canvas:restored');
           resolve();
