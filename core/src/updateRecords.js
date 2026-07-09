@@ -6,7 +6,7 @@ export const updateRecords = [
       added: [],
       fixed: [
         { text: '修复调色面板长时间使用后内存占用持续上升的问题', platforms: null },
-        { text: '修复平行四边形绘制时实际宽度超出拖拽框选范围的问题', platforms: null }
+        { text: '修复平行四边形绘制时实际宽度超出拖拽框选范围的问题', platforms: null },
         { text: '修复调色面板滑块调整后无法撤销的问题', platforms: null }
       ],
       improved: [
