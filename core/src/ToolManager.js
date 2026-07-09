@@ -1,4 +1,4 @@
-﻿import eventBus from './EventBus.js';
+import eventBus from './EventBus.js';
 import SelectModule from './modules/SelectModule.js';
 import MosaicModule from './modules/MosaicModule.js';
 import CropModule from './modules/CropModule.js';
@@ -92,6 +92,7 @@ class ToolManager {
       group: 'adjust',
       shortcut: 'A',
       module: ColorModule,
+      defaultOptions: { filterScope: 'all' },
     });
 
     this.registerTool({

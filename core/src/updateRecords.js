@@ -17,8 +17,6 @@ export const updateRecords = [
       ],
       improved: [],
       adjusted: [
-        { text: '工具栏分组调整：移动/框选与剪切归为同一组并相邻，调色单独成组，马赛克单独成组', platforms: null },
-        { text: '右侧侧栏恢复为属性/图层两个 Tab，移除了调色 Tab（调色功能改为左侧工具栏的调色工具）', platforms: null }
       ],
       removed: []
     }
