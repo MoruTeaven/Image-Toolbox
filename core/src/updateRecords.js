@@ -5,25 +5,14 @@ export const updateRecords = [
     changes: {
       added: [],
       fixed: [
-        { text: '修复调色面板销毁后未清理事件监听器导致的内存泄漏问题', platforms: null }
-      ],
-      improved: [
-        { text: '优化滤镜预设应用性能，避免批量设置时重复计算，提升响应速度', platforms: null },
-        { text: '优化含大图画布的撤销/重做性能，减少自由绘制、拖拽等频繁操作时的界面卡顿', platforms: null }
-      ],
-      adjusted: [],
-      removed: []
-    }
-  },
-  {
-    version: '2.3',
-    date: '2026-07-09',
-    changes: {
-      added: [],
-      fixed: [
+        { text: '修复调色面板长时间使用后内存占用持续上升的问题', platforms: null },
+        { text: '修复平行四边形绘制时实际宽度超出拖拽框选范围的问题', platforms: null }
         { text: '修复调色面板滑块调整后无法撤销的问题', platforms: null }
       ],
-      improved: [],
+      improved: [
+        { text: '提升滤镜预设的响应速度', platforms: null },
+        { text: '优化大图编辑时撤销/重做和自由绘制、拖拽操作的流畅度', platforms: null }
+      ],
       adjusted: [],
       removed: []
     }

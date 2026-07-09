@@ -518,11 +518,12 @@ class ShapeModule extends BaseModule {
     const centerX = left + width / 2;
     const centerY = top + height / 2;
     const skewX = width * 0.22;
+    const baseWidth = width - 2 * skewX;
     const points = [
-      { x: -width / 2 + skewX, y: -height / 2 },
-      { x: width / 2 + skewX, y: -height / 2 },
-      { x: width / 2 - skewX, y: height / 2 },
-      { x: -width / 2 - skewX, y: height / 2 },
+      { x: -baseWidth / 2 + skewX, y: -height / 2 },
+      { x: baseWidth / 2 + skewX, y: -height / 2 },
+      { x: baseWidth / 2 - skewX, y: height / 2 },
+      { x: -baseWidth / 2 - skewX, y: height / 2 },
     ];
 
     return new fabric.Polygon(points, {
