@@ -40,9 +40,14 @@ class ColorPanel {
       eventBus.on('image:loaded', () => this._clearHint())
     );
 
-    this._el.addEventListener('input', (e) => this._handleEvent(e));
-    this._el.addEventListener('change', (e) => this._handleEvent(e));
-    this._el.addEventListener('click', (e) => this._handleEvent(e));
+    this._domHandlers = {
+      input: (e) => this._handleEvent(e),
+      change: (e) => this._handleEvent(e),
+      click: (e) => this._handleEvent(e),
+    };
+    this._el.addEventListener('input', this._domHandlers.input);
+    this._el.addEventListener('change', this._domHandlers.change);
+    this._el.addEventListener('click', this._domHandlers.click);
   }
 
   _update() {
@@ -257,6 +262,13 @@ class ColorPanel {
   destroy() {
     this._eventBusUnsubscribers.forEach(unsub => unsub());
     this._eventBusUnsubscribers = [];
+
+    if (this._domHandlers) {
+      this._el.removeEventListener('input', this._domHandlers.input);
+      this._el.removeEventListener('change', this._domHandlers.change);
+      this._el.removeEventListener('click', this._domHandlers.click);
+      this._domHandlers = null;
+    }
   }
 }
 
