@@ -6,7 +6,8 @@ export const updateRecords = [
       added: [],
       fixed: [],
       improved: [
-        { text: '优化滤镜预设应用性能，避免批量设置时重复计算，提升响应速度', platforms: null }
+        { text: '优化滤镜预设应用性能，避免批量设置时重复计算，提升响应速度', platforms: null },
+        { text: '优化含大图画布的撤销/重做性能，减少自由绘制、拖拽等频繁操作时的界面卡顿', platforms: null }
       ],
       adjusted: [],
       removed: []

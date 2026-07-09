@@ -1,4 +1,4 @@
-﻿import eventBus from './EventBus.js';
+import eventBus from './EventBus.js';
 
 /**
  * 历史记录管理器 — 实现撤销/重做
@@ -155,10 +155,22 @@ class HistoryManager {
     if (!a || !b) return false;
 
     try {
-      return JSON.stringify(a) === JSON.stringify(b);
+      // 用轻量级签名对比，过滤掉图片对象的大体积 src（base64），
+      // 避免对大图做深度序列化导致高频保存历史（自由绘制、拖拽等）时卡顿。
+      // src 被替换为「长度:首段:尾段」的内容指纹，仍可识别图片是否被替换。
+      return this._snapshotSignature(a) === this._snapshotSignature(b);
     } catch (err) {
       return false;
     }
+  }
+
+  _snapshotSignature(json) {
+    return JSON.stringify(json, (key, value) => {
+      if (key === 'src' && typeof value === 'string' && value.length > 64) {
+        return `${value.length}:${value.slice(0, 16)}:${value.slice(-16)}`;
+      }
+      return value;
+    });
   }
 }
 
