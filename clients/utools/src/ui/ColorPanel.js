@@ -170,6 +170,7 @@ class ColorPanel {
     this._requestRender();
 
     if (e.type === 'change') {
+      this._hm?.saveState?.();
       this._notifyObjectChanged(targets[0]);
     }
   }

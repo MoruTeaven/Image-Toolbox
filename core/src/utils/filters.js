@@ -145,8 +145,11 @@ export function getFilterUiValue(image, type) {
  * @param {fabric.Image} image
  * @param {string} type
  * @param {number} uiValue
+ * @param {boolean} [skipApply=false] 为 true 时跳过 applyFilters(image) 重算，
+ *   用于批量设置（如应用预设）时避免多次重复调用昂贵的滤镜重算；
+ *   调用方需在批量结束后自行触发一次重算
  */
-export function setFilter(image, type, uiValue) {
+export function setFilter(image, type, uiValue, skipApply = false) {
   if (!image) return;
 
   if (!Array.isArray(image.filters)) {
@@ -165,7 +168,7 @@ export function setFilter(image, type, uiValue) {
     ? FILTER_RANGES[type].default
     : (PRESET_ONLY_DEFAULTS[type] != null ? PRESET_ONLY_DEFAULTS[type] : 0);
   if (uiValue === defaultValue) {
-    applyFilters(image);
+    if (!skipApply) applyFilters(image);
     return;
   }
 
@@ -173,7 +176,7 @@ export function setFilter(image, type, uiValue) {
   const attr = FILTER_ATTR_NAME[type];
   const filter = new FilterClass({ [attr]: filterValue });
   image.filters.push(filter);
-  applyFilters(image);
+  if (!skipApply) applyFilters(image);
 }
 
 /**
@@ -266,12 +269,14 @@ export function applyFilterPreset(image, presetName) {
   if (!preset) return false;
 
   // 重置全部为默认值，再应用预设覆盖
+  // 批量设置时跳过逐次 applyFilters，循环结束后统一应用一次，避免重复重算
   ALL_RESETTABLE_TYPES.forEach(type => {
     const value = preset.filters[type] != null
       ? preset.filters[type]
       : (FILTER_RANGES[type] ? FILTER_RANGES[type].default : (PRESET_ONLY_DEFAULTS[type] != null ? PRESET_ONLY_DEFAULTS[type] : 0));
-    setFilter(image, type, value);
+    setFilter(image, type, value, true);
   });
+  applyFilters(image);
   return true;
 }
 

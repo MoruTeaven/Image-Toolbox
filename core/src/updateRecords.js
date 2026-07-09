@@ -1,5 +1,31 @@
 export const updateRecords = [
   {
+    version: '2.3.1',
+    date: '2026-07-09',
+    changes: {
+      added: [],
+      fixed: [],
+      improved: [
+        { text: '优化滤镜预设应用性能，避免批量设置时重复计算，提升响应速度', platforms: null }
+      ],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
+    version: '2.3',
+    date: '2026-07-09',
+    changes: {
+      added: [],
+      fixed: [
+        { text: '修复调色面板滑块调整后无法撤销的问题', platforms: null }
+      ],
+      improved: [],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
     version: '2.3',
     date: '2026-07-09',
     changes: {
