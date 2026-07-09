@@ -23,6 +23,7 @@ class ColorModule extends BaseModule {
     super(canvasManager, historyManager, defaultOptions);
     // 标记：此模块接管属性面板，即使有选中对象也显示调色控件
     this.overridePropertyPanel = true;
+    this._filterDragSaving = false;
   }
 
   activate(options = {}) {
@@ -146,11 +147,18 @@ class ColorModule extends BaseModule {
     const uiValue = parseInt(value, 10);
     if (!Number.isFinite(uiValue)) return false;
 
+    // 拖拽开始时保存一次历史（仅首个 input 事件触发），保存调整前状态以支持撤销
+    if (eventType === 'input' && !this._filterDragSaving) {
+      this._filterDragSaving = true;
+      this.history?.saveState?.();
+    }
+
     targets.forEach(image => setFilter(image, type, uiValue));
     this._markImagesChanged(targets);
     _requestRender(this.canvasManager.canvas);
 
     if (eventType === 'change') {
+      this._filterDragSaving = false;
       eventBus.emit('canvas:objectModified', targets[0]);
     }
     return false; // 不刷新属性面板（避免滑块失焦）
