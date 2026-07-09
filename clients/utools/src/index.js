@@ -306,6 +306,16 @@ class App {
 
       // 工具快捷键
       if (!e.ctrlKey && !e.metaKey) {
+        // 检查焦点是否在 HTML 表单元素上（输入框、下拉框等）
+        const activeElement = document.activeElement;
+        const tagName = activeElement?.tagName?.toUpperCase();
+        if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return;
+        if (activeElement?.isContentEditable) return;
+        
+        // Fabric.js 文字编辑状态下也不触发
+        const active = this.canvasManager?.getActiveObject();
+        if (active && active.isEditing) return;
+        
         const tools = this.toolManager?.getTools() || [];
         const tool = tools.find(t => t.shortcut === e.key.toUpperCase());
         if (tool) {

@@ -11,11 +11,12 @@ class ColorPanel {
     this._el = containerEl;
     this._cm = canvasManager;
     this._hm = historyManager;
-    this._filterScope = 'current';
+    this._filterScope = 'all';
     this._eventBusUnsubscribers = [];
 
     this._render();
     this._bindEvents();
+    this._update();
   }
 
   _render() {
@@ -53,17 +54,14 @@ class ColorPanel {
       bodyEl.innerHTML = this._getColorAdjustHTML(reference);
     } else {
       const hint = this._getAllImages().length > 0
-        ? '选中图片图层，或将作用范围切换为全部图片图层'
+        ? '选中图片图层以调色'
         : '当前画布没有可调色的图片图层';
       bodyEl.innerHTML = `${this._getScopeControlHTML()}<div class="property-empty">${hint}</div>`;
     }
   }
 
   _clearHint() {
-    const bodyEl = this._el.querySelector('#color-panel-body');
-    if (bodyEl) {
-      bodyEl.innerHTML = '<div class="property-empty">选中图片图层以调色</div>';
-    }
+    this._update();
   }
 
   _getColorAdjustHTML(active) {

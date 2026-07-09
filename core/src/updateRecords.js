@@ -1,17 +1,19 @@
 export const updateRecords = [
   {
-    version: '2.4',
-    date: '2026-06-30',
+    version: '2.3',
+    date: '2026-07-09',
     changes: {
       added: [
         { text: '新增「调色」工具，支持滤镜预设以及亮度、对比度、饱和度、色相、模糊等参数调整', platforms: null }
       ],
       fixed: [
+        { text: '修复图形工具拖选绘制时部分情况下意外移动图层的问题', platforms: null },
         { text: '修复添加文字后第一次撤销无反应的问题', platforms: null },
         { text: '修复撤销/重做时偶尔出现画布状态异常的问题', platforms: null },
         { text: '修复切换或停用工具后，已锁定图层可能被意外解锁的问题', platforms: null },
         { text: '修复使用画笔、图形、马赛克等工具新建图层后，切回移动/框选工具无法直接选中图层的问题', platforms: null },
-        { text: '修复移动/框选工具选中背景图片后，无法调整宽高、位置、旋转或拖拽变换的问题', platforms: null }
+        { text: '修复移动/框选工具选中背景图片后，无法调整宽高、位置、旋转或拖拽变换的问题', platforms: null },
+        { text: '修复使用文字工具编辑文字时，按快捷键会意外切换工具的问题', platforms: null }
       ],
       improved: [],
       adjusted: [

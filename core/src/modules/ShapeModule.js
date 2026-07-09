@@ -60,10 +60,16 @@ class ShapeModule extends BaseModule {
 
     canvas.discardActiveObject();
     canvas.defaultCursor = 'crosshair';
-    canvas.upperCanvasEl?.addEventListener('mousedown', this._boundMouseDown);
-    canvas.upperCanvasEl?.addEventListener('mousemove', this._boundMouseMove);
-    canvas.upperCanvasEl?.addEventListener('mouseup', this._boundMouseUp);
-    canvas.upperCanvasEl?.addEventListener('mouseout', this._boundMouseOut);
+    // 禁用 Fabric.js 的目标查找，防止拖选绘制时意外移动图层
+    canvas.skipTargetFind = true;
+
+    // 使用 Fabric.js 合成事件（与其他模块一致），
+    // 确保在 Fabric 内部处理完事件后才接收，避免原生 DOM 事件与
+    // Fabric.js 内部 __onMouseDown 同时处理同一事件导致的状态冲突
+    canvas.on('mouse:down', this._boundMouseDown);
+    canvas.on('mouse:move', this._boundMouseMove);
+    canvas.on('mouse:up', this._boundMouseUp);
+    canvas.on('mouse:out', this._boundMouseOut);
 
     eventBus.emit('module:activated', 'shape');
   }
@@ -71,10 +77,12 @@ class ShapeModule extends BaseModule {
   deactivate() {
     const canvas = this.canvasManager.canvas;
     if (canvas) {
-      canvas.upperCanvasEl?.removeEventListener('mousedown', this._boundMouseDown);
-      canvas.upperCanvasEl?.removeEventListener('mousemove', this._boundMouseMove);
-      canvas.upperCanvasEl?.removeEventListener('mouseup', this._boundMouseUp);
-      canvas.upperCanvasEl?.removeEventListener('mouseout', this._boundMouseOut);
+      canvas.off('mouse:down', this._boundMouseDown);
+      canvas.off('mouse:move', this._boundMouseMove);
+      canvas.off('mouse:up', this._boundMouseUp);
+      canvas.off('mouse:out', this._boundMouseOut);
+      // 重置 skipTargetFind，避免影响后续工具（如 SelectModule）
+      canvas.skipTargetFind = false;
       this._removePreviewShape();
       this._isDrawing = false;
       this._startPoint = null;
@@ -283,12 +291,14 @@ class ShapeModule extends BaseModule {
   }
 
   _onMouseDown(e) {
-    if (e.button !== 0) return;
+    // Fabric.js 合成事件：e.e 是原生 DOM 事件，e.pointer 是画布坐标
+    const nativeEvent = e?.e;
+    if (nativeEvent && typeof nativeEvent.button === 'number' && nativeEvent.button !== 0) return;
 
     const canvas = this.canvasManager.canvas;
     if (!canvas) return;
 
-    const pointer = canvas.getPointer(e);
+    const pointer = e.pointer || canvas.getPointer(nativeEvent);
     this._isDrawing = true;
     this._startPoint = { x: pointer.x, y: pointer.y };
     this.history.saveState();
@@ -301,7 +311,7 @@ class ShapeModule extends BaseModule {
     const canvas = this.canvasManager.canvas;
     if (!canvas) return;
 
-    const pointer = canvas.getPointer(e);
+    const pointer = e.pointer || canvas.getPointer(e.e);
     const endPoint = { x: pointer.x, y: pointer.y };
 
     // 移除旧的预览形状
@@ -322,7 +332,7 @@ class ShapeModule extends BaseModule {
     const canvas = this.canvasManager.canvas;
     if (!canvas) return;
 
-    const pointer = canvas.getPointer(e);
+    const pointer = e.pointer || canvas.getPointer(e.e);
     const endPoint = { x: pointer.x, y: pointer.y };
 
     // 移除预览形状
