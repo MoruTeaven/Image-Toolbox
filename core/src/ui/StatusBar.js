@@ -1,4 +1,4 @@
-import { eventBus } from '../../../../core/src/index.js';
+import { eventBus } from '../index.js';
 
 /**
  * Status bar UI component.

@@ -1,5 +1,5 @@
-import { eventBus } from '../../../../core/src/index.js';
-import { escapeHTML, escapeAttr } from '../../../../core/src/utils/helpers.js';
+import { eventBus } from '../index.js';
+import { escapeHTML, escapeAttr } from '../utils/helpers.js';
 
 /**
  * Toolbar UI component.

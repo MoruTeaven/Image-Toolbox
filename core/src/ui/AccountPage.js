@@ -1,8 +1,8 @@
-import { eventBus } from '../../../../core/src/index.js';
+import { eventBus } from '../index.js';
 import { SIDE_PANEL_LAYOUT_KEY, SIDE_PANEL_LAYOUTS } from './SidePanelTabs.js';
-import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../../../../core/src/utils/theme.js';
-import { updateCategories, updateRecords, PLATFORMS } from '../../../../core/src/updateRecords.js';
-import { escapeHTML, escapeAttr } from '../../../../core/src/utils/helpers.js';
+import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../utils/theme.js';
+import { updateCategories, updateRecords, PLATFORMS } from '../updateRecords.js';
+import { escapeHTML, escapeAttr } from '../utils/helpers.js';
 
 /**
  * 获取当前平台标识
@@ -278,6 +278,7 @@ class AccountPage {
     const appVersion = this._getCurrentVersion();
     const hostName = this._getHostName();
     const hostVersion = this._getHostVersion();
+    const qqUrl = this._getContactUrl();
 
     return `
       <div class="account-about">
@@ -320,7 +321,7 @@ class AccountPage {
                 <em>me@moruteaven.com</em>
               </span>
             </a>
-            <a class="account-about__contact" href="https://qm.qq.com/q/xdx9hstuGA" data-external-url="https://qm.qq.com/q/xdx9hstuGA">
+            <a class="account-about__contact" href="${this._escapeAttr(qqUrl)}" data-external-url="${this._escapeAttr(qqUrl)}">
               <span class="account-about__contact-icon">Q</span>
               <span>
                 <strong>QQ 交流群</strong>
@@ -546,6 +547,16 @@ class AccountPage {
 
   _getHostName() {
     return this._host?.platform?.name || this._host?.getHostName?.() || 'uTools';
+  }
+
+  _getContactUrl() {
+    try {
+      const url = this._host?.getContactUrl?.();
+      if (url) return url;
+    } catch (e) {
+      console.warn('[AccountPage] 获取联系方式失败:', e);
+    }
+    return 'https://qm.qq.com/q/Nzn12S22e6';
   }
 
   _getInitial(name) {

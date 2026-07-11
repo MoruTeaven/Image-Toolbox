@@ -1,6 +1,6 @@
-import { eventBus } from '../../../../core/src/index.js';
-import { getFontOptionsHTML, recordFontUsage, isSystemFontsLoaded, onSystemFontsLoaded } from '../../../../core/src/utils/fonts.js';
-import { clamp, escapeHTML, escapeAttr } from '../../../../core/src/utils/helpers.js';
+import { eventBus } from '../index.js';
+import { getFontOptionsHTML, recordFontUsage, isSystemFontsLoaded, onSystemFontsLoaded } from '../utils/fonts.js';
+import { clamp, escapeHTML, escapeAttr } from '../utils/helpers.js';
 
 /**
  * Property panel UI component.

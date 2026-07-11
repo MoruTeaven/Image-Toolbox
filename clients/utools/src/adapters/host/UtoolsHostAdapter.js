@@ -284,6 +284,10 @@ class UtoolsHostAdapter {
     return normalizeUtoolsUser(getRawUser(this._api));
   }
 
+  getContactUrl() {
+    return 'https://qm.qq.com/q/Nzn12S22e6';
+  }
+
   fetchUserServerTemporaryToken() {
     if (this._api && typeof this._api.fetchUserServerTemporaryToken === 'function') {
       return this._api.fetchUserServerTemporaryToken();

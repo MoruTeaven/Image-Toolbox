@@ -1,5 +1,5 @@
-import { eventBus } from '../../../../core/src/index.js';
-import { FILTER_RANGES, FILTER_PRESETS, getFilterUiValue, setFilter, clearFilters, applyFilterPreset, isPresetActive } from '../../../../core/src/utils/filters.js';
+import { eventBus } from '../index.js';
+import { FILTER_RANGES, FILTER_PRESETS, getFilterUiValue, setFilter, clearFilters, applyFilterPreset, isPresetActive } from '../utils/filters.js';
 
 /**
  * 调色面板 — 侧栏「调色」Tab

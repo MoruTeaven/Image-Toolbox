@@ -1,4 +1,4 @@
-import { eventBus } from '../../../../core/src/index.js';
+import { eventBus } from '../index.js';
 
 const SIDE_PANEL_TAB_KEY = 'image-toolbox-side-panel-tab';
 export const SIDE_PANEL_LAYOUT_KEY = 'image-toolbox-side-panel-layout';

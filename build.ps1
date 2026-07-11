@@ -56,9 +56,9 @@ function Test-BuildOutput {
     $ok = $true
     $checkPaths = @(
         (Join-Path $Target "src\*.js"),
-        (Join-Path $Target "src\ui\*.js"),
         (Join-Path $Target "src\adapters\host\*.js"),
         (Join-Path $Target "core\src\*.js"),
+        (Join-Path $Target "core\src\ui\*.js"),
         (Join-Path $Target "core\src\modules\*.js"),
         (Join-Path $Target "core\src\utils\*.js")
     )

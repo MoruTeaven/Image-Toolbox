@@ -287,6 +287,10 @@ class ZtoolsHostAdapter {
     return normalizeZtoolsUser(getRawUser(this._api));
   }
 
+  getContactUrl() {
+    return 'https://qm.qq.com/q/xdx9hstuGA';
+  }
+
   fetchUserServerTemporaryToken() {
     if (this._api && typeof this._api.fetchUserServerTemporaryToken === 'function') {
       return this._api.fetchUserServerTemporaryToken();

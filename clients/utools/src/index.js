@@ -10,18 +10,18 @@ import {
   ToolManager,
 } from '../../../core/src/runtime/fabric.js';
 
-import Toolbar from './ui/Toolbar.js';
-import OptionsBar from './ui/OptionsBar.js';
-import SidePanelTabs from './ui/SidePanelTabs.js';
-import PropertyPanel from './ui/PropertyPanel.js';
-import LayerPanel from './ui/LayerPanel.js';
-import StatusBar from './ui/StatusBar.js';
+import Toolbar from '../../../core/src/ui/Toolbar.js';
+import OptionsBar from '../../../core/src/ui/OptionsBar.js';
+import SidePanelTabs from '../../../core/src/ui/SidePanelTabs.js';
+import PropertyPanel from '../../../core/src/ui/PropertyPanel.js';
+import LayerPanel from '../../../core/src/ui/LayerPanel.js';
+import StatusBar from '../../../core/src/ui/StatusBar.js';
 import AccountPage, {
   EDITOR_BARS_LAYOUT_KEY,
   EDITOR_BARS_LAYOUTS,
   EDITOR_SIDE_PANEL_POSITION_KEY,
   EDITOR_SIDE_PANEL_POSITIONS,
-} from './ui/AccountPage.js';
+} from '../../../core/src/ui/AccountPage.js';
 import UtoolsHostAdapter from './adapters/host/UtoolsHostAdapter.js';
 import { initTheme } from '../../../core/src/utils/theme.js';
 
