@@ -1,16 +1,7 @@
 import eventBus from './EventBus.js';
+import { CANVAS_DEFAULTS } from './utils/constants.js';
 
 const CLIP_PATH_SERIALIZED_PROPS = ['clipPath', 'absolutePositioned', 'inverted'];
-
-const DEFAULT_CANVAS_OPTIONS = {
-  width: 800,
-  height: 600,
-  backgroundColor: '#d2d6d9',
-  preserveObjectStacking: true,
-  selection: true,
-  stopContextMenu: true,
-  fireRightClick: true,
-};
 
 /**
  * 画布管理器 — 封装 Fabric.js 画布的创建、配置和基础操作
@@ -39,7 +30,16 @@ class CanvasManager {
       throw new Error(`[CanvasManager] 找不到画布元素 #${this._canvasElId}`);
     }
 
-    const config = { ...DEFAULT_CANVAS_OPTIONS, ...options };
+    const config = {
+      width: CANVAS_DEFAULTS.WIDTH,
+      height: CANVAS_DEFAULTS.HEIGHT,
+      backgroundColor: CANVAS_DEFAULTS.BACKGROUND_COLOR,
+      preserveObjectStacking: CANVAS_DEFAULTS.PRESERVE_OBJECT_STACKING,
+      selection: CANVAS_DEFAULTS.SELECTION,
+      stopContextMenu: CANVAS_DEFAULTS.STOP_CONTEXT_MENU,
+      fireRightClick: CANVAS_DEFAULTS.FIRE_RIGHT_CLICK,
+      ...options,
+    };
     this.canvas = new fabric.Canvas(this._canvasElId, config);
     this._bindEvents();
     this._updateCanvasSize();
@@ -415,6 +415,25 @@ class CanvasManager {
   isPointInCanvas(point) {
     return point.x >= 0 && point.x <= this.canvas.width
         && point.y >= 0 && point.y <= this.canvas.height;
+  }
+
+  /**
+   * 刷新动态马赛克（由 MosaicModule 注入）
+   * 此方法在 MosaicModule 激活时设置回调，避免直接依赖模块
+   * @param {function():void} callback
+   */
+  setRefreshDynamicMosaics(callback) {
+    this._refreshDynamicMosaics = callback;
+  }
+
+  /**
+   * 调用动态马赛克刷新回调
+   * @param {object} options
+   */
+  refreshDynamicMosaics(options) {
+    if (typeof this._refreshDynamicMosaics === 'function') {
+      this._refreshDynamicMosaics(options);
+    }
   }
 
   // ── 内部方法 ──

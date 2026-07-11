@@ -1,5 +1,21 @@
 export const updateRecords = [
   {
+    version: '2.4',
+    date: '2026-07-11',
+    changes: {
+      added: [],
+      fixed: [
+        { text: '修复 ZTools 平台错误使用 uTools 宿主适配器导致的功能异常', platforms: ['ztools'] }
+      ],
+      improved: [
+        { text: '优化马赛克图层拖动时的动态重算性能，减少拖动卡顿', platforms: null },
+        { text: '内部代码重构：消除约 2300 行重复代码、提取跨平台共享模块、添加代码规范检查', platforms: null }
+      ],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
     version: '2.3.1',
     date: '2026-07-09',
     changes: {

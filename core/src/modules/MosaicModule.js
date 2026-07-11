@@ -43,6 +43,7 @@ class MosaicModule extends BaseModule {
     this._boundObjectMoving = this._onObjectMoving.bind(this);
     this._refreshingDynamicMosaic = false;
     this._eventBusUnsubscribers = [];
+    this._refreshDynamicRafId = null;
 
     this._bindDynamicMosaicEvents();
   }
@@ -80,7 +81,8 @@ class MosaicModule extends BaseModule {
       eventBus.on('mosaic:refreshDynamic', () => this.refreshDynamicMosaics({ render: true }))
     );
 
-    this.canvasManager.refreshDynamicMosaics = (options = {}) => this.refreshDynamicMosaics(options);
+    // 通过正式方法注册回调，而非动态注入
+    this.canvasManager.setRefreshDynamicMosaics((options) => this.refreshDynamicMosaics(options));
   }
 
   // ── 生命周期 ──
@@ -126,9 +128,8 @@ class MosaicModule extends BaseModule {
     }
     this._eventBusUnsubscribers.forEach(unsub => unsub());
     this._eventBusUnsubscribers = [];
-    if (this.canvasManager.refreshDynamicMosaics) {
-      delete this.canvasManager.refreshDynamicMosaics;
-    }
+    // 清除动态马赛克回调
+    this.canvasManager.setRefreshDynamicMosaics(null);
   }
 
   // ── 参数设置 ──
@@ -759,15 +760,26 @@ class MosaicModule extends BaseModule {
   }
 
   _onObjectMoving(e) {
+    if (this._refreshingDynamicMosaic) return;
+
     const targets = this._getDynamicMosaicTargets(e.target);
     if (targets.length === 0) return;
 
-    this._refreshingDynamicMosaic = true;
-    try {
-      targets.forEach(obj => this._refreshDynamicMosaicOverlay(obj, { render: false }));
-    } finally {
-      this._refreshingDynamicMosaic = false;
+    // 使用 RAF 防抖，避免在拖动过程中频繁重算
+    if (this._refreshDynamicRafId) {
+      cancelAnimationFrame(this._refreshDynamicRafId);
     }
+
+    this._refreshDynamicRafId = requestAnimationFrame(() => {
+      this._refreshDynamicRafId = null;
+      this._refreshingDynamicMosaic = true;
+      try {
+        targets.forEach(obj => this._refreshDynamicMosaicOverlay(obj, { render: false }));
+        this._requestRender();
+      } finally {
+        this._refreshingDynamicMosaic = false;
+      }
+    });
   }
 
   _getDynamicMosaicTargets(target) {

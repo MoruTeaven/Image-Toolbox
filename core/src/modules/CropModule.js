@@ -1,6 +1,13 @@
-﻿import BaseModule from './BaseModule.js';
+import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { clamp, requestRender as _requestRender, createClipPathFromSource } from '../utils/helpers.js';
+import { CROP_RATIOS } from '../utils/constants.js';
+
+// 将 CROP_RATIOS 映射为 id → ratio 的快速查找表
+const CROP_RATIO_MAP = {};
+for (const ratio of CROP_RATIOS) {
+  CROP_RATIO_MAP[ratio.id] = ratio.w === null ? null : { w: ratio.w, h: ratio.h };
+}
 
 /**
  * 剪切模块 — 图片裁剪
@@ -102,19 +109,8 @@ class CropModule extends BaseModule {
   applyPreset(presetName) {
     if (this.applyShapePreset(presetName)) return;
 
-    const ratioMap = {
-      'crop-ratio-free': null,
-      'crop-ratio-1-1': { w: 1, h: 1 },
-      'crop-ratio-3-2': { w: 3, h: 2 },
-      'crop-ratio-2-3': { w: 2, h: 3 },
-      'crop-ratio-3-4': { w: 3, h: 4 },
-      'crop-ratio-4-3': { w: 4, h: 3 },
-      'crop-ratio-16-9': { w: 16, h: 9 },
-      'crop-ratio-9-16': { w: 9, h: 16 },
-    };
-
-    if (!Object.prototype.hasOwnProperty.call(ratioMap, presetName)) return;
-    this.setAspectRatio(ratioMap[presetName]);
+    if (!(presetName in CROP_RATIO_MAP)) return;
+    this.setAspectRatio(CROP_RATIO_MAP[presetName]);
   }
 
   applyShapePreset(presetName) {
@@ -667,20 +663,17 @@ class CropModule extends BaseModule {
   getOptionsBarHTML() {
     const ratio = this.options.aspectRatio;
     const shape = this._getCropShape();
+    const ratioButtons = CROP_RATIOS.map(r => {
+      const isActive = r.w === null ? !ratio : ratio && ratio.w === r.w && ratio.h === r.h;
+      return `<button class="options-btn options-btn-sm ${isActive ? 'active' : ''}" data-preset="${r.id}">${r.label}</button>`;
+    }).join('');
     return `
       <div class="options-group">
         <button class="options-btn options-btn-sm ${shape === 'rect' ? 'active' : ''}" data-preset="crop-shape-rect">矩形</button>
         <button class="options-btn options-btn-sm ${shape === 'ellipse' ? 'active' : ''}" data-preset="crop-shape-ellipse">椭圆/圆形</button>
       </div>
       <div class="options-group">
-        <button class="options-btn options-btn-sm ${!ratio ? 'active' : ''}" data-preset="crop-ratio-free">自由比例</button>
-        <button class="options-btn options-btn-sm ${ratio && ratio.w === 1 && ratio.h === 1 ? 'active' : ''}" data-preset="crop-ratio-1-1">1:1</button>
-        <button class="options-btn options-btn-sm ${ratio && ratio.w === 3 && ratio.h === 2 ? 'active' : ''}" data-preset="crop-ratio-3-2">3:2</button>
-        <button class="options-btn options-btn-sm ${ratio && ratio.w === 2 && ratio.h === 3 ? 'active' : ''}" data-preset="crop-ratio-2-3">2:3</button>
-        <button class="options-btn options-btn-sm ${ratio && ratio.w === 3 && ratio.h === 4 ? 'active' : ''}" data-preset="crop-ratio-3-4">3:4</button>
-        <button class="options-btn options-btn-sm ${ratio && ratio.w === 4 && ratio.h === 3 ? 'active' : ''}" data-preset="crop-ratio-4-3">4:3</button>
-        <button class="options-btn options-btn-sm ${ratio && ratio.w === 16 && ratio.h === 9 ? 'active' : ''}" data-preset="crop-ratio-16-9">16:9</button>
-        <button class="options-btn options-btn-sm ${ratio && ratio.w === 9 && ratio.h === 16 ? 'active' : ''}" data-preset="crop-ratio-9-16">9:16</button>
+        ${ratioButtons}
       </div>
     `;
   }
@@ -721,14 +714,11 @@ class CropModule extends BaseModule {
       <div class="property-item property-item--wide">
         <label>比例</label>
         <select class="property-select property-select--short" data-module-prop="aspectRatio" data-refresh-property="true">
-          <option value="free" ${!ratio ? 'selected' : ''}>自由</option>
-          <option value="1:1" ${ratio && ratio.w === 1 && ratio.h === 1 ? 'selected' : ''}>1:1</option>
-          <option value="3:2" ${ratio && ratio.w === 3 && ratio.h === 2 ? 'selected' : ''}>3:2</option>
-          <option value="2:3" ${ratio && ratio.w === 2 && ratio.h === 3 ? 'selected' : ''}>2:3</option>
-          <option value="3:4" ${ratio && ratio.w === 3 && ratio.h === 4 ? 'selected' : ''}>3:4</option>
-          <option value="4:3" ${ratio && ratio.w === 4 && ratio.h === 3 ? 'selected' : ''}>4:3</option>
-          <option value="16:9" ${ratio && ratio.w === 16 && ratio.h === 9 ? 'selected' : ''}>16:9</option>
-          <option value="9:16" ${ratio && ratio.w === 9 && ratio.h === 16 ? 'selected' : ''}>9:16</option>
+          ${CROP_RATIOS.map(r => {
+            const value = r.w === null ? 'free' : `${r.w}:${r.h}`;
+            const isActive = r.w === null ? !ratio : ratio && ratio.w === r.w && ratio.h === r.h;
+            return `<option value="${value}" ${isActive ? 'selected' : ''}>${r.label}</option>`;
+          }).join('')}
         </select>
       </div>
       <div class="property-actions">
