@@ -1,5 +1,6 @@
 import { eventBus } from '../index.js';
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
+import { TOOLBAR_LABELS_VISIBLE_KEY, TOOLBAR_LABELS_VISIBLE } from './AccountPage.js';
 
 /**
  * Toolbar UI component.
@@ -30,6 +31,7 @@ class Toolbar {
 
     this._render();
     this._bindEvents();
+    this._applyLabelsVisibility();
   }
 
   _render() {
@@ -130,8 +132,22 @@ class Toolbar {
       }),
       eventBus.on('history:changed', ({ canUndo, canRedo }) => {
         this._updateHistoryButtons(canUndo, canRedo);
+      }),
+      eventBus.on('toolbar:labelsVisibilityChanged', (value) => {
+        this._applyLabelsVisibility(value);
       })
     );
+  }
+
+  _getLabelsVisible() {
+    const saved = localStorage.getItem(TOOLBAR_LABELS_VISIBLE_KEY);
+    return saved === TOOLBAR_LABELS_VISIBLE.OFF ? TOOLBAR_LABELS_VISIBLE.OFF : TOOLBAR_LABELS_VISIBLE.ON;
+  }
+
+  _applyLabelsVisibility(value) {
+    const resolved = value || this._getLabelsVisible();
+    if (!this._el) return;
+    this._el.classList.toggle('toolbar--labels-hidden', resolved === TOOLBAR_LABELS_VISIBLE.OFF);
   }
 
   _updateHistoryButtons(canUndo, canRedo) {

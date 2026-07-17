@@ -198,6 +198,19 @@ html, body {
   white-space: nowrap;
 }
 
+.toolbar--labels-hidden .toolbar__btn {
+  width: 36px;
+  height: 36px;
+}
+
+.toolbar--labels-hidden .toolbar__btn span {
+  display: none;
+}
+
+.toolbar--labels-hidden .toolbar__separator {
+  width: 28px;
+}
+
 .toolbar__separator {
   width: 36px;
   height: 1px;
@@ -1179,7 +1192,7 @@ html, body {
   background: #a8b0b5;
   color: var(--text-preset-fill, var(--color-text));
   border-color: #8a949a;
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.15;
   -webkit-text-stroke: 0.45px var(--text-preset-stroke, transparent);
