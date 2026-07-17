@@ -1,5 +1,18 @@
 export const updateRecords = [
   {
+    version: '2.3.2',
+    date: '2026-07-17',
+    changes: {
+      added: [],
+      fixed: [
+        { text: '修复使用调色工具调整滤镜滑块后无法撤销的问题', platforms: null }
+      ],
+      improved: [],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
     version: '2.3.1',
     date: '2026-07-17',
     changes: {
