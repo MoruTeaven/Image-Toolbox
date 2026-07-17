@@ -183,8 +183,11 @@ class ShapeModule extends BaseModule {
           <span class="shape-picker-trigger__arrow">▾</span>
         </button>
       </div>
-      <div class="options-group">
-        ${colorPresets}
+      <div class="options-group options-group--scrollable shape-style-group">
+        <span class="options-group__label">预设</span>
+        <div class="shape-style-scroll">
+          ${colorPresets}
+        </div>
       </div>
       <div class="options-group">
         <button class="options-btn options-btn-sm ${strokeWidth === 1 ? 'active' : ''}" data-preset="shape-width-thin">细</button>

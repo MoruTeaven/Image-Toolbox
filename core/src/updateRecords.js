@@ -7,7 +7,9 @@ export const updateRecords = [
       fixed: [
         { text: '修复使用调色工具调整滤镜滑块后无法撤销的问题', platforms: null }
       ],
-      improved: [],
+      improved: [
+        { text: '图形工具配色预设栏增加「预设」父标签，预设颜色在标签内可左右滑动，粗细按钮固定在右侧不被压缩', platforms: null }
+      ],
       adjusted: [],
       removed: []
     }

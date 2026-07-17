@@ -887,7 +887,8 @@ html, body {
   flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* 选项栏控件 */
@@ -898,6 +899,46 @@ html, body {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+/* 可横向滑动的选项组：左右两侧的控件保持固定，中间此组自动压缩并内部滑动 */
+.options-group--scrollable {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.options-group__label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-right: 2px;
+}
+
+.shape-style-scroll {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  scrollbar-width: thin;
+}
+
+.shape-style-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.shape-style-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.shape-style-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 2px;
 }
 
 .options-label {

@@ -67,8 +67,30 @@ class OptionsBar {
     const module = this._tm.getCurrentModule();
     if (module && typeof module.getOptionsBarHTML === 'function') {
       controlsEl.innerHTML = module.getOptionsBarHTML();
+      this._scrollActiveShapePresetIntoView(controlsEl);
     } else {
       controlsEl.innerHTML = '';
+    }
+  }
+
+  /**
+   * 图形工具配色预设可横向滑动，重渲染后把当前选中的预设滚到可视区，
+   * 避免点击后滚动位置被重置导致激活项不可见。
+   */
+  _scrollActiveShapePresetIntoView(container) {
+    const scrollEl = container.querySelector('.shape-style-scroll');
+    if (!scrollEl) return;
+    const activeBtn = scrollEl.querySelector('.shape-style-btn.active');
+    if (!activeBtn) return;
+
+    const scrollRect = scrollEl.getBoundingClientRect();
+    const btnRect = activeBtn.getBoundingClientRect();
+    const margin = 8;
+
+    if (btnRect.left < scrollRect.left + margin) {
+      scrollEl.scrollLeft -= (scrollRect.left + margin - btnRect.left);
+    } else if (btnRect.right > scrollRect.right - margin) {
+      scrollEl.scrollLeft += (btnRect.right - (scrollRect.right - margin));
     }
   }
 
