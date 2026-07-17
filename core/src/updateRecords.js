@@ -5,7 +5,8 @@ export const updateRecords = [
     changes: {
       added: [],
       fixed: [
-        { text: '修复使用调色工具调整滤镜滑块后无法撤销的问题', platforms: null }
+        { text: '修复使用调色工具调整滤镜滑块后无法撤销的问题', platforms: null },
+        { text: '修复调色面板销毁时未清理 DOM 事件监听器导致的内存泄漏问题', platforms: null }
       ],
       improved: [
         { text: '图形工具配色预设栏支持左右滑动查看更多配色，粗细按钮固定在右侧不被压缩', platforms: null },
