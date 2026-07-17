@@ -56,6 +56,16 @@ class OptionsBar {
     this._el.addEventListener('click', (e) => {
       this._handleControlEvent(e);
     });
+
+    // 鼠标悬停在配色预设滑动区时，滚轮转为横向滚动
+    this._el.addEventListener('wheel', (e) => {
+      const scrollEl = e.target.closest('.shape-style-scroll');
+      if (!scrollEl) return;
+      // 仅在纵向滚轮占主导时接管（触控板原生横向滚动不拦截）
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      e.preventDefault();
+      scrollEl.scrollLeft += e.deltaY;
+    }, { passive: false });
   }
 
   _updateControls() {

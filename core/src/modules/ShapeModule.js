@@ -184,7 +184,6 @@ class ShapeModule extends BaseModule {
         </button>
       </div>
       <div class="options-group options-group--scrollable shape-style-group">
-        <span class="options-group__label">预设</span>
         <div class="shape-style-scroll">
           ${colorPresets}
         </div>

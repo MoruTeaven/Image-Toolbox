@@ -8,7 +8,7 @@ export const updateRecords = [
         { text: '修复使用调色工具调整滤镜滑块后无法撤销的问题', platforms: null }
       ],
       improved: [
-        { text: '图形工具配色预设栏增加「预设」父标签，预设颜色在标签内可左右滑动，粗细按钮固定在右侧不被压缩', platforms: null },
+        { text: '图形工具配色预设栏支持左右滑动查看更多配色，粗细按钮固定在右侧不被压缩', platforms: null },
         { text: '优化应用滤镜预设时的性能，批量设置时只重算一次滤镜，响应更迅速', platforms: null }
       ],
       adjusted: [],
