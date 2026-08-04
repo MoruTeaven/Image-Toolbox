@@ -5,6 +5,7 @@ export const updateRecords = [
     changes: {
       added: [
         { text: '左侧工具栏支持展开/收起', platforms: null },
+        { text: '图形工具新增菱形图形', platforms: null },
         { text: '新增「接入统一账号系统」功能', platforms: null }
       ],
       fixed: [
