@@ -4,7 +4,7 @@ export const updateRecords = [
     date: '2026-08-04',
     changes: {
       added: [
-        { text: '左侧工具栏支持展开/收起，展开后图标和文字并排显示，并在头像旁展示昵称', platforms: null },
+        { text: '左侧工具栏支持展开/收起', platforms: null },
         { text: '新增「接入统一账号系统」功能', platforms: null }
       ],
       fixed: [

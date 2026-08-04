@@ -1,6 +1,6 @@
 import { eventBus } from '../index.js';
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
-import { TOOLBAR_LABELS_VISIBLE_KEY, TOOLBAR_LABELS_VISIBLE, TOOLBAR_COLLAPSED_KEY, TOOLBAR_COLLAPSED } from './AccountPage.js';
+import { TOOLBAR_LABELS_VISIBLE_KEY, TOOLBAR_LABELS_VISIBLE, TOOLBAR_COLLAPSED_KEY, TOOLBAR_COLLAPSED, TOOLBAR_TOGGLE_VISIBLE_KEY, TOOLBAR_TOGGLE_VISIBLE } from './AccountPage.js';
 import IdentityClient from '../identity/IdentityClient.js';
 
 /**
@@ -39,6 +39,7 @@ class Toolbar {
     this._bindEvents();
     this._applyLabelsVisibility();
     this._applyToolbarState();
+    this._applyToggleVisible();
     this._loadProfileIfAuthenticated();
   }
 
@@ -156,6 +157,9 @@ class Toolbar {
       eventBus.on('toolbar:collapsedChanged', (value) => {
         this._applyToolbarState(value);
       }),
+      eventBus.on('toolbar:toggleVisibleChanged', (value) => {
+        this._applyToggleVisible(value);
+      }),
       // 账户页登录 / 登出 / 资料更新后，同步刷新侧栏头像
       eventBus.on('account:profileChanged', () => {
         this._loadProfileIfAuthenticated();
@@ -192,6 +196,17 @@ class Toolbar {
       toggleBtn.setAttribute('aria-label', isExpanded ? '收起侧栏' : '展开侧栏');
       toggleBtn.innerHTML = isExpanded ? this._icons.collapse : this._icons.expand;
     }
+  }
+
+  _getToggleVisible() {
+    const saved = localStorage.getItem(TOOLBAR_TOGGLE_VISIBLE_KEY);
+    return saved === TOOLBAR_TOGGLE_VISIBLE.OFF ? TOOLBAR_TOGGLE_VISIBLE.OFF : TOOLBAR_TOGGLE_VISIBLE.ON;
+  }
+
+  _applyToggleVisible(value) {
+    const resolved = value || this._getToggleVisible();
+    if (!this._el) return;
+    this._el.classList.toggle('toolbar--toggle-hidden', resolved === TOOLBAR_TOGGLE_VISIBLE.OFF);
   }
 
   _toggleCollapsed() {

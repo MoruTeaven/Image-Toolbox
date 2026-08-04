@@ -300,6 +300,11 @@ html, body {
   height: 16px;
 }
 
+/* 隐藏展开/收起按钮 */
+.toolbar--toggle-hidden .toolbar__toggle {
+  display: none;
+}
+
 /* ── 展开状态：水平布局 ── */
 .toolbar--expanded {
   align-items: stretch;

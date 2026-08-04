@@ -52,10 +52,17 @@ export const TOOLBAR_COLLAPSED = {
   COLLAPSED: 'collapsed',
 };
 
+export const TOOLBAR_TOGGLE_VISIBLE_KEY = 'image-toolbox-toolbar-toggle-visible';
+export const TOOLBAR_TOGGLE_VISIBLE = {
+  ON: 'on',
+  OFF: 'off',
+};
+
 const VALID_EDITOR_BARS_LAYOUTS = new Set(Object.values(EDITOR_BARS_LAYOUTS));
 const VALID_EDITOR_SIDE_PANEL_POSITIONS = new Set(Object.values(EDITOR_SIDE_PANEL_POSITIONS));
 const VALID_TOOLBAR_LABELS_VISIBLE = new Set(Object.values(TOOLBAR_LABELS_VISIBLE));
 const VALID_TOOLBAR_COLLAPSED = new Set(Object.values(TOOLBAR_COLLAPSED));
+const VALID_TOOLBAR_TOGGLE_VISIBLE = new Set(Object.values(TOOLBAR_TOGGLE_VISIBLE));
 
 /**
  * Account page UI component.
@@ -206,6 +213,13 @@ class AccountPage {
       const toolbarCollapsed = this._closest(e.target, '[data-toolbar-collapsed]')?.getAttribute('data-toolbar-collapsed');
       if (toolbarCollapsed) {
         this._setToolbarCollapsed(toolbarCollapsed);
+        this._render();
+        return;
+      }
+
+      const toolbarToggleVisible = this._closest(e.target, '[data-toolbar-toggle-visible]')?.getAttribute('data-toolbar-toggle-visible');
+      if (toolbarToggleVisible) {
+        this._setToolbarToggleVisible(toolbarToggleVisible);
         this._render();
         return;
       }
@@ -387,6 +401,7 @@ class AccountPage {
     const editorSidePanelPosition = this._getEditorSidePanelPosition();
     const toolbarLabels = this._getToolbarLabelsVisible();
     const toolbarCollapsed = this._getToolbarCollapsed();
+    const toolbarToggleVisible = this._getToolbarToggleVisible();
     return `
       <div class="account-card">
         <div class="account-card__label">外观</div>
@@ -446,6 +461,16 @@ class AccountPage {
         <div class="account-page__theme-row">
           <button class="account-page__theme-choice ${toolbarCollapsed === TOOLBAR_COLLAPSED.EXPANDED ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-collapsed="${TOOLBAR_COLLAPSED.EXPANDED}">展开</button>
           <button class="account-page__theme-choice ${toolbarCollapsed === TOOLBAR_COLLAPSED.COLLAPSED ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-collapsed="${TOOLBAR_COLLAPSED.COLLAPSED}">收起</button>
+        </div>
+      </div>
+
+      <div class="account-card">
+        <div class="account-card__label">编辑器</div>
+        <div class="account-card__value">侧栏展开/收起按钮</div>
+        <p>选择是否在侧栏顶部显示展开/收起切换按钮。关闭后仍可在设置中切换侧栏状态。</p>
+        <div class="account-page__theme-row">
+          <button class="account-page__theme-choice ${toolbarToggleVisible === TOOLBAR_TOGGLE_VISIBLE.ON ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-toggle-visible="${TOOLBAR_TOGGLE_VISIBLE.ON}">显示按钮</button>
+          <button class="account-page__theme-choice ${toolbarToggleVisible === TOOLBAR_TOGGLE_VISIBLE.OFF ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-toggle-visible="${TOOLBAR_TOGGLE_VISIBLE.OFF}">隐藏按钮</button>
         </div>
       </div>
     `;
@@ -704,6 +729,13 @@ class AccountPage {
     eventBus.emit('toolbar:collapsedChanged', value);
   }
 
+  _setToolbarToggleVisible(value) {
+    if (!VALID_TOOLBAR_TOGGLE_VISIBLE.has(value)) return;
+
+    localStorage.setItem(TOOLBAR_TOGGLE_VISIBLE_KEY, value);
+    eventBus.emit('toolbar:toggleVisibleChanged', value);
+  }
+
   _getSidePanelLayout() {
     const saved = localStorage.getItem(SIDE_PANEL_LAYOUT_KEY);
     return Object.values(SIDE_PANEL_LAYOUTS).includes(saved) ? saved : SIDE_PANEL_LAYOUTS.TABS;
@@ -727,6 +759,11 @@ class AccountPage {
   _getToolbarCollapsed() {
     const saved = localStorage.getItem(TOOLBAR_COLLAPSED_KEY);
     return VALID_TOOLBAR_COLLAPSED.has(saved) ? saved : TOOLBAR_COLLAPSED.COLLAPSED;
+  }
+
+  _getToolbarToggleVisible() {
+    const saved = localStorage.getItem(TOOLBAR_TOGGLE_VISIBLE_KEY);
+    return VALID_TOOLBAR_TOGGLE_VISIBLE.has(saved) ? saved : TOOLBAR_TOGGLE_VISIBLE.ON;
   }
 
   _getHostUser() {
