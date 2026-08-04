@@ -38,7 +38,7 @@ class Toolbar {
     this._render();
     this._bindEvents();
     this._applyLabelsVisibility();
-    this._applyCollapsedState();
+    this._applyToolbarState();
     this._loadProfileIfAuthenticated();
   }
 
@@ -90,8 +90,8 @@ class Toolbar {
     `;
 
     this._el.innerHTML = `
-      <button class="toolbar__toggle" data-action="toggle-collapse" title="收起侧栏" aria-label="收起侧栏">
-        ${this._icons.collapse}
+      <button class="toolbar__toggle" data-action="toggle-collapse" title="展开侧栏" aria-label="展开侧栏">
+        ${this._icons.expand}
       </button>
       <div class="toolbar__tools">${toolsHtml}</div>
       <div class="toolbar__footer">${footerHtml}</div>
@@ -154,7 +154,7 @@ class Toolbar {
         this._applyLabelsVisibility(value);
       }),
       eventBus.on('toolbar:collapsedChanged', (value) => {
-        this._applyCollapsedState(value);
+        this._applyToolbarState(value);
       }),
       // 账户页登录 / 登出 / 资料更新后，同步刷新侧栏头像
       eventBus.on('account:profileChanged', () => {
@@ -176,15 +176,22 @@ class Toolbar {
 
   _getCollapsed() {
     const saved = localStorage.getItem(TOOLBAR_COLLAPSED_KEY);
-    return saved === TOOLBAR_COLLAPSED.COLLAPSED ? TOOLBAR_COLLAPSED.COLLAPSED : TOOLBAR_COLLAPSED.EXPANDED;
+    return saved === TOOLBAR_COLLAPSED.EXPANDED ? TOOLBAR_COLLAPSED.EXPANDED : TOOLBAR_COLLAPSED.COLLAPSED;
   }
 
-  _applyCollapsedState(value) {
+  _applyToolbarState(value) {
     const resolved = value || this._getCollapsed();
     if (!this._el) return;
-    const isCollapsed = resolved === TOOLBAR_COLLAPSED.COLLAPSED;
-    document.getElementById('app')?.classList.toggle('app--toolbar-collapsed', isCollapsed);
-    this._updateExpandButton(isCollapsed);
+    const isExpanded = resolved === TOOLBAR_COLLAPSED.EXPANDED;
+    this._el.classList.toggle('toolbar--expanded', isExpanded);
+    document.getElementById('app')?.classList.toggle('app--toolbar-expanded', isExpanded);
+
+    const toggleBtn = this._el.querySelector('.toolbar__toggle');
+    if (toggleBtn) {
+      toggleBtn.title = isExpanded ? '收起侧栏' : '展开侧栏';
+      toggleBtn.setAttribute('aria-label', isExpanded ? '收起侧栏' : '展开侧栏');
+      toggleBtn.innerHTML = isExpanded ? this._icons.collapse : this._icons.expand;
+    }
   }
 
   _toggleCollapsed() {
@@ -194,21 +201,6 @@ class Toolbar {
       : TOOLBAR_COLLAPSED.COLLAPSED;
     localStorage.setItem(TOOLBAR_COLLAPSED_KEY, next);
     eventBus.emit('toolbar:collapsedChanged', next);
-  }
-
-  _updateExpandButton(isCollapsed) {
-    if (isCollapsed && !this._expandBtn) {
-      this._expandBtn = document.createElement('button');
-      this._expandBtn.className = 'toolbar-expand-btn';
-      this._expandBtn.title = '展开侧栏';
-      this._expandBtn.setAttribute('aria-label', '展开侧栏');
-      this._expandBtn.innerHTML = this._icons.expand;
-      this._expandBtn.addEventListener('click', () => this._toggleCollapsed());
-      document.getElementById('app')?.appendChild(this._expandBtn);
-    } else if (!isCollapsed && this._expandBtn) {
-      this._expandBtn.remove();
-      this._expandBtn = null;
-    }
   }
 
   _updateHistoryButtons(canUndo, canRedo) {
@@ -239,11 +231,13 @@ class Toolbar {
   _renderAccount() {
     const { name, avatar, initial } = this._getAccountView();
     const title = this._escapeAttr(name);
+    const nameHtml = `<span class="toolbar__account-name">${this._escapeHTML(name)}</span>`;
 
     if (avatar) {
       return `
         <button class="toolbar__account" type="button" title="${title}" aria-label="打开账户页">
           <img class="toolbar__avatar toolbar__avatar-img" src="${this._escapeAttr(avatar)}" alt="${title}" data-initial="${this._escapeAttr(initial)}" draggable="false">
+          ${nameHtml}
         </button>
       `;
     }
@@ -251,6 +245,7 @@ class Toolbar {
     return `
       <button class="toolbar__account" type="button" title="${title}" aria-label="打开账户页">
         <div class="toolbar__avatar toolbar__avatar--fallback">${this._escapeHTML(initial)}</div>
+        ${nameHtml}
       </button>
     `;
   }
@@ -336,8 +331,6 @@ class Toolbar {
   destroy() {
     this._eventBusUnsubscribers.forEach(unsub => unsub());
     this._eventBusUnsubscribers = [];
-    this._expandBtn?.remove();
-    this._expandBtn = null;
   }
 }
 

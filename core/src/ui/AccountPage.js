@@ -442,7 +442,7 @@ class AccountPage {
       <div class="account-card">
         <div class="account-card__label">编辑器</div>
         <div class="account-card__value">侧栏展开/收起</div>
-        <p>收起左侧工具栏可以获得更大的画布空间，收起后仍可通过快捷键或浮动按钮重新展开。</p>
+        <p>展开后侧栏图标和文字并排显示，并在头像旁展示昵称；收起后仅显示图标和简短文字，更节省空间。</p>
         <div class="account-page__theme-row">
           <button class="account-page__theme-choice ${toolbarCollapsed === TOOLBAR_COLLAPSED.EXPANDED ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-collapsed="${TOOLBAR_COLLAPSED.EXPANDED}">展开</button>
           <button class="account-page__theme-choice ${toolbarCollapsed === TOOLBAR_COLLAPSED.COLLAPSED ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-collapsed="${TOOLBAR_COLLAPSED.COLLAPSED}">收起</button>
@@ -726,7 +726,7 @@ class AccountPage {
 
   _getToolbarCollapsed() {
     const saved = localStorage.getItem(TOOLBAR_COLLAPSED_KEY);
-    return VALID_TOOLBAR_COLLAPSED.has(saved) ? saved : TOOLBAR_COLLAPSED.EXPANDED;
+    return VALID_TOOLBAR_COLLAPSED.has(saved) ? saved : TOOLBAR_COLLAPSED.COLLAPSED;
   }
 
   _getHostUser() {

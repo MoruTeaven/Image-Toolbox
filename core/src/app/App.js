@@ -538,17 +538,17 @@ class App {
 
   _getToolbarCollapsed() {
     const saved = localStorage.getItem(TOOLBAR_COLLAPSED_KEY);
-    return Object.values(TOOLBAR_COLLAPSED).includes(saved) ? saved : TOOLBAR_COLLAPSED.EXPANDED;
+    return Object.values(TOOLBAR_COLLAPSED).includes(saved) ? saved : TOOLBAR_COLLAPSED.COLLAPSED;
   }
 
   _applyToolbarCollapsed(value) {
     const normalized = Object.values(TOOLBAR_COLLAPSED).includes(value)
       ? value
-      : TOOLBAR_COLLAPSED.EXPANDED;
+      : TOOLBAR_COLLAPSED.COLLAPSED;
 
     document.getElementById('app')?.classList.toggle(
-      'app--toolbar-collapsed',
-      normalized === TOOLBAR_COLLAPSED.COLLAPSED
+      'app--toolbar-expanded',
+      normalized === TOOLBAR_COLLAPSED.EXPANDED
     );
   }
 }
