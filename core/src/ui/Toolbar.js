@@ -1,6 +1,7 @@
 import { eventBus } from '../index.js';
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
-import { TOOLBAR_LABELS_VISIBLE_KEY, TOOLBAR_LABELS_VISIBLE } from './AccountPage.js';
+import { TOOLBAR_LABELS_VISIBLE_KEY, TOOLBAR_LABELS_VISIBLE, TOOLBAR_COLLAPSED_KEY, TOOLBAR_COLLAPSED } from './AccountPage.js';
+import IdentityClient from '../identity/IdentityClient.js';
 
 /**
  * Toolbar UI component.
@@ -13,6 +14,9 @@ class Toolbar {
     this._host = host;
     this._currentTool = 'select';
     this._user = this._getHostUser();
+    this._identity = new IdentityClient();
+    this._profile = null;
+    this._profileLoading = false;
     this._eventBusUnsubscribers = [];
 
     // SVG 图标模板
@@ -27,11 +31,15 @@ class Toolbar {
       shape: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8"/><circle cx="16" cy="7" r="4"/><polygon points="3,16 8,12 12,16"/><circle cx="16" cy="18" r="3"/></svg>`,
       undo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>`,
       redo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>`,
+      collapse: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>`,
+      expand: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>`,
     };
 
     this._render();
     this._bindEvents();
     this._applyLabelsVisibility();
+    this._applyCollapsedState();
+    this._loadProfileIfAuthenticated();
   }
 
   _render() {
@@ -82,6 +90,9 @@ class Toolbar {
     `;
 
     this._el.innerHTML = `
+      <button class="toolbar__toggle" data-action="toggle-collapse" title="收起侧栏" aria-label="收起侧栏">
+        ${this._icons.collapse}
+      </button>
       <div class="toolbar__tools">${toolsHtml}</div>
       <div class="toolbar__footer">${footerHtml}</div>
     `;
@@ -89,6 +100,12 @@ class Toolbar {
 
   _bindEvents() {
     this._el.addEventListener('click', (e) => {
+      const toggleBtn = e.target.closest('[data-action="toggle-collapse"]');
+      if (toggleBtn) {
+        this._toggleCollapsed();
+        return;
+      }
+
       const account = e.target.closest('.toolbar__account');
       if (account) {
         eventBus.emit('account:open');
@@ -135,6 +152,13 @@ class Toolbar {
       }),
       eventBus.on('toolbar:labelsVisibilityChanged', (value) => {
         this._applyLabelsVisibility(value);
+      }),
+      eventBus.on('toolbar:collapsedChanged', (value) => {
+        this._applyCollapsedState(value);
+      }),
+      // 账户页登录 / 登出 / 资料更新后，同步刷新侧栏头像
+      eventBus.on('account:profileChanged', () => {
+        this._loadProfileIfAuthenticated();
       })
     );
   }
@@ -148,6 +172,43 @@ class Toolbar {
     const resolved = value || this._getLabelsVisible();
     if (!this._el) return;
     this._el.classList.toggle('toolbar--labels-hidden', resolved === TOOLBAR_LABELS_VISIBLE.OFF);
+  }
+
+  _getCollapsed() {
+    const saved = localStorage.getItem(TOOLBAR_COLLAPSED_KEY);
+    return saved === TOOLBAR_COLLAPSED.COLLAPSED ? TOOLBAR_COLLAPSED.COLLAPSED : TOOLBAR_COLLAPSED.EXPANDED;
+  }
+
+  _applyCollapsedState(value) {
+    const resolved = value || this._getCollapsed();
+    if (!this._el) return;
+    const isCollapsed = resolved === TOOLBAR_COLLAPSED.COLLAPSED;
+    document.getElementById('app')?.classList.toggle('app--toolbar-collapsed', isCollapsed);
+    this._updateExpandButton(isCollapsed);
+  }
+
+  _toggleCollapsed() {
+    const current = this._getCollapsed();
+    const next = current === TOOLBAR_COLLAPSED.COLLAPSED
+      ? TOOLBAR_COLLAPSED.EXPANDED
+      : TOOLBAR_COLLAPSED.COLLAPSED;
+    localStorage.setItem(TOOLBAR_COLLAPSED_KEY, next);
+    eventBus.emit('toolbar:collapsedChanged', next);
+  }
+
+  _updateExpandButton(isCollapsed) {
+    if (isCollapsed && !this._expandBtn) {
+      this._expandBtn = document.createElement('button');
+      this._expandBtn.className = 'toolbar-expand-btn';
+      this._expandBtn.title = '展开侧栏';
+      this._expandBtn.setAttribute('aria-label', '展开侧栏');
+      this._expandBtn.innerHTML = this._icons.expand;
+      this._expandBtn.addEventListener('click', () => this._toggleCollapsed());
+      document.getElementById('app')?.appendChild(this._expandBtn);
+    } else if (!isCollapsed && this._expandBtn) {
+      this._expandBtn.remove();
+      this._expandBtn = null;
+    }
   }
 
   _updateHistoryButtons(canUndo, canRedo) {
@@ -176,10 +237,7 @@ class Toolbar {
   }
 
   _renderAccount() {
-    const user = this._user || {};
-    const name = user.nickname || user.name || user.userName || user.username || `${this._getHostName()} 用户`;
-    const avatar = user.avatar || user.avatarUrl || user.photo || '';
-    const initial = this._getInitial(name);
+    const { name, avatar, initial } = this._getAccountView();
     const title = this._escapeAttr(name);
 
     if (avatar) {
@@ -195,6 +253,50 @@ class Toolbar {
         <div class="toolbar__avatar toolbar__avatar--fallback">${this._escapeHTML(initial)}</div>
       </button>
     `;
+  }
+
+  /**
+   * 计算侧栏左下角头像视图。
+   * 登录平台账号时优先使用平台头像，否则回退到宿主用户信息。
+   */
+  _getAccountView() {
+    // 平台账号已登录 → 使用平台档案
+    if (this._identity.isAuthenticated()) {
+      const profile = this._profile || {};
+      const name = profile.nickname || '我的账户';
+      const avatar = profile.avatar || '';
+      return { name, avatar, initial: this._getInitial(name) };
+    }
+
+    // 未登录平台账号 → 使用宿主用户信息
+    const user = this._user || {};
+    const name = user.nickname || user.name || user.userName || user.username || `${this._getHostName()} 用户`;
+    const avatar = user.avatar || user.avatarUrl || user.photo || '';
+    return { name, avatar, initial: this._getInitial(name) };
+  }
+
+  /**
+   * 平台已登录时拉取用户档案，用于侧栏头像展示。
+   */
+  async _loadProfileIfAuthenticated() {
+    if (!this._identity.isAuthenticated()) {
+      // 退出登录后清空平台档案，回退到宿主用户头像
+      if (this._profile) {
+        this._profile = null;
+        this._render();
+      }
+      return;
+    }
+
+    this._profileLoading = true;
+    try {
+      this._profile = await this._identity.getProfile();
+    } catch (e) {
+      console.warn('[Toolbar] 加载平台用户档案失败:', e);
+      this._profile = null;
+    }
+    this._profileLoading = false;
+    this._render();
   }
 
   _getHostUser() {
@@ -234,6 +336,8 @@ class Toolbar {
   destroy() {
     this._eventBusUnsubscribers.forEach(unsub => unsub());
     this._eventBusUnsubscribers = [];
+    this._expandBtn?.remove();
+    this._expandBtn = null;
   }
 }
 

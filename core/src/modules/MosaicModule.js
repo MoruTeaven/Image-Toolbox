@@ -246,6 +246,10 @@ class MosaicModule extends BaseModule {
       strokeDashArray: [4, 3],
       selectable: false,
       evented: false,
+      excludeFromExport: true,
+      excludeFromLayer: true,
+      excludeFromProperty: true,
+      excludeFromHistory: true,
     });
     this.canvasManager.canvas.add(this._selectionRect);
   }
@@ -310,6 +314,10 @@ class MosaicModule extends BaseModule {
       selectable: false,
       evented: false,
       objectCaching: false,
+      excludeFromExport: true,
+      excludeFromLayer: true,
+      excludeFromProperty: true,
+      excludeFromHistory: true,
     });
     this.canvasManager.canvas.add(this._lassoPreview);
     this.canvasManager.canvas.renderAll();
@@ -445,6 +453,10 @@ class MosaicModule extends BaseModule {
         selectable: false,
         evented: false,
         objectCaching: false,
+        excludeFromExport: true,
+        excludeFromLayer: true,
+        excludeFromProperty: true,
+        excludeFromHistory: true,
       });
       this.canvasManager.canvas.add(this._brushPreview);
     } else {

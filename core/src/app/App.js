@@ -24,6 +24,8 @@ import AccountPage, {
   EDITOR_BARS_LAYOUTS,
   EDITOR_SIDE_PANEL_POSITION_KEY,
   EDITOR_SIDE_PANEL_POSITIONS,
+  TOOLBAR_COLLAPSED_KEY,
+  TOOLBAR_COLLAPSED,
 } from '../ui/AccountPage.js';
 import { initTheme } from '../utils/theme.js';
 
@@ -64,6 +66,7 @@ class App {
       initTheme();
       this._applyEditorBarsLayout(this._getEditorBarsLayout());
       this._applyEditorSidePanelPosition(this._getEditorSidePanelPosition());
+      this._applyToolbarCollapsed(this._getToolbarCollapsed());
 
       // 1. 初始化画布管理器
       this.canvasManager = new CanvasManager('fabric-canvas');
@@ -277,6 +280,10 @@ class App {
 
     eventBus.on('editorSidePanel:positionChanged', (position) => {
       this._applyEditorSidePanelPosition(position);
+    });
+
+    eventBus.on('toolbar:collapsedChanged', (value) => {
+      this._applyToolbarCollapsed(value);
     });
 
     // ═══ 快捷键 ═══
@@ -526,6 +533,22 @@ class App {
     document.getElementById('app')?.classList.toggle(
       'app--panel-left',
       normalized === EDITOR_SIDE_PANEL_POSITIONS.LEFT
+    );
+  }
+
+  _getToolbarCollapsed() {
+    const saved = localStorage.getItem(TOOLBAR_COLLAPSED_KEY);
+    return Object.values(TOOLBAR_COLLAPSED).includes(saved) ? saved : TOOLBAR_COLLAPSED.EXPANDED;
+  }
+
+  _applyToolbarCollapsed(value) {
+    const normalized = Object.values(TOOLBAR_COLLAPSED).includes(value)
+      ? value
+      : TOOLBAR_COLLAPSED.EXPANDED;
+
+    document.getElementById('app')?.classList.toggle(
+      'app--toolbar-collapsed',
+      normalized === TOOLBAR_COLLAPSED.COLLAPSED
     );
   }
 }
