@@ -2,7 +2,7 @@
   "name": "image-toolbox",
   "title": "图片工具箱",
   "description": "马赛克、剪切、加字等图片编辑功能",
-  "version": "2.2.1",
+  "version": "2.4",
   "main": "src/index.html",
   "logo": "logo.png",
   "preload": "preload.js",

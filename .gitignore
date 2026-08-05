@@ -2,6 +2,7 @@
 /node_modules/
 /agents.md
 /.workbuddy/
+/.wrangler/
 
 # Architecture documents (not tracked)
 CORE_ARCHITECTURE.md
