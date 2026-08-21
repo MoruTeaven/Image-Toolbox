@@ -250,21 +250,56 @@ const _getFontNameFromBuffer = (buffer, filePath) => {
 
 const _getSystemFontsWindows = () => {
   try {
-    const fontsDir = path.join(process.env.WINDIR || 'C:\\Windows', 'Fonts');
-    if (!fs.existsSync(fontsDir)) return [];
-    const fonts = new Set();
-    const files = fs.readdirSync(fontsDir);
-    for (const file of files) {
-      const ext = path.extname(file).toLowerCase();
-      if (FONT_EXTENSIONS.has(ext)) {
-        const fullPath = path.join(fontsDir, file);
-        const fontBuffer = _readBuffer(fullPath);
-        if (fontBuffer) {
-          const name = _getFontNameFromBuffer(fontBuffer, fullPath);
-          if (name && !fonts.has(name)) {
-            fonts.add(name);
+    // 使用 PowerShell 读取注册表中的已安装字体名称，比逐个解析字体文件快得多
+    const psScript = `
+      $fonts = @()
+      $regKeys = @(
+        'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts',
+        'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Fonts',
+        'HKCU:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts',
+        'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Fonts'
+      )
+      foreach ($key in $regKeys) {
+        if (Test-Path $key) {
+          $reg = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue
+          if ($reg) {
+            foreach ($prop in $reg.PSObject.Properties) {
+              if ($prop.Name -notmatch '^PS') {
+                $name = $prop.Name -replace '\\s*\\(TrueType\\)\\s*$',''
+                $name = $name -replace '\\s*\\(OpenType\\)\\s*$',''
+                $name = $name -replace '\\s*\\(Regular\\)\\s*$',''
+                $name = $name -replace '\\s*\\(Bold\\)\\s*$',''
+                $name = $name -replace '\\s*\\(Italic\\)\\s*$',''
+                $name = $name -replace '\\s*\\(Bold Italic\\)\\s*$',''
+                $name = $name -replace '\\s*\\(Light\\)\\s*$',''
+                $name = $name -replace '\\s*\\(Medium\\)\\s*$',''
+                $name = $name -replace '\\s*\\(Semibold\\)\\s*$',''
+                $name = $name -replace '\\s*\\(Black\\)\\s*$',''
+                $name = $name -replace '\\s*\\(Thin\\)\\s*$',''
+                $name = $name -replace '\\s*\\(ExtraBold\\)\\s*$',''
+                $name = $name -replace '\\s*\\(Condensed\\)\\s*$',''
+                $name = $name -replace '\\s*\\(Extended\\)\\s*$',''
+                $name = $name.Trim()
+                if ($name) { $fonts += $name }
+              }
+            }
           }
         }
+      }
+      $fonts | Select-Object -Unique
+    `;
+    const result = execSync(psScript, {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      timeout: 10000,
+      shell: 'powershell.exe',
+    });
+    const fonts = new Set();
+    const lines = result.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed && trimmed.length > 0) {
+        fonts.add(trimmed);
       }
     }
     return Array.from(fonts);
