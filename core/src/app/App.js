@@ -50,6 +50,9 @@ class App {
     this.accountPage = null;
     this.hostAdapter = null;
     this._destroyed = false;
+    this._boundGlobalListeners = null;
+    this._externalSourceTimer = null;
+    this._onPluginEnterCallback = null;
 
     this._init();
   }
@@ -153,12 +156,12 @@ class App {
     // ═══ 图片导入 ═══
 
     // 拖拽导入
-    document.addEventListener('dragover', (e) => {
+    const onDragOver = (e) => {
       e.preventDefault();
       e.stopPropagation();
-    });
+    };
 
-    document.addEventListener('drop', (e) => {
+    const onDrop = (e) => {
       e.preventDefault();
       e.stopPropagation();
 
@@ -169,10 +172,10 @@ class App {
           this._loadImage(file);
         }
       }
-    });
+    };
 
     // 粘贴导入
-    document.addEventListener('paste', (e) => {
+    const onPaste = (e) => {
       const items = e.clipboardData?.items;
       if (!items) return;
 
@@ -185,7 +188,7 @@ class App {
           break;
         }
       }
-    });
+    };
 
     // 文件选择对话框（宿主 API）
     document.getElementById('welcome-btn')?.addEventListener('click', () => {
@@ -231,16 +234,6 @@ class App {
       this.canvasManager?.resetZoom();
       this._updateZoomLabel();
     });
-
-    // 滚轮缩放（以鼠标位置为中心）
-    document.getElementById('canvas-area')?.addEventListener('wheel', (e) => {
-      if (!this.canvasManager?.canvas) return;
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.05 : 0.05;
-      const pointer = this.canvasManager.canvas.getPointer(e);
-      this.canvasManager.zoomIn(delta, new fabric.Point(pointer.x, pointer.y));
-      this._updateZoomLabel();
-    }, { passive: false });
 
     eventBus.on('canvas:zoomIn', () => {
       this.canvasManager?.zoomIn();
@@ -289,7 +282,7 @@ class App {
     });
 
     // ═══ 快捷键 ═══
-    document.addEventListener('keydown', (e) => {
+    const onKeyDown = (e) => {
       // Ctrl+Z 撤销
       if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
         e.preventDefault();
@@ -331,7 +324,26 @@ class App {
           this.toolManager?.activateTool(tool.name);
         }
       }
-    });
+    };
+
+    // ═══ 滚轮缩放 ═══
+    const onWheel = (e) => {
+      if (!this.canvasManager?.canvas) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.05 : 0.05;
+      const pointer = this.canvasManager.canvas.getPointer(e);
+      this.canvasManager.zoomIn(delta, new fabric.Point(pointer.x, pointer.y));
+      this._updateZoomLabel();
+    };
+
+    // 注册所有全局监听器并保存引用以便销毁时移除
+    document.addEventListener('dragover', onDragOver);
+    document.addEventListener('drop', onDrop);
+    document.addEventListener('paste', onPaste);
+    document.addEventListener('keydown', onKeyDown);
+    document.getElementById('canvas-area')?.addEventListener('wheel', onWheel, { passive: false });
+
+    this._boundGlobalListeners = { onDragOver, onDrop, onPaste, onKeyDown, onWheel };
 
     // ═══ 画布操作后自动保存历史 ═══
     eventBus.on('canvas:objectModified', (target) => {
@@ -361,7 +373,7 @@ class App {
     // preload.js 已在插件加载时注册了 onPluginEnter，将首次进入的图片
     // payload 暂存到 window.__imageSource，由 _checkExternalSource() 拾取。
     // 此处重新注册 onPluginEnter 处理后续进入（覆盖 preload 中的回调）。
-    this.hostAdapter?.onPluginEnter(({ code, type, payload, from }) => {
+    this._onPluginEnterCallback = ({ code, type, payload, from }) => {
       console.log('[App] onPluginEnter:', { code, type, from, payload });
       if (code === 'image-edit') {
         const source = this._getExternalImageSource(type, payload);
@@ -372,16 +384,17 @@ class App {
           }
           this._loadImage(source);
         } else if (type === 'img' && window.__imageSource) {
-          const source = window.__imageSource;
-          if (source) {
+          const fallbackSource = window.__imageSource;
+          if (fallbackSource) {
             window.__imageSource = null;
-            this._loadImage(source);
+            this._loadImage(fallbackSource);
           }
         }
 
         this.hostAdapter?.setWindowHeight(560);
       }
-    });
+    };
+    this.hostAdapter?.onPluginEnter(this._onPluginEnterCallback);
   }
 
   destroy() {
@@ -391,6 +404,22 @@ class App {
     if (this._saveTimer) {
       clearTimeout(this._saveTimer);
       this._saveTimer = null;
+    }
+
+    if (this._externalSourceTimer) {
+      clearTimeout(this._externalSourceTimer);
+      this._externalSourceTimer = null;
+    }
+
+    // 移除全局事件监听器
+    if (this._boundGlobalListeners) {
+      const { onDragOver, onDrop, onPaste, onKeyDown, onWheel } = this._boundGlobalListeners;
+      document.removeEventListener('dragover', onDragOver);
+      document.removeEventListener('drop', onDrop);
+      document.removeEventListener('paste', onPaste);
+      document.removeEventListener('keydown', onKeyDown);
+      document.getElementById('canvas-area')?.removeEventListener('wheel', onWheel);
+      this._boundGlobalListeners = null;
     }
 
     [
@@ -478,9 +507,8 @@ class App {
   }
 
   _checkExternalSource() {
-    let attempts = 0;
-    const maxAttempts = 30;
-
+    // 使用事件驱动 + 轮询降级：先检查是否已有图片源，
+    // 如果没有则设置一个更长的轮询窗口（10s），等待 preload 回调写入。
     const check = () => {
       if (window.__imageSource) {
         const source = window.__imageSource;
@@ -491,15 +519,21 @@ class App {
         }
         return;
       }
-      attempts++;
-      if (attempts < maxAttempts) {
-        setTimeout(check, 100);
-      } else {
-        console.log('[App] _checkExternalSource 超时（3s），未发现外部图片源');
-      }
+      // 继续等待，直到超时
+      this._externalSourceTimer = setTimeout(check, 200);
     };
 
-    setTimeout(check, 100);
+    // 先等待 100ms 再开始检查，给 preload 回调留出时间
+    this._externalSourceTimer = setTimeout(check, 100);
+
+    // 安全兜底：10 秒后清理定时器
+    setTimeout(() => {
+      if (this._externalSourceTimer) {
+        clearTimeout(this._externalSourceTimer);
+        this._externalSourceTimer = null;
+        console.log('[App] _checkExternalSource 超时（10s），未发现外部图片源');
+      }
+    }, 10000);
   }
 
   _updateZoomLabel() {

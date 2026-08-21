@@ -5,10 +5,15 @@ export const updateRecords = [
     changes: {
       added: [],
       fixed: [
-        { text: '修复通过功能指令（右键图片编辑、拖入图片文件等）进入插件时图片无法加载的问题', platforms: ['utools', 'ztools'] }
+        { text: '修复通过功能指令（右键图片编辑、拖入图片文件等）进入插件时图片无法加载的问题', platforms: ['utools', 'ztools'] },
+        { text: '修复部分字体名称显示不正确的问题', platforms: null },
+        { text: '修复 Windows 平台无法获取系统字体列表的问题', platforms: ['utools', 'ztools'] },
+        { text: '修复大图片加载时可能超时失败的问题', platforms: ['utools', 'ztools'] },
+        { text: '修复重复进入插件时图片可能无法加载的问题', platforms: ['utools', 'ztools'] }
       ],
       improved: [
-        { text: '滚轮缩放改为以鼠标位置为中心进行缩放', platforms: null }
+        { text: '滚轮缩放改为以鼠标位置为中心进行缩放', platforms: null },
+        { text: '图片加载超时反馈更快', platforms: null }
       ],
       adjusted: [],
       removed: []

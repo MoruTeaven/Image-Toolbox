@@ -75,7 +75,7 @@ class CanvasManager {
    * @param {string|File} source - URL / DataURL / File 对象
    * @returns {Promise<fabric.Image>}
    */
-  loadImage(source) {
+    loadImage(source) {
     return new Promise((resolve, reject) => {
       if (!this.canvas) {
         reject(new Error('画布未初始化'));
@@ -84,8 +84,8 @@ class CanvasManager {
 
       // 超时保护：防止 fabric.Image.fromURL 永远不回调
       const timeout = setTimeout(() => {
-        reject(new Error('图片加载超时（30s），可能是格式不支持'));
-      }, 30000);
+        reject(new Error('图片加载超时（15s），可能是格式不支持或文件过大'));
+      }, 15000);
 
       /**
        * fabric.Image.fromURL 回调签名: function(fabricImage, isError)

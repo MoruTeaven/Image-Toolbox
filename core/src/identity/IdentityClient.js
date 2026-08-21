@@ -15,6 +15,15 @@ const DEFAULT_API_BASE = 'https://api.image-toolbox.moruteaven.com';
 const DEFAULT_CLIENT_ID = 'image-toolbox';
 const TOKEN_KEY = 'image_toolbox_tokens';
 
+// 简单的 Base64 编码/解码，用于降低 localStorage 中 token 的明文可见性
+// 注意：这不是加密，仅做轻量混淆以防 XSS 直接读取明文 token
+const _encode = (str) => {
+  try { return btoa(unescape(encodeURIComponent(str))); } catch { return str; }
+};
+const _decode = (str) => {
+  try { return decodeURIComponent(escape(atob(str))); } catch { return str; }
+};
+
 class IdentityClient {
   constructor(options = {}) {
     this.identityBaseUrl = (options.identityBaseUrl || DEFAULT_IDENTITY_BASE).replace(/\/+$/, '');
@@ -31,7 +40,8 @@ class IdentityClient {
     try {
       const raw = localStorage.getItem(this.tokenKey);
       if (!raw) return null;
-      const parsed = JSON.parse(raw);
+      const decoded = _decode(raw);
+      const parsed = JSON.parse(decoded);
       if (parsed && typeof parsed.accessToken === 'string' && typeof parsed.refreshToken === 'string') {
         return parsed;
       }
@@ -40,7 +50,8 @@ class IdentityClient {
   }
 
   _setTokens(tokens) {
-    localStorage.setItem(this.tokenKey, JSON.stringify(tokens));
+    const encoded = _encode(JSON.stringify(tokens));
+    localStorage.setItem(this.tokenKey, encoded);
   }
 
   _clearTokens() {
