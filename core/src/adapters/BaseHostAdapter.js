@@ -239,8 +239,8 @@ class BaseHostAdapter {
    */
   pickImage() {
     if (typeof window !== 'undefined' && typeof window.showOpenImageDialog === 'function') {
-      const result = window.showOpenImageDialog();
-      const filePath = Array.isArray(result) ? result[0] : result?.filePaths?.[0];
+      // showOpenImageDialog 返回文件路径字符串或 null
+      const filePath = window.showOpenImageDialog();
       return filePath ? this.readImageFile(filePath) : null;
     }
     return null;

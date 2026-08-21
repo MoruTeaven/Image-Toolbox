@@ -190,9 +190,10 @@ class App {
     // 文件选择对话框（宿主 API）
     document.getElementById('welcome-btn')?.addEventListener('click', () => {
       if (typeof window.showOpenImageDialog === 'function') {
-        const result = window.showOpenImageDialog();
-        if (result && result.length > 0) {
-          const dataURL = window.readImageFile(result[0]);
+        // showOpenImageDialog 返回文件路径字符串或 null
+        const filePath = window.showOpenImageDialog();
+        if (filePath) {
+          const dataURL = window.readImageFile(filePath);
           if (dataURL) {
             this._loadImage(dataURL);
           }
