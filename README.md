@@ -4,6 +4,8 @@
 
 当前版本：**v2.4.1**
 
+项目官网：[https://image-toolbox.moruteaven.com](https://image-toolbox.moruteaven.com)
+
 ## 功能一览
 
 | 工具 | 快捷键 | 说明 |
@@ -26,7 +28,7 @@
 |------|------|------|
 | uTools | ✅ 已上线 | 支持「图片编辑」关键词、拖拽图片、文件右键进入 |
 | ZTools | ✅ 已上线 | 与 uTools 功能对等，按 ZTools 插件规范独立加载 |
-| Web | ✅ 已部署 | 部署在 Cloudflare Pages，浏览器直接使用 |
+| Web | ✅ 已上线 | 浏览器直接使用 |
 
 ## 架构
 
