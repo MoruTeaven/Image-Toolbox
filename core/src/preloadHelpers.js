@@ -252,6 +252,8 @@ const _getSystemFontsWindows = () => {
   try {
     // 使用 PowerShell 读取注册表中的已安装字体名称，比逐个解析字体文件快得多
     const psScript = `
+      [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+      $OutputEncoding = [System.Text.Encoding]::UTF8
       $fonts = @()
       $regKeys = @(
         'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts',
