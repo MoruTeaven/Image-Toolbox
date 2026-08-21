@@ -589,7 +589,7 @@ class AccountPage {
    }
 
    /**
-    * 渲染单个更新项，处理平台限制标记
+    * 渲染单个更新项（仅展示文本内容，不展示平台标签）
     */
    _renderChangeItem(item) {
      // 兼容旧格式（字符串）
@@ -597,26 +597,9 @@ class AccountPage {
        return `<li>${this._escapeHTML(item)}</li>`;
      }
 
-     // 新格式（对象）
+     // 新格式（对象）— 仅展示文本，平台过滤已在 _renderChangeGroup 中完成
      const text = item.text || '';
-     const platforms = item.platforms;
-     const currentPlatform = getCurrentPlatform();
-
-     // 如果有平台限制且当前不是所有平台，添加平台标签
-     let badge = '';
-     if (Array.isArray(platforms) && platforms.length > 0 && platforms.length < 3) {
-       const platformLabels = {
-         'utools': 'uTools',
-         'ztools': 'ZTools',
-         'local': '本地环境'
-       };
-       const labels = platforms.map(p => platformLabels[p] || p).join('/');
-       const isCurrentPlatform = shouldShowForCurrentPlatform(platforms);
-       const badgeClass = isCurrentPlatform ? 'update-item__platform-badge--current' : 'update-item__platform-badge--other';
-       badge = `<span class="update-item__platform-badge ${badgeClass}">${this._escapeHTML(labels)}</span>`;
-     }
-
-     return `<li><span class="update-item__text">${this._escapeHTML(text)}</span>${badge}</li>`;
+     return `<li>${this._escapeHTML(text)}</li>`;
    }
 
   _renderAvatar(className) {
