@@ -356,6 +356,9 @@ class App {
     });
 
     // ═══ 插件重复进入 ═══
+    // preload.js 已在插件加载时注册了 onPluginEnter，将首次进入的图片
+    // payload 暂存到 window.__imageSource，由 _checkExternalSource() 拾取。
+    // 此处重新注册 onPluginEnter 处理后续进入（覆盖 preload 中的回调）。
     this.hostAdapter?.onPluginEnter(({ code, type, payload, from }) => {
       console.log('[App] onPluginEnter:', { code, type, from, payload });
       if (code === 'image-edit') {

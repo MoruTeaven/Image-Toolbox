@@ -1,5 +1,18 @@
 export const updateRecords = [
   {
+    version: '2.4.1',
+    date: '2026-08-21',
+    changes: {
+      added: [],
+      fixed: [
+        { text: '修复通过功能指令（右键图片编辑、拖入图片文件等）进入插件时图片无法加载的问题', platforms: ['utools', 'ztools'] }
+      ],
+      improved: [],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
     version: '2.4',
     date: '2026-08-04',
     changes: {

@@ -94,4 +94,43 @@ if (typeof window !== 'undefined') {
     }
     return null;
   };
+
+  // ═══════════════════════════════════════════════════════════════
+  // 在 preload 阶段注册 onPluginEnter
+  //
+  // uTools/zTools 通过功能指令（cmds）进入插件时，onPluginEnter 事件
+  // 在 preload.js 执行后就会触发。如果此时没有注册回调，事件会丢失。
+  // 因此必须在 preload 阶段就注册回调，将图片 payload 解析后暂存到
+  // window.__imageSource，供 App._checkExternalSource() 拾取。
+  // 同时保留 window.__pluginEnterAction 供 App.js 重新注册回调后使用。
+  // ═══════════════════════════════════════════════════════════════
+
+  window.__pluginEnterAction = null;
+
+  const api = getHostTools();
+  if (api && typeof api.onPluginEnter === 'function') {
+    api.onPluginEnter((action) => {
+      console.log(`[${PLATFORM_NAME} preload] onPluginEnter:`, action);
+
+      // 保存最新的 enter action，供 App.js 重新注册后使用
+      window.__pluginEnterAction = action;
+
+      if (action.code === 'image-edit') {
+        const source = window.getImageSourceFromPluginPayload
+          ? window.getImageSourceFromPluginPayload(action.type, action.payload)
+          : null;
+
+        if (source) {
+          window.__imageSource = source;
+        } else if (action.type === 'img' && window.__imageSource) {
+          // 已有图片源，保持不变
+        }
+
+        // 设置窗口高度
+        if (api && typeof api.setExpendHeight === 'function') {
+          api.setExpendHeight(560);
+        }
+      }
+    });
+  }
 }

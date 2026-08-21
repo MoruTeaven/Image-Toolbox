@@ -323,7 +323,7 @@ const _extractFontName = (nameTableData) => {
 // ── 公共初始化函数 ──
 
 const initPreload = (platform) => {
-  if (typeof window === 'undefined' || !window.require) return;
+  if (typeof window === 'undefined') return;
 
   // 设置公共 API
   window.getPluginPath = () => {
@@ -677,6 +677,11 @@ const setupMiscAPIs = (platform) => {
 
   window.getImageSourceFromPluginPayload = (type, payload) => {
     if (type === 'img' && payload) {
+      // uTools img 匹配指令进入时，payload 是 dataURL 字符串
+      if (typeof payload === 'string' && payload.startsWith('data:')) {
+        return payload;
+      }
+      // 兼容 payload 为对象数组的情况
       const imgPayload = Array.isArray(payload) ? payload : [payload];
       for (const item of imgPayload) {
         const dataURL = (item && typeof item === 'object') ? item.dataURL || item.dataUrl || item.base64 || item.content : null;
