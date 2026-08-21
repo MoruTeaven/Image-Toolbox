@@ -251,12 +251,12 @@ class CanvasManager {
     eventBus.emit('canvas:zoomChanged', this.zoomLevel);
   }
 
-  zoomIn(step = 0.1) {
-    this.setZoom(this.zoomLevel + step);
+  zoomIn(step = 0.1, point) {
+    this.setZoom(this.zoomLevel + step, point);
   }
 
-  zoomOut(step = 0.1) {
-    this.setZoom(this.zoomLevel - step);
+  zoomOut(step = 0.1, point) {
+    this.setZoom(this.zoomLevel - step, point);
   }
 
   resetZoom() {

@@ -7,7 +7,9 @@ export const updateRecords = [
       fixed: [
         { text: '修复通过功能指令（右键图片编辑、拖入图片文件等）进入插件时图片无法加载的问题', platforms: ['utools', 'ztools'] }
       ],
-      improved: [],
+      improved: [
+        { text: '滚轮缩放改为以鼠标位置为中心进行缩放', platforms: null }
+      ],
       adjusted: [],
       removed: []
     }

@@ -231,12 +231,13 @@ class App {
       this._updateZoomLabel();
     });
 
-    // 滚轮缩放
+    // 滚轮缩放（以鼠标位置为中心）
     document.getElementById('canvas-area')?.addEventListener('wheel', (e) => {
       if (!this.canvasManager?.canvas) return;
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.05 : 0.05;
-      this.canvasManager.zoomIn(delta);
+      const pointer = this.canvasManager.canvas.getPointer(e);
+      this.canvasManager.zoomIn(delta, new fabric.Point(pointer.x, pointer.y));
       this._updateZoomLabel();
     }, { passive: false });
 
