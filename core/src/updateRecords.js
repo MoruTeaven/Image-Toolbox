@@ -1,5 +1,18 @@
 export const updateRecords = [
   {
+    version: '2.4.2',
+    date: '2026-08-22',
+    changes: {
+      added: [],
+      fixed: [
+        { text: '修复使用马赛克、橡皮擦等工具后，鼠标变成移动状态，绘制第二个选区时会移动图层的问题', platforms: null }
+      ],
+      improved: [],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
     version: '2.4.1',
     date: '2026-08-21',
     changes: {

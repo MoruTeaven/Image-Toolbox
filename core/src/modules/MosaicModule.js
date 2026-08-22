@@ -92,6 +92,7 @@ class MosaicModule extends BaseModule {
 
     const canvas = this.canvasManager.canvas;
     canvas.defaultCursor = this._getCursorForDrawMode();
+    canvas.skipTargetFind = true;
     this._detachCanvasClipPath();
 
     canvas.on('mouse:down', this._boundMouseDown);
@@ -109,6 +110,7 @@ class MosaicModule extends BaseModule {
     canvas.off('mouse:move', this._boundMouseMove);
     canvas.off('mouse:up', this._boundMouseUp);
     canvas.off('mouse:out', this._boundMouseOut);
+    canvas.skipTargetFind = false;
     this._cleanupRect();
     this._cleanupLasso();
     this._cleanupLiveBrushOverlay();
