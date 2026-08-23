@@ -494,10 +494,19 @@ const setupImageDialog = (platform) => {
     try {
       const result = hostTools.showOpenDialog({
         properties: ['openFile'],
-        filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'svg'] }],
+        filters: [
+          { name: '图片和工程文件', extensions: ['ora', 'png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'svg'] },
+          { name: 'OpenRaster 工程文件', extensions: ['ora'] },
+          { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'svg'] },
+        ],
       });
-      if (result && result.length > 0) {
-        const selectedFile = result[0];
+      let selectedFile = null;
+      if (result) {
+        if (typeof result === 'string') selectedFile = result;
+        else if (Array.isArray(result) && result.length > 0) selectedFile = result[0];
+        else if (result.filePaths && Array.isArray(result.filePaths) && result.filePaths.length > 0) selectedFile = result.filePaths[0];
+      }
+      if (selectedFile) {
         return selectedFile.startsWith('file://') ? selectedFile.replace('file://', '') : selectedFile;
       }
     } catch (e) {
@@ -506,23 +515,41 @@ const setupImageDialog = (platform) => {
     return null;
   };
 
-  window.showSaveImageDialog = (suggestedName = 'edited.png') => {
+  window.showSaveImageDialog = (suggestedName = 'edited.png', format = null) => {
     const hostTools = getHostTools();
     if (!hostTools || typeof hostTools.showSaveDialog !== 'function') return null;
     try {
       const defaultPath = path.join(os.homedir(), 'Desktop', suggestedName);
+
+      // 格式过滤器映射
+      const allFilters = {
+        png:    { name: 'PNG 图片', extensions: ['png'] },
+        jpg:    { name: 'JPEG 图片', extensions: ['jpg', 'jpeg'] },
+        jpeg:   { name: 'JPEG 图片', extensions: ['jpg', 'jpeg'] },
+        webp:   { name: 'WebP 图片', extensions: ['webp'] },
+        ora:    { name: 'OpenRaster 工程文件', extensions: ['ora'] },
+      };
+
+      // 如果指定了格式，只显示该格式的过滤器（+ 所有文件）
+      const filters = format && allFilters[format.toLowerCase()]
+        ? [allFilters[format.toLowerCase()], { name: '所有文件', extensions: ['*'] }]
+        : [
+            { name: 'PNG 图片', extensions: ['png'] },
+            { name: 'JPEG 图片', extensions: ['jpg', 'jpeg'] },
+            { name: 'WebP 图片', extensions: ['webp'] },
+            { name: 'OpenRaster 工程文件', extensions: ['ora'] },
+            { name: '所有文件', extensions: ['*'] },
+          ];
+
       const result = hostTools.showSaveDialog({
         title: '保存图片',
         defaultPath,
-        filters: [
-          { name: 'PNG 图片', extensions: ['png'] },
-          { name: 'JPEG 图片', extensions: ['jpg', 'jpeg'] },
-          { name: 'WebP 图片', extensions: ['webp'] },
-          { name: '所有文件', extensions: ['*'] },
-        ],
+        filters,
       });
-      if (result && result.length > 0) {
-        return result[0];
+      if (result) {
+        if (typeof result === 'string') return result;
+        if (Array.isArray(result) && result.length > 0) return result[0];
+        if (result.filePath && typeof result.filePath === 'string') return result.filePath;
       }
     } catch (e) {
       console.warn(`[${platform.getName()} preload] 保存图片失败:`, e);
@@ -551,7 +578,10 @@ const setupImageDialog = (platform) => {
     if (!dataUrl || typeof dataUrl !== 'string') return false;
     try {
       const cleanedPath = filePath.replace(/^file:\/\//, '');
-      fs.mkdirSync(path.dirname(cleanedPath), { recursive: true });
+      const dirName = path.dirname(cleanedPath);
+      if (dirName && !/^[a-zA-Z]:\\?$/.test(dirName)) {
+        fs.mkdirSync(dirName, { recursive: true });
+      }
       const base64Match = dataUrl.match(/^data:([^;]+);base64,(.+)$/i);
       if (base64Match) {
         const base64Data = base64Match[2];
@@ -808,6 +838,97 @@ const setupUserAPI = (platform) => {
 
 const setupMiscAPIs = (platform) => {
   if (typeof window === 'undefined') return;
+
+  // ═══ ORA / 通用文件操作 ═══
+
+  // 通用打开文件对话框（返回文件路径数组）
+  window.showOpenDialog = (options) => {
+    const hostTools = getHostTools();
+    if (!hostTools || typeof hostTools.showOpenDialog !== 'function') return null;
+    try {
+      return hostTools.showOpenDialog(options) || null;
+    } catch (e) {
+      console.warn(`[${platform.getName()} preload] 打开文件对话框失败:`, e);
+      return null;
+    }
+  };
+
+  // 读取二进制文件（返回 ArrayBuffer）
+  window.readBinaryFile = (filePath) => {
+    if (!filePath || typeof filePath !== 'string') return null;
+    try {
+      const cleanedPath = filePath.replace(/^file:\/\//, '');
+      if (!fs.existsSync(cleanedPath)) return null;
+      const buffer = fs.readFileSync(cleanedPath);
+      // 返回 ArrayBuffer
+      return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+    } catch (e) {
+      console.warn(`[${platform.getName()} preload] 读取二进制文件失败:`, e);
+      return null;
+    }
+  };
+
+  // 写入二进制文件（接收 base64 dataURL 或 ArrayBuffer）
+  window.writeBinaryFile = (filePath, data) => {
+    if (!filePath || typeof filePath !== 'string') return false;
+    try {
+      const cleanedPath = filePath.replace(/^file:\/\//, '');
+      const dirName = path.dirname(cleanedPath);
+      // 仅在目录非盘符根目录时创建，避免 EPERM
+      if (dirName && !/^[a-zA-Z]:\\?$/.test(dirName)) {
+        fs.mkdirSync(dirName, { recursive: true });
+      }
+
+      let buffer;
+      if (typeof data === 'string') {
+        // base64 dataURL
+        const base64Match = data.match(/^data:[^;]+;base64,(.+)$/i);
+        if (base64Match) {
+          buffer = Buffer.from(base64Match[1], 'base64');
+        } else {
+          // 纯 base64
+          buffer = Buffer.from(data, 'base64');
+        }
+      } else if (data instanceof ArrayBuffer) {
+        buffer = Buffer.from(data);
+      } else if (data instanceof Uint8Array) {
+        buffer = Buffer.from(data);
+      } else {
+        return false;
+      }
+
+      fs.writeFileSync(cleanedPath, buffer);
+      return true;
+    } catch (e) {
+      console.warn(`[${platform.getName()} preload] 写入二进制文件失败:`, e);
+      return false;
+    }
+  };
+
+  // 保存 ORA 文件对话框
+  window.showSaveOraDialog = (suggestedName = 'project.ora') => {
+    const hostTools = getHostTools();
+    if (!hostTools || typeof hostTools.showSaveDialog !== 'function') return null;
+    try {
+      const defaultPath = path.join(os.homedir(), 'Desktop', suggestedName);
+      const result = hostTools.showSaveDialog({
+        title: '保存 ORA 工程文件',
+        defaultPath,
+        filters: [
+          { name: 'OpenRaster 工程文件', extensions: ['ora'] },
+          { name: '所有文件', extensions: ['*'] },
+        ],
+      });
+      if (result) {
+        if (typeof result === 'string') return result;
+        if (Array.isArray(result) && result.length > 0) return result[0];
+        if (result.filePath && typeof result.filePath === 'string') return result.filePath;
+      }
+    } catch (e) {
+      console.warn(`[${platform.getName()} preload] 保存 ORA 文件失败:`, e);
+    }
+    return null;
+  };
 
   window.getImageSourceFromPluginPayload = (type, payload) => {
     if (type === 'img' && payload) {

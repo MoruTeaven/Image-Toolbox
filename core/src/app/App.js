@@ -13,6 +13,8 @@ import {
   ToolManager,
 } from '../runtime/fabric.js';
 
+import { exportORA, importORA } from '../utils/ora.js';
+
 import Toolbar from '../ui/Toolbar.js';
 import OptionsBar from '../ui/OptionsBar.js';
 import SidePanelTabs from '../ui/SidePanelTabs.js';
@@ -168,6 +170,11 @@ class App {
       const files = e.dataTransfer.files;
       if (files.length > 0) {
         const file = files[0];
+        // ORA 工程文件
+        if (file.name.toLowerCase().endsWith('.ora')) {
+          eventBus.emit('ora:import', file);
+          return;
+        }
         if (file.type.startsWith('image/')) {
           this._loadImage(file);
         }
@@ -196,6 +203,25 @@ class App {
         // showOpenImageDialog 返回文件路径字符串或 null
         const filePath = window.showOpenImageDialog();
         if (filePath) {
+          // ORA 工程文件走单独导入流程
+          if (filePath.toLowerCase().endsWith('.ora')) {
+            if (typeof window.readImageFile === 'function') {
+              const dataURL = window.readImageFile(filePath);
+              if (dataURL) {
+                // dataURL → Blob → ora:import
+                const match = dataURL.match(/^data:[^;]+;base64,(.+)$/i);
+                if (match) {
+                  const binary = atob(match[1]);
+                  const bytes = new Uint8Array(binary.length);
+                  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                  const blob = new Blob([bytes], { type: 'application/zip' });
+                  eventBus.emit('ora:import', blob);
+                }
+              }
+            }
+            return;
+          }
+          // 普通图片
           const dataURL = window.readImageFile(filePath);
           if (dataURL) {
             this._loadImage(dataURL);
@@ -205,10 +231,16 @@ class App {
         // 降级方案：浏览器 file input
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = 'image/png,image/jpeg,image/webp,image/bmp,image/gif,image/svg+xml';
+        input.accept = '.ora,.png,.jpg,.jpeg,.webp,.bmp,.gif,.svg,image/*,application/zip';
         input.onchange = (e) => {
           const file = e.target.files[0];
-          if (file) this._loadImage(file);
+          if (!file) return;
+          // ORA 工程文件
+          if (file.name.toLowerCase().endsWith('.ora')) {
+            eventBus.emit('ora:import', file);
+            return;
+          }
+          this._loadImage(file);
         };
         input.click();
       }
@@ -245,14 +277,43 @@ class App {
     });
 
     // ═══ 导出 ═══
-    eventBus.on('export:requested', async (format) => {
-      if (format === 'clipboard') {
+    eventBus.on('export:requested', async (payload) => {
+      // 兼容旧调用方式：字符串 'clipboard' 或 { type: 'file', format }
+      const type = typeof payload === 'string' ? payload : payload?.type;
+      if (type === 'clipboard') {
         await this.toolManager?.export('clipboard');
       } else {
         const exportModule = this.toolManager?.getModule('export');
         if (exportModule) {
-          await exportModule.exportToFile();
+          await exportModule.exportToFile(payload?.format);
         }
+      }
+    });
+
+    // ═══ 打开文件（从状态栏「打开」按钮）═══
+    eventBus.on('file:open', async (source) => {
+      if (source) {
+        await this._loadImage(source);
+        this.hostAdapter?.setWindowHeight(560);
+      }
+    });
+
+    // ═══ ORA 导出/导入 ═══
+    eventBus.on('ora:export', async () => {
+      if (!this.canvasManager?.originalImage) {
+        eventBus.emit('toast:show', { message: '请先加载图片', type: 'error' });
+        return;
+      }
+      await exportORA(this.canvasManager, this.layerManager, this.hostAdapter);
+    });
+
+    eventBus.on('ora:import', async (file) => {
+      if (file instanceof Blob) {
+        document.getElementById('welcome')?.classList.add('hidden');
+        document.getElementById('canvas-container')?.classList.remove('hidden');
+        document.getElementById('zoom-control')?.classList.remove('hidden');
+        await importORA(file, this.canvasManager, this.layerManager, this.historyManager);
+        this.hostAdapter?.setWindowHeight(560);
       }
     });
 

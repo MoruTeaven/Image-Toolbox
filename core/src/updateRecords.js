@@ -1,13 +1,18 @@
 export const updateRecords = [
   {
     version: '2.4.2',
-    date: '2026-08-22',
+    date: '2026-08-23',
     changes: {
-      added: [],
-      fixed: [
-        { text: '修复使用马赛克、橡皮擦等工具后，鼠标变成移动状态，绘制第二个选区时会移动图层的问题', platforms: null }
+      added: [
+        { text: '新增 ORA (OpenRaster) 工程文件导入/导出功能，可保存含图层的完整编辑状态', platforms: null }
       ],
-      improved: [],
+      fixed: [
+        { text: '修复使用马赛克、橡皮擦等工具后，鼠标变成移动状态，绘制第二个选区时会移动图层的问题', platforms: null },
+      ],
+      improved: [
+        { text: '底部状态栏新增「打开」按钮，支持选择 ORA 工程文件和 WebP / JPG / PNG 等常见图片格式', platforms: null },
+        { text: '底部状态栏「保存」按钮弹出格式选择窗口，可一键保存为 ORA、PNG、JPEG 或 WebP', platforms: null }
+      ],
       adjusted: [],
       removed: []
     }

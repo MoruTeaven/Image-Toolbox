@@ -2598,3 +2598,124 @@ html, body {
   color: var(--color-text-secondary);
   margin: 0;
 }
+
+
+
+/* 鈺愨晲鈺?淇濆瓨鏍煎紡寮圭獥 鈺愨晲鈺?*/
+.save-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: saveDialogFadeIn 0.15s ease;
+}
+
+@keyframes saveDialogFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.save-dialog {
+  background: var(--bg-panel, #ffffff);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  padding: 20px;
+  min-width: 320px;
+  max-width: 400px;
+  animation: saveDialogSlide 0.2s ease;
+}
+
+@keyframes saveDialogSlide {
+  from { transform: translateY(-12px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.save-dialog__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text, #222);
+  margin-bottom: 4px;
+}
+
+.save-dialog__hint {
+  font-size: 12px;
+  color: var(--color-text-secondary, #637074);
+  margin-bottom: 16px;
+}
+
+.save-dialog__options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.save-dialog__option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #e0e4e7);
+  border-radius: 8px;
+  background: var(--bg-main, #fff);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.save-dialog__option:hover {
+  border-color: var(--accent, #5b9bf7);
+  background: var(--bg-hover, #f0f6ff);
+}
+
+.save-dialog__option-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--bg-toolbar, #f0f2f5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-text-secondary, #637074);
+}
+
+.save-dialog__option-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.save-dialog__option-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.save-dialog__option-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text, #222);
+}
+
+.save-dialog__option-desc {
+  font-size: 12px;
+  color: var(--color-text-secondary, #637074);
+  margin-top: 2px;
+}
+
+.save-dialog__cancel {
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  background: var(--bg-toolbar, #f0f2f5);
+  color: var(--color-text-secondary, #637074);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.save-dialog__cancel:hover {
+  background: var(--bg-hover, #e8eaed);
+}

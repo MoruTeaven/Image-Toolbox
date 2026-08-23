@@ -54,10 +54,11 @@ function Update-ImportPaths {
         }
     }
 
-    # Fix index.html fabric.js path.
+    # Fix index.html fabric.js + jszip path.
     $htmlFile = Join-Path $Target "src\index.html"
     $htmlContent = [System.IO.File]::ReadAllText($htmlFile, [System.Text.Encoding]::UTF8)
     $htmlNew = $htmlContent -replace 'src="\.\./\.\./\.\./core/src/lib/fabric\.min\.js"', 'src="../core/src/lib/fabric.min.js"'
+    $htmlNew = $htmlNew -replace 'src="\.\./\.\./\.\./core/src/lib/jszip\.min\.js"', 'src="../core/src/lib/jszip.min.js"'
     if ($htmlNew -ne $htmlContent) {
         [System.IO.File]::WriteAllText($htmlFile, $htmlNew, [System.Text.Encoding]::UTF8)
     }

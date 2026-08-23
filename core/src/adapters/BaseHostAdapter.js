@@ -279,9 +279,9 @@ class BaseHostAdapter {
   /**
    * 显示保存对话框（仅返回路径）
    */
-  showSaveImageDialog(suggestedName = 'edited.png') {
+  showSaveImageDialog(suggestedName = 'edited.png', format = null) {
     if (typeof window !== 'undefined' && typeof window.showSaveImageDialog === 'function') {
-      return window.showSaveImageDialog(suggestedName);
+      return window.showSaveImageDialog(suggestedName, format);
     }
     return null;
   }
