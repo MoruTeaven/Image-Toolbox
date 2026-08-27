@@ -91,7 +91,10 @@ function Test-BuildOutput {
         (Join-Path $Target "core\src\app\*.js"),
         (Join-Path $Target "core\src\ui\*.js"),
         (Join-Path $Target "core\src\modules\*.js"),
-        (Join-Path $Target "core\src\utils\*.js")
+        (Join-Path $Target "core\src\utils\*.js"),
+        (Join-Path $Target "core\src\identity\*.js"),
+        (Join-Path $Target "core\src\identity\sdk\*.js"),
+        (Join-Path $Target "core\src\identity\sdk\adapters\*.js")
     )
 
     Get-ChildItem $checkPaths -File -ErrorAction SilentlyContinue | ForEach-Object {

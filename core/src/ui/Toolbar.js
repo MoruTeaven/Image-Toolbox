@@ -19,6 +19,14 @@ class Toolbar {
     this._profileLoading = false;
     this._eventBusUnsubscribers = [];
 
+    // 初始化 SDK（异步，不阻塞渲染）
+    this._identity.init().then(() => {
+      // 初始化后重新检查认证状态
+      this._loadProfileIfAuthenticated();
+    }).catch((e) => {
+      console.warn('[Toolbar] Identity SDK 初始化失败:', e);
+    });
+
     // SVG 图标模板
     this._icons = {
       select: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>`,
@@ -289,6 +297,8 @@ class Toolbar {
    * 平台已登录时拉取用户档案，用于侧栏头像展示。
    */
   async _loadProfileIfAuthenticated() {
+    // 确保 SDK 已初始化
+    await this._identity.init().catch(() => {});
     if (!this._identity.isAuthenticated()) {
       // 退出登录后清空平台档案，回退到宿主用户头像
       if (this._profile) {

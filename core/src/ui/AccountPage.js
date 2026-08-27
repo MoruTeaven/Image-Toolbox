@@ -81,6 +81,19 @@ class AccountPage {
     this._profile = null;
     this._profileLoading = false;
     this._nicknameEditing = false;
+    this._magicLinkEmail = '';
+    this._magicLinkSending = false;
+
+    // 初始化 SDK（异步，不阻塞渲染）
+    this._identity.init().then(() => {
+      // 初始化后重新渲染，更新登录状态
+      this._render();
+      if (this._identity.isAuthenticated() && !this._profile) {
+        this._loadProfile();
+      }
+    }).catch((e) => {
+      console.warn('[AccountPage] Identity SDK 初始化失败:', e);
+    });
 
     this._render();
     this._bindEvents();
@@ -91,10 +104,12 @@ class AccountPage {
     this._render();
     this._editorEl?.classList.add('hidden');
     this._el?.classList.remove('hidden');
-    // 打开时尝试加载档案
-    if (this._identity.isAuthenticated() && !this._profile) {
-      this._loadProfile();
-    }
+    // 打开时尝试加载档案（SDK 初始化后）
+    this._identity.init().then(() => {
+      if (this._identity.isAuthenticated() && !this._profile) {
+        this._loadProfile();
+      }
+    }).catch(() => {});
   }
 
   close() {
@@ -265,15 +280,14 @@ class AccountPage {
         this._handleUToolsLogin();
         return;
       }
-      if (modalAction === 'send-code') {
+      if (modalAction === 'send-magic-link') {
         const emailInput = document.getElementById('login-email-input');
-        if (emailInput) this._handleSendCode(emailInput.value);
+        if (emailInput) this._handleSendMagicLink(emailInput.value);
         return;
       }
-      if (modalAction === 'email-login') {
-        const emailInput = document.getElementById('login-email-input');
-        const codeInput = document.getElementById('login-code-input');
-        if (emailInput && codeInput) this._handleEmailLogin(emailInput.value, codeInput.value);
+      if (modalAction === 'verify-magic-link') {
+        const tokenInput = document.getElementById('login-token-input');
+        if (tokenInput) this._handleVerifyMagicLink(tokenInput.value);
         return;
       }
     });
@@ -867,6 +881,7 @@ class AccountPage {
       document.body.appendChild(modal);
     }
     const isUTools = !!window.utools;
+    const magicLinkSent = this._magicLinkSending === 'done';
     modal.innerHTML = `
       <div class="login-modal__backdrop" data-modal-action="close-login"></div>
       <div class="login-modal__card">
@@ -883,16 +898,22 @@ class AccountPage {
           ` : ''}
           <div class="login-modal__field">
             <label>邮箱</label>
-            <input type="email" id="login-email-input" placeholder="请输入邮箱地址" autocomplete="email">
+            <input type="email" id="login-email-input" placeholder="请输入邮箱地址" autocomplete="email" value="${this._escapeAttr(this._magicLinkEmail)}">
           </div>
-          <div class="login-modal__field login-modal__field--code">
-            <label>验证码</label>
-            <div class="login-modal__code-row">
-              <input type="text" id="login-code-input" placeholder="6 位验证码" maxlength="6" autocomplete="code">
-              <button class="login-modal__btn login-modal__btn--small" type="button" data-modal-action="send-code" id="send-code-btn">发送验证码</button>
+          ${magicLinkSent ? `
+            <p class="login-modal__hint" style="text-align:center;color:var(--accent-color,#597EF7);">
+              登录链接已发送到您的邮箱，请查收邮件并点击链接完成登录。
+            </p>
+            <div class="login-modal__field">
+              <label>或手动输入链接中的 token</label>
+              <input type="text" id="login-token-input" placeholder="粘贴 Magic Link 中的 token" autocomplete="off">
             </div>
-          </div>
-          <button class="login-modal__btn login-modal__btn--primary" type="button" data-modal-action="email-login">登录</button>
+            <button class="login-modal__btn login-modal__btn--primary" type="button" data-modal-action="verify-magic-link">验证并登录</button>
+          ` : `
+            <button class="login-modal__btn login-modal__btn--primary" type="button" data-modal-action="send-magic-link" id="send-magic-link-btn">
+              ${this._magicLinkSending ? '发送中…' : '发送登录链接'}
+            </button>
+          `}
           <p class="login-modal__hint">首次登录将自动注册账号</p>
         </div>
       </div>
@@ -911,15 +932,14 @@ class AccountPage {
         this._handleUToolsLogin();
         return;
       }
-      if (modalAction === 'send-code') {
+      if (modalAction === 'send-magic-link') {
         const emailInput = document.getElementById('login-email-input');
-        if (emailInput) this._handleSendCode(emailInput.value);
+        if (emailInput) this._handleSendMagicLink(emailInput.value);
         return;
       }
-      if (modalAction === 'email-login') {
-        const emailInput = document.getElementById('login-email-input');
-        const codeInput = document.getElementById('login-code-input');
-        if (emailInput && codeInput) this._handleEmailLogin(emailInput.value, codeInput.value);
+      if (modalAction === 'verify-magic-link') {
+        const tokenInput = document.getElementById('login-token-input');
+        if (tokenInput) this._handleVerifyMagicLink(tokenInput.value);
         return;
       }
     };
@@ -933,48 +953,37 @@ class AccountPage {
     }
   }
 
-  async _handleSendCode(email) {
-    const btn = document.getElementById('send-code-btn');
+  async _handleSendMagicLink(email) {
+    const btn = document.getElementById('send-magic-link-btn');
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       eventBus.emit('toast:show', { message: '请输入有效的邮箱地址', type: 'error' });
       return;
     }
     try {
       if (btn) { btn.disabled = true; btn.textContent = '发送中…'; }
-      await this._identity.requestEmailCode(email, 'login');
-      eventBus.emit('toast:show', { message: '验证码已发送', type: 'success' });
-      this._startCountdown(btn, 60);
+      this._magicLinkSending = true;
+      this._magicLinkEmail = email;
+      await this._identity.requestMagicLink(email);
+      this._magicLinkSending = 'done';
+      eventBus.emit('toast:show', { message: '登录链接已发送，请查收邮件', type: 'success' });
+      this._openLoginModal(); // 重新渲染弹窗，显示 token 输入框
     } catch (e) {
       eventBus.emit('toast:show', { message: e?.message || '发送失败', type: 'error' });
-      if (btn) { btn.disabled = false; btn.textContent = '发送验证码'; }
+      this._magicLinkSending = false;
+      if (btn) { btn.disabled = false; btn.textContent = '发送登录链接'; }
     }
   }
 
-  _startCountdown(btn, seconds) {
-    if (!btn) return;
-    let remaining = seconds;
-    btn.disabled = true;
-    btn.textContent = `${remaining}s`;
-    const timer = setInterval(() => {
-      remaining--;
-      if (remaining <= 0) {
-        clearInterval(timer);
-        btn.disabled = false;
-        btn.textContent = '发送验证码';
-      } else {
-        btn.textContent = `${remaining}s`;
-      }
-    }, 1000);
-  }
-
-  async _handleEmailLogin(email, code) {
-    if (!email || !code) {
-      eventBus.emit('toast:show', { message: '请填写邮箱和验证码', type: 'error' });
+  async _handleVerifyMagicLink(token) {
+    if (!token || !token.trim()) {
+      eventBus.emit('toast:show', { message: '请输入登录链接中的 token', type: 'error' });
       return;
     }
     try {
-      await this._identity.loginWithEmailCode(email, code, 'login');
+      await this._identity.verifyMagicLink(token.trim());
       this._closeLoginModal();
+      this._magicLinkSending = false;
+      this._magicLinkEmail = '';
       eventBus.emit('toast:show', { message: '登录成功', type: 'success' });
       await this._loadProfile();
     } catch (e) {
@@ -990,8 +999,8 @@ class AccountPage {
         return;
       }
       const { token: accessToken } = await api.fetchUserServerTemporaryToken();
-      const deviceId = api.getDeviceId?.() || 'utools-device';
-      await this._identity.loginWithUTools(accessToken, deviceId);
+      // 新版 SDK 不再需要 deviceId
+      await this._identity.loginWithUTools(accessToken);
       this._closeLoginModal();
       eventBus.emit('toast:show', { message: '登录成功', type: 'success' });
       await this._loadProfile();

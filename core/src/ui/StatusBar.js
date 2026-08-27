@@ -236,7 +236,7 @@ class StatusBar {
             </div>
             <div class="save-dialog__option-info">
               <div class="save-dialog__option-name">ORA 工程文件</div>
-              <div class="save-dialog__option-desc">保留所有图层，可再次编辑</div>
+              <div class="save-dialog__option-desc">保留所有图层并栅格化，可再次编辑</div>
             </div>
           </button>
           <button class="save-dialog__option" data-format="png">
