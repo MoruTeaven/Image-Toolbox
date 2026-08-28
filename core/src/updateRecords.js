@@ -1,7 +1,7 @@
 export const updateRecords = [
   {
     version: '2.4.2',
-    date: '2026-08-27',
+    date: '2026-08-28',
     changes: {
       added: [
         { text: '新增 ORA (OpenRaster) 工程文件导入/导出功能，可保存含图层的完整编辑状态', platforms: null }
