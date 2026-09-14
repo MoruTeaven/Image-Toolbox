@@ -320,19 +320,19 @@ class TextModule extends BaseModule {
             ${this._getSelectOption('inside', '内部', opts.strokePosition)}
           </select>
         </div>
-        <div class="property-item">
+        <div class="property-item property-item--toggle">
           <label>粗体</label>
           <input type="checkbox" class="property-checkbox" data-module-prop="fontWeight" ${opts.fontWeight === 'bold' ? 'checked' : ''} />
         </div>
-        <div class="property-item">
+        <div class="property-item property-item--toggle">
           <label>斜体</label>
           <input type="checkbox" class="property-checkbox" data-module-prop="fontStyle" ${opts.fontStyle === 'italic' ? 'checked' : ''} />
         </div>
-        <div class="property-item">
+        <div class="property-item property-item--toggle">
           <label>下划线</label>
           <input type="checkbox" class="property-checkbox" data-module-prop="underline" ${opts.underline ? 'checked' : ''} />
         </div>
-        <div class="property-item">
+        <div class="property-item property-item--toggle">
           <label>删除线</label>
           <input type="checkbox" class="property-checkbox" data-module-prop="linethrough" ${opts.linethrough ? 'checked' : ''} />
         </div>
@@ -361,7 +361,7 @@ class TextModule extends BaseModule {
         <label>描边</label>
         <input type="color" class="property-color" data-prop="stroke" value="${active.stroke || '#000000'}" />
       </div>
-      <div class="property-item">
+      <div class="property-item property-item--full">
         <label>不透明度</label>
         <input type="range" class="property-range" data-prop="opacity" min="0" max="100" value="${Math.round(active.opacity * 100)}" />
         <span class="property-value">${Math.round(active.opacity * 100)}%</span>

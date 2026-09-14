@@ -1,9 +1,9 @@
-/* ══════════════════════════════════════════════
-   图片工具箱 — 全局样式
-   中性编辑器布局 | 灰青主题 | BEM 命名
-   ══════════════════════════════════════════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
+   鍥剧墖宸ュ叿绠?鈥?鍏ㄥ眬鏍峰紡
+   涓€х紪杈戝櫒甯冨眬 | 鐏伴潚涓婚 | BEM 鍛藉悕
+   鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲 */
 
-/* ── CSS 变量：中性浅色主题（默认） ── */
+/* 鈹€鈹€ CSS 鍙橀噺锛氫腑鎬ф祬鑹蹭富棰橈紙榛樿锛?鈹€鈹€ */
 :root, [data-theme="light"] {
   --bg-window: #f2f4f5;
   --bg-panel: #eef1f2;
@@ -26,7 +26,7 @@
   --scrollbar-thumb-hover: #9facb2;
 }
 
-/* ── CSS 变量：中性深色主题 ── */
+/* 鈹€鈹€ CSS 鍙橀噺锛氫腑鎬ф繁鑹蹭富棰?鈹€鈹€ */
 [data-theme="dark"] {
   --bg-window: #1d2225;
   --bg-panel: #252b2f;
@@ -45,7 +45,7 @@
   --scrollbar-thumb-hover: #5c6971;
 }
 
-/* ── 基础重置 ── */
+/* 鈹€鈹€ 鍩虹閲嶇疆 鈹€鈹€ */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -64,7 +64,7 @@ html, body {
   -webkit-user-select: none;
 }
 
-/* ── 滚动条 ── */
+/* 鈹€鈹€ 婊氬姩鏉?鈹€鈹€ */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -82,9 +82,9 @@ html, body {
   background: var(--scrollbar-thumb-hover);
 }
 
-/* ══════════════════════════════════════════════
-   整体布局 — 五区结构
-   ══════════════════════════════════════════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
+   鏁翠綋甯冨眬 鈥?浜斿尯缁撴瀯
+   鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲 */
 
 .app {
   display: grid;
@@ -123,12 +123,12 @@ html, body {
     "toolbar optionsbar optionsbar";
 }
 
-/* ── 工具栏展开状态 ── */
+/* 鈹€鈹€ 宸ュ叿鏍忓睍寮€鐘舵€?鈹€鈹€ */
 .app.app--toolbar-expanded {
   --toolbar-width: 160px;
 }
 
-/* ── 工具栏（左侧） ── */
+/* 鈹€鈹€ 宸ュ叿鏍忥紙宸︿晶锛?鈹€鈹€ */
 .toolbar {
   grid-area: toolbar;
   background: var(--bg-panel);
@@ -217,6 +217,11 @@ html, body {
 }
 
 .toolbar__separator {
+  display: none;
+}
+
+.toolbar__footer .toolbar__separator {
+  display: block;
   width: 36px;
   height: 1px;
   background: var(--color-border);
@@ -268,12 +273,12 @@ html, body {
   font-weight: 600;
 }
 
-/* 昵称（仅展开时显示） */
+/* 鏄电О锛堜粎灞曞紑鏃舵樉绀猴級 */
 .toolbar__account-name {
   display: none;
 }
 
-/* 工具栏收起/展开按钮 */
+/* 宸ュ叿鏍忔敹璧?灞曞紑鎸夐挳 */
 .toolbar__toggle {
   width: 36px;
   height: 26px;
@@ -300,12 +305,12 @@ html, body {
   height: 16px;
 }
 
-/* 隐藏展开/收起按钮 */
+/* 闅愯棌灞曞紑/鏀惰捣鎸夐挳 */
 .toolbar--toggle-hidden .toolbar__toggle {
   display: none;
 }
 
-/* ── 展开状态：水平布局 ── */
+/* 鈹€鈹€ 灞曞紑鐘舵€侊細姘村钩甯冨眬 鈹€鈹€ */
 .toolbar--expanded {
   align-items: stretch;
   padding: 6px 4px;
@@ -366,7 +371,7 @@ html, body {
   min-width: 0;
 }
 
-/* ── 账户页 ── */
+/* 鈹€鈹€ 璐︽埛椤?鈹€鈹€ */
 .account-page {
   width: 100%;
   height: 100%;
@@ -502,6 +507,13 @@ html, body {
   border-color: var(--color-border);
   border-radius: 7px;
   font-size: 12px;
+}
+
+.account-page__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .account-page__content {
@@ -858,6 +870,9 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  /* 全局禁用了文本选择，更新日志需要允许手动选取复制 */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .update-record {
@@ -938,7 +953,7 @@ html, body {
   margin-top: 3px;
 }
 
-/* ── 更新项平台限制标记 ── */
+/* 鈹€鈹€ 鏇存柊椤瑰钩鍙伴檺鍒舵爣璁?鈹€鈹€ */
 .update-item__text {
   display: inline-block;
 }
@@ -967,7 +982,7 @@ html, body {
   border: 1px solid rgba(191, 144, 0, 0.25);
 }
 
-/* ── 选项栏（顶部） ── */
+/* 鈹€鈹€ 閫夐」鏍忥紙椤堕儴锛?鈹€鈹€ */
 .optionsbar {
   grid-area: optionsbar;
   background: var(--bg-panel);
@@ -1000,7 +1015,7 @@ html, body {
   overflow: hidden;
 }
 
-/* 选项栏控件 */
+/* 閫夐」鏍忔帶浠?*/
 .options-group {
   display: flex;
   flex-direction: row;
@@ -1010,7 +1025,7 @@ html, body {
   flex-shrink: 0;
 }
 
-/* 可横向滑动的选项组：左右两侧的控件保持固定，中间此组自动压缩并内部滑动 */
+/* 鍙í鍚戞粦鍔ㄧ殑閫夐」缁勶細宸﹀彸涓や晶鐨勬帶浠朵繚鎸佸浐瀹氾紝涓棿姝ょ粍鑷姩鍘嬬缉骞跺唴閮ㄦ粦鍔?*/
 .options-group--scrollable {
   flex: 1 1 auto;
   min-width: 0;
@@ -1342,7 +1357,18 @@ html, body {
   border-color: #7c878d;
 }
 
-/* 滤镜预设按钮（选项栏） */
+/* 娣辫壊妯″紡锛氭枃瀛楅璁炬寜閽儗鏅€傞厤娣辫壊涓婚 */
+[data-theme="dark"] .text-preset-btn {
+  background: #3a4247;
+  border-color: #4a555c;
+}
+
+[data-theme="dark"] .text-preset-btn:hover {
+  background: #465158;
+  border-color: #5c6971;
+}
+
+/* 婊ら暅棰勮鎸夐挳锛堥€夐」鏍忥級 */
 .filter-preset-btn {
   min-width: 44px;
 }
@@ -1367,7 +1393,7 @@ html, body {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
 }
 
-/* ── 画布区（中央） ── */
+/* 鈹€鈹€ 鐢诲竷鍖猴紙涓ぎ锛?鈹€鈹€ */
 .canvas-area {
   grid-area: canvas;
   position: relative;
@@ -1388,7 +1414,7 @@ html, body {
   display: block;
 }
 
-/* 画布网格背景 */
+/* 鐢诲竷缃戞牸鑳屾櫙 */
 .canvas-area::before {
   content: '';
   position: absolute;
@@ -1404,7 +1430,7 @@ html, body {
   pointer-events: none;
 }
 
-/* 缩放控制 */
+/* 缂╂斁鎺у埗 */
 .zoom-control {
   position: absolute;
   bottom: 6px;
@@ -1451,7 +1477,7 @@ html, body {
   color: var(--color-accent);
 }
 
-/* ── 右侧面板（属性 / 图层） ── */
+/* 鈹€鈹€ 鍙充晶闈㈡澘锛堝睘鎬?/ 鍥惧眰锛?鈹€鈹€ */
 .panel-area {
   grid-area: panel;
   background: var(--bg-panel);
@@ -1544,9 +1570,65 @@ html, body {
 
 .side-tabs__pane #property-panel,
 .side-tabs__pane #color-panel,
-.side-tabs__pane #layer-panel {
+.side-tabs__pane #layer-panel,
+.side-tabs__pane #sticker-panel {
   height: 100%;
   min-height: 0;
+}
+
+/* 鈹€鈹€ 璐寸焊闈㈡澘 鈹€鈹€ */
+.panel--sticker {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.sticker-panel__body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px 10px;
+}
+
+.sticker-panel__add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px dashed var(--color-accent);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--color-accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.sticker-panel__add-btn:hover {
+  background: var(--bg-hover);
+}
+
+.sticker-panel__add-btn.is-busy,
+.sticker-panel__add-btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.sticker-panel__add-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.sticker-panel__hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
 }
 
 .side-tabs--tabs .panel__header {
@@ -1626,9 +1708,31 @@ html, body {
   align-content: flex-start;
 }
 
-/* ── 属性面板 ── */
+/* 灞炴€?璋冭壊闈㈡澘浣擄細12 鍒楃綉鏍硷紝閫夐」瀹藉害缁熶竴涓?100% / 50% / 33.3% / 25% */
+.panel--property .panel__body,
+.panel--color .panel__body {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 4px;
+  align-content: flex-start;
+}
+
+/* 璺ㄦ暣琛岀殑闈為€夐」鍏冪礌锛氭爣棰?/ 绌烘彁绀?/ 鎸夐挳缁?/ 婊ら暅棰勮缁?*/
+.property-section-title,
+.property-empty,
+.property-actions,
+.filter-presets {
+  grid-column: 1 / -1;
+}
+
+.filter-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* 鈹€鈹€ 灞炴€ч潰鏉?鈹€鈹€ */
 .property-section-title {
-  width: 100%;
   padding: 4px 6px 2px;
   color: var(--color-text-secondary);
   font-size: 10px;
@@ -1641,10 +1745,10 @@ html, body {
   text-align: center;
   color: var(--color-text-secondary);
   font-size: 11px;
-  width: 100%;
 }
 
 .property-item {
+  grid-column: span 6;
   display: flex;
   align-items: center;
   gap: 3px;
@@ -1652,15 +1756,51 @@ html, body {
   background: var(--bg-card);
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  flex-shrink: 0;
+  min-width: 0;
 }
 
-.property-item--wide {
-  min-width: 132px;
+/* 鏁磋 100% */
+.property-item--wide,
+.property-item--full {
+  grid-column: span 12;
+}
+
+/* 鍗婅 50% */
+.property-item--half {
+  grid-column: span 6;
+}
+
+/* 涓夊垎涔嬩竴 33.3% */
+.property-item--third {
+  grid-column: span 4;
+}
+
+/* 鍥涘垎涔嬩竴 25% */
+.property-item--quarter {
+  grid-column: span 3;
+}
+
+/* 寮€鍏冲紡锛?5% + 绾靛悜鎺掑垪锛堝閫夋鍦ㄤ笂锛屾爣绛惧湪涓嬶級 */
+.property-item--toggle {
+  grid-column: span 3;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 2px;
+}
+
+.property-item--toggle .property-checkbox {
+  width: 16px;
+  height: 16px;
+}
+
+.property-item--toggle label {
+  text-align: center;
 }
 
 .property-item--stacked {
-  width: 100%;
+  grid-column: span 12;
   align-items: stretch;
   flex-direction: column;
   gap: 6px;
@@ -1718,7 +1858,6 @@ html, body {
 }
 
 .property-actions {
-  width: 100%;
   display: flex;
   gap: 6px;
   padding: 4px;
@@ -1752,7 +1891,7 @@ html, body {
   opacity: 0.88;
 }
 
-/* 调色重置按钮行 */
+/* 璋冭壊閲嶇疆鎸夐挳琛?*/
 .property-item--actions {
   justify-content: flex-end;
   padding: 4px 6px;
@@ -1771,7 +1910,9 @@ html, body {
 }
 
 .property-input {
-  width: 60px;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
   background: transparent;
   color: var(--color-text);
   border: none;
@@ -1784,7 +1925,9 @@ html, body {
 
 .property-input--name,
 .property-input--text {
-  width: 96px;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
   text-align: left;
 }
 
@@ -1810,7 +1953,9 @@ html, body {
 }
 
 .property-select {
-  width: 120px;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
   background: var(--bg-card);
   color: var(--color-text);
   border: 1px solid var(--color-border);
@@ -1821,7 +1966,7 @@ html, body {
 }
 
 .property-select--short {
-  width: 88px;
+  min-width: 0;
 }
 
 .property-checkbox {
@@ -1847,8 +1992,9 @@ html, body {
 }
 
 .property-range {
-  width: 90px;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
   height: 3px;
   -webkit-appearance: none;
   appearance: none;
@@ -1875,7 +2021,7 @@ html, body {
   flex-shrink: 0;
 }
 
-/* ── 图层面板 ── */
+/* 鈹€鈹€ 鍥惧眰闈㈡澘 鈹€鈹€ */
 .layer-list {
   list-style: none;
   display: flex;
@@ -2021,7 +2167,7 @@ html, body {
   height: 10px;
 }
 
-/* 背景图层特殊样式 */
+/* 鑳屾櫙鍥惧眰鐗规畩鏍峰紡 */
 .layer-item--background {
   border-bottom: 1px solid var(--color-border);
   color: var(--color-text-secondary);
@@ -2066,7 +2212,7 @@ html, body {
   color: var(--color-text);
 }
 
-/* ── 状态栏（底部） ── */
+/* 鈹€鈹€ 鐘舵€佹爮锛堝簳閮級 鈹€鈹€ */
 .statusbar {
   grid-area: statusbar;
   background: var(--bg-statusbar);
@@ -2141,7 +2287,7 @@ html, body {
   box-shadow: 0 2px 6px rgba(0,0,0,0.25);
 }
 
-/* ── 标签页（多图编辑预留） ── */
+/* 鈹€鈹€ 鏍囩椤碉紙澶氬浘缂栬緫棰勭暀锛?鈹€鈹€ */
 .tabs {
   display: flex;
   align-items: center;
@@ -2189,7 +2335,7 @@ html, body {
   background: var(--color-border);
 }
 
-/* ── 欢迎/导入界面 ── */
+/* 鈹€鈹€ 娆㈣繋/瀵煎叆鐣岄潰 鈹€鈹€ */
 .welcome {
   display: flex;
   flex-direction: column;
@@ -2247,7 +2393,7 @@ html, body {
   opacity: 0.85;
 }
 
-/* ── 加载状态 ── */
+/* 鈹€鈹€ 鍔犺浇鐘舵€?鈹€鈹€ */
 .loading {
   display: flex;
   align-items: center;
@@ -2257,12 +2403,12 @@ html, body {
   font-size: 13px;
 }
 
-/* ── 隐藏类 ── */
+/* 鈹€鈹€ 闅愯棌绫?鈹€鈹€ */
 .hidden {
   display: none !important;
 }
 
-/* ── Toast 提示 ── */
+/* 鈹€鈹€ Toast 鎻愮ず 鈹€鈹€ */
 .toast {
   position: fixed;
   top: 60px;
@@ -2305,7 +2451,7 @@ html, body {
   100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
 }
 
-/* ═══ 账户区域 — 按钮 / 昵称编辑 / 头像上传 ═══ */
+/* 鈺愨晲鈺?璐︽埛鍖哄煙 鈥?鎸夐挳 / 鏄电О缂栬緫 / 澶村儚涓婁紶 鈺愨晲鈺?*/
 
 .account-page__btn {
   padding: 8px 16px;
@@ -2406,7 +2552,7 @@ html, body {
   opacity: 1;
 }
 
-/* ═══ 登录弹窗 ═══ */
+/* 鈺愨晲鈺?鐧诲綍寮圭獥 鈺愨晲鈺?*/
 
 .login-modal {
   position: fixed;
@@ -2599,7 +2745,9 @@ html, body {
   margin: 0;
 }
 
-/* ═══ 保存格式弹窗 ═══ */
+
+
+/* 閳烘劏鏅查埡?娣囨繂鐡ㄩ弽鐓庣础瀵湱鐛?閳烘劏鏅查埡?*/
 .save-dialog-overlay {
   position: fixed;
   inset: 0;
@@ -2655,15 +2803,15 @@ html, body {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border: 1px solid var(--border-color, #e0e4e7);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: var(--bg-main, #fff);
+  background: var(--bg-card);
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
 
 .save-dialog__option:hover {
-  border-color: var(--accent, #5b9bf7);
+  border-color: var(--color-accent);
   background: var(--bg-hover, #f0f6ff);
 }
 
@@ -2671,7 +2819,7 @@ html, body {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: var(--bg-toolbar, #f0f2f5);
+  background: var(--bg-hover);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2707,7 +2855,7 @@ html, body {
   padding: 10px;
   border: none;
   border-radius: 8px;
-  background: var(--bg-toolbar, #f0f2f5);
+  background: var(--bg-hover);
   color: var(--color-text-secondary, #637074);
   font-size: 13px;
   cursor: pointer;

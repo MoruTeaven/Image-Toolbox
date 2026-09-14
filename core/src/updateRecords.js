@@ -1,5 +1,40 @@
 export const updateRecords = [
   {
+    version: '2.5.0',
+    date: '2026-09-13',
+    changes: {
+      added: [
+        { text: '左侧栏新增「贴纸」功能，可从本地文件选择图片作为新图层添加到画布', platforms: null },
+        { text: '新增按 P 快速打开贴纸面板的快捷键', platforms: null }
+      ],
+      fixed: [],
+      improved: [
+        { text: '优化侧栏属性面板选项的排列与宽度对齐', platforms: null }
+      ],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
+    version: '2.4.3',
+    date: '2026-08-31',
+    changes: {
+      added: [
+        { text: '图形工具新增五边形', platforms: null }
+      ],
+      fixed: [
+        { text: '修复撤销/重做、打开新图片、导入 ORA 后画笔光标指示丢失的问题', platforms: null },
+        { text: '修复「保存」格式弹窗在深色模式下显示异常的问题', platforms: null },
+        { text: '修复文字预设按钮在深色模式下显示过亮的问题', platforms: null }
+      ],
+      improved: [
+        { text: '画笔光标指示增强对比度，并增加中心点提示落笔位置', platforms: null }
+      ],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
     version: '2.4.2',
     date: '2026-08-28',
     changes: {

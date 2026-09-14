@@ -316,49 +316,70 @@ class CanvasManager {
 
   toJSON() {
     if (!this.canvas) return null;
-    const json = this.canvas.toJSON([
-      'clipPath',
-      'filters',
-      'id',
-      'selectable',
-      'evented',
-      'hasControls',
-      'hasBorders',
-      'lockMovementX',
-      'lockMovementY',
-      'lockRotation',
-      'lockScalingX',
-      'lockScalingY',
-      'absolutePositioned',
-      'inverted',
-      'objectCaching',
-      'strokeLineCap',
-      'strokeLineJoin',
-      '_strokePosition',
-      '_layerName',
-      '_layerNameAuto',
-      '_layerBaseName',
-      '_layerKind',
-      '_layerShapeType',
-      '_layerColorPresetName',
-      '_layerWidthPresetName',
-      '_layerPresetName',
-      '_layerLocked',
-      '_mosaicDynamic',
-      '_mosaicMode',
-      '_mosaicSize',
-      '_mosaicBlurRadius',
-      '_mosaicWidth',
-      '_mosaicHeight',
-      '_mosaicMaskType',
-      '_mosaicBrushPoints',
-      '_mosaicBrushSize',
-      '_mosaicLassoPoints',
-      '_originalImage',
-    ]);
-    // 手动序列化 canvas.clipPath（Fabric.js canvas.toJSON 不包含此属性）
-    if (this.canvas.clipPath) {
-      json._canvasClipPath = this.canvas.clipPath.toJSON(CLIP_PATH_SERIALIZED_PROPS);
+
+    // 临时移出 excludeFromHistory 的辅助对象（画笔光标预览、马赛克选区框等），
+    // 避免它们被序列化进历史快照；序列化完成后立即按原下标放回，保持对象顺序不变。
+    const canvas = this.canvas;
+    const removed = [];
+    const objects = canvas._objects;
+    for (let i = objects.length - 1; i >= 0; i--) {
+      if (objects[i].excludeFromHistory) {
+        removed.push({ index: i, obj: objects.splice(i, 1)[0] });
+      }
+    }
+
+    let json = null;
+    try {
+      json = canvas.toJSON([
+        'clipPath',
+        'filters',
+        'id',
+        'selectable',
+        'evented',
+        'hasControls',
+        'hasBorders',
+        'lockMovementX',
+        'lockMovementY',
+        'lockRotation',
+        'lockScalingX',
+        'lockScalingY',
+        'absolutePositioned',
+        'inverted',
+        'objectCaching',
+        'strokeLineCap',
+        'strokeLineJoin',
+        '_strokePosition',
+        '_layerName',
+        '_layerNameAuto',
+        '_layerBaseName',
+        '_layerKind',
+        '_layerShapeType',
+        '_layerColorPresetName',
+        '_layerWidthPresetName',
+        '_layerPresetName',
+        '_layerLocked',
+        '_mosaicDynamic',
+        '_mosaicMode',
+        '_mosaicSize',
+        '_mosaicBlurRadius',
+        '_mosaicWidth',
+        '_mosaicHeight',
+        '_mosaicMaskType',
+        '_mosaicBrushPoints',
+        '_mosaicBrushSize',
+        '_mosaicLassoPoints',
+        '_originalImage',
+      ]);
+      // 手动序列化 canvas.clipPath（Fabric.js canvas.toJSON 不包含此属性）
+      if (canvas.clipPath) {
+        json._canvasClipPath = canvas.clipPath.toJSON(CLIP_PATH_SERIALIZED_PROPS);
+      }
+    } finally {
+      // 按原下标升序插回，保证对象顺序与序列化前完全一致
+      removed.sort((a, b) => a.index - b.index);
+      for (const { index, obj } of removed) {
+        objects.splice(Math.min(index, objects.length), 0, obj);
+      }
     }
     return json;
   }

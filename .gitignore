@@ -3,6 +3,9 @@
 /agents.md
 /.workbuddy/
 /.wrangler/
+/.codebuddy/
+/.maestro/
+/maestro.config.json
 
 # Architecture documents (not tracked)
 CORE_ARCHITECTURE.md

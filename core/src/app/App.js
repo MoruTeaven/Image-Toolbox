@@ -378,8 +378,10 @@ class App {
         const active = this.canvasManager?.getActiveObject();
         if (active && active.isEditing) return;
 
+        const key = e.key.toUpperCase();
+
         const tools = this.toolManager?.getTools() || [];
-        const tool = tools.find(t => t.shortcut === e.key.toUpperCase());
+        const tool = tools.find(t => t.shortcut === key);
         if (tool) {
           e.preventDefault();
           this.toolManager?.activateTool(tool.name);

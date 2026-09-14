@@ -129,15 +129,15 @@ class PropertyPanel {
         <label>名称</label>
         <input type="text" class="property-input property-input--name" data-prop="layerName" value="${this._escapeAttr(layerName)}"${renameDisabled} />
       </div>
-      <div class="property-item">
+      <div class="property-item property-item--third">
         <label>类型</label>
         <span class="property-static">${this._escapeHTML(typeLabel)}</span>
       </div>
-      <div class="property-item">
+      <div class="property-item property-item--third">
         <label>显示</label>
         <input type="checkbox" class="property-checkbox" data-prop="visible" ${active.visible !== false ? 'checked' : ''} />
       </div>
-      <div class="property-item">
+      <div class="property-item property-item--third">
         <label>锁定</label>
         <input type="checkbox" class="property-checkbox" data-prop="locked" ${locked ? 'checked' : ''}${lockDisabled} />
       </div>
@@ -179,7 +179,7 @@ class PropertyPanel {
 
     // Opacity.
     html += `
-      <div class="property-item">
+      <div class="property-item property-item--full">
         <label>不透明</label>
         <input type="range" class="property-range" data-prop="opacity"
                min="0" max="100" value="${Math.round(opacity * 100)}"${editDisabled} />
@@ -222,19 +222,19 @@ class PropertyPanel {
             ${this._getSelectOption('inside', '内部', active._strokePosition || 'outside')}
           </select>
         </div>
-        <div class="property-item">
+        <div class="property-item property-item--toggle">
           <label>粗体</label>
           <input type="checkbox" class="property-checkbox" data-prop="fontWeight" ${active.fontWeight === 'bold' ? 'checked' : ''}${editDisabled} />
         </div>
-        <div class="property-item">
+        <div class="property-item property-item--toggle">
           <label>斜体</label>
           <input type="checkbox" class="property-checkbox" data-prop="fontStyle" ${active.fontStyle === 'italic' ? 'checked' : ''}${editDisabled} />
         </div>
-        <div class="property-item">
+        <div class="property-item property-item--toggle">
           <label>下划线</label>
           <input type="checkbox" class="property-checkbox" data-prop="underline" ${active.underline ? 'checked' : ''}${editDisabled} />
         </div>
-        <div class="property-item">
+        <div class="property-item property-item--toggle">
           <label>删除线</label>
           <input type="checkbox" class="property-checkbox" data-prop="linethrough" ${active.linethrough ? 'checked' : ''}${editDisabled} />
         </div>

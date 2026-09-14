@@ -1,4 +1,4 @@
-﻿# build.ps1 — Assemble core + clients into dist/<platform>/
+# build.ps1 — Assemble core + clients into dist/<platform>/
 # Usage: .\build.ps1
 
 $ErrorActionPreference = "Stop"
@@ -59,6 +59,7 @@ function Update-ImportPaths {
     $htmlContent = [System.IO.File]::ReadAllText($htmlFile, [System.Text.Encoding]::UTF8)
     $htmlNew = $htmlContent -replace 'src="\.\./\.\./\.\./core/src/lib/fabric\.min\.js"', 'src="../core/src/lib/fabric.min.js"'
     $htmlNew = $htmlNew -replace 'src="\.\./\.\./\.\./core/src/lib/jszip\.min\.js"', 'src="../core/src/lib/jszip.min.js"'
+    $htmlNew = $htmlNew -replace 'href="\.\./\.\./\.\./core/src/style\.css"', 'href="../core/src/style.css"'
     if ($htmlNew -ne $htmlContent) {
         [System.IO.File]::WriteAllText($htmlFile, $htmlNew, [System.Text.Encoding]::UTF8)
     }
@@ -93,8 +94,8 @@ function Test-BuildOutput {
         (Join-Path $Target "core\src\modules\*.js"),
         (Join-Path $Target "core\src\utils\*.js"),
         (Join-Path $Target "core\src\identity\*.js"),
-        (Join-Path $Target "core\src\identity\sdk\*.js"),
-        (Join-Path $Target "core\src\identity\sdk\adapters\*.js")
+        (Join-Path $Target "core\src\lib\identity-sdk\*.js"),
+        (Join-Path $Target "core\src\lib\identity-sdk\adapters\*.js")
     )
 
     Get-ChildItem $checkPaths -File -ErrorAction SilentlyContinue | ForEach-Object {

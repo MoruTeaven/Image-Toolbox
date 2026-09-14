@@ -150,7 +150,10 @@ class AccountPage {
               <div class="account-page__eyebrow">账户中心</div>
               <h1>${this._escapeHTML(sectionTitle)}</h1>
             </div>
-            <button class="account-page__header-back" type="button" data-action="back">返回编辑器</button>
+            <div class="account-page__header-actions">
+              ${this._activeSection === 'updates' ? '<button class="account-page__header-back" type="button" data-action="copy-updates">复制更新日志</button>' : ''}
+              <button class="account-page__header-back" type="button" data-action="back">返回编辑器</button>
+            </div>
           </header>
 
           <section class="account-page__content">
@@ -180,6 +183,11 @@ class AccountPage {
       const action = this._closest(e.target, '[data-action]')?.getAttribute('data-action');
       if (action === 'back') {
         this.close();
+        return;
+      }
+
+      if (action === 'copy-updates') {
+        this._copyUpdates();
         return;
       }
 
@@ -615,6 +623,104 @@ class AccountPage {
      const text = item.text || '';
      return `<li>${this._escapeHTML(text)}</li>`;
    }
+
+  /**
+   * 复制更新日志到剪贴板。
+   * 直接用纯文本拼接，避免依赖 DOM 选区（应用全局 user-select: none）。
+   */
+  async _copyUpdates() {
+    const text = this._getUpdatesPlainText();
+    if (!text) {
+      eventBus.emit('toast:show', { message: '没有可复制的更新日志', type: 'error' });
+      return;
+    }
+
+    const ok = await this._writeClipboardText(text);
+    eventBus.emit('toast:show', {
+      message: ok ? '更新日志已复制' : '复制失败，请手动选择文本复制',
+      type: ok ? 'success' : 'error',
+    });
+  }
+
+  /**
+   * 将可见的更新日志拼装为纯文本。
+   * @returns {string}
+   */
+  _getUpdatesPlainText() {
+    return updateRecords.map((record) => {
+      const lines = [`版本 ${record.version}（${record.date}）`];
+
+      updateCategories.forEach((category) => {
+        const items = record.changes?.[category.key] || [];
+        const visibleItems = items
+          .map((item) => (typeof item === 'string' ? item : item?.text || ''))
+          .filter((item) => {
+            if (typeof item === 'string') return true;
+            return shouldShowForCurrentPlatform(item.platforms);
+          })
+          .map((item) => String(item).trim())
+          .filter(Boolean);
+
+        if (visibleItems.length === 0) return;
+
+        lines.push(`【${category.title}】`);
+        visibleItems.forEach((item) => lines.push(`- ${item}`));
+      });
+
+      return lines.join('\n');
+    }).join('\n\n');
+  }
+
+  /**
+   * 写入文本到剪贴板：优先走宿主适配器，降级到 navigator.clipboard 与 execCommand。
+   * @param {string} text
+   * @returns {Promise<boolean>}
+   */
+  async _writeClipboardText(text) {
+    try {
+      const ok = await this._host?.clipboard?.writeText?.(text);
+      if (ok) return true;
+    } catch (e) {
+      console.warn('[AccountPage] 宿主剪贴板写入失败:', e);
+    }
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) {
+      console.warn('[AccountPage] navigator.clipboard 写入失败:', e);
+    }
+
+    return this._writeClipboardTextFallback(text);
+  }
+
+  /**
+   * 降级方案：临时 textarea + execCommand（无剪贴板权限时可用）。
+   * @param {string} text
+   * @returns {boolean}
+   */
+  _writeClipboardTextFallback(text) {
+    if (typeof document === 'undefined') return false;
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', 'readonly');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-1000px';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const ok = document.execCommand?.('copy') ?? false;
+      document.body.removeChild(textarea);
+      return ok;
+    } catch (e) {
+      console.warn('[AccountPage] execCommand 复制失败:', e);
+      return false;
+    }
+  }
 
   _renderAvatar(className) {
     const user = this._getUserView();
