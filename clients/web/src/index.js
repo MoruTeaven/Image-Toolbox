@@ -7,7 +7,7 @@
  * - 不需要 plugin.json（非插件形态）
  * - 支持 URL 参数导入图片（?img=<url>）
  */
-import App from '../../../core/src/app/App.js';
+import App from '#core/app/App.js';
 import WebHostAdapter from './adapters/host/WebHostAdapter.js';
 
 // ═══ URL 参数图片导入 ═══

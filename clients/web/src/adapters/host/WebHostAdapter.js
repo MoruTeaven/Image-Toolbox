@@ -11,7 +11,7 @@
  * - 无系统字体扫描能力（降级到内置字体列表）
  */
 
-import BaseHostAdapter from '../../../../../core/src/adapters/BaseHostAdapter.js';
+import BaseHostAdapter from '#core/adapters/BaseHostAdapter.js';
 
 const DEFAULT_HOST_NAME = 'Web';
 

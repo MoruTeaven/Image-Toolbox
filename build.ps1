@@ -1,5 +1,11 @@
-# build.ps1 — Assemble core + clients into dist/<platform>/
+# build.ps1 - Assemble core + clients into dist/<platform>/
 # Usage: .\build.ps1
+#
+# Path strategy:
+#   Source uses the location-independent #core/ alias (resolved by the root
+#   package.json "imports" field). At build time #core/ is rewritten to the
+#   correct relative path for each output file, with the depth computed from
+#   the file's actual location in dist instead of being hardcoded per directory.
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
@@ -10,69 +16,41 @@ $platforms = @(
     @{ Client = "web";   Dist = "web" }
 )
 
+# Returns the "../" prefix a file needs to reach the platform root.
+function Get-CorePrefix {
+    param(
+        [string]$File,
+        [string]$TargetRoot
+    )
+
+    $dir = Split-Path $File -Parent
+    $rel = $dir.Substring($TargetRoot.Length)
+    $rel = ($rel -split '[\\/]' | Where-Object { $_ -ne '' }) -join '/'
+    $rel = $rel.Trim('/')
+    if ([string]::IsNullOrEmpty($rel)) {
+        return './'
+    }
+    $depth = @($rel.Split('/') | Where-Object { $_ -ne '' }).Count
+    return ('../' * $depth)
+}
+
+# Rewrites the #core/ alias into a real relative path usable inside dist.
 function Update-ImportPaths {
     param(
         [string]$Target
     )
 
-    # Fix import paths in dist/<platform>/src/ files.
-    # From clients/<platform>/src/ the path was ../../../core/src/  (3 levels up to root)
-    # From dist/<platform>/src/ the path should be ../core/src/    (1 level up to dist root)
-    $rootSrcFiles = Get-ChildItem (Join-Path $Target "src\*.js") -File -ErrorAction SilentlyContinue
-    foreach ($file in $rootSrcFiles) {
+    $targeted = Get-ChildItem $Target -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -eq '.js' -or $_.Extension -eq '.html' }
+    foreach ($file in $targeted) {
         $content = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
-        $newContent = $content -replace "from '\.\./\.\./\.\./core/src/", "from '../core/src/" `
-                               -replace "from '\.\./\.\./\.\./\.\./core/src/", "from '../core/src/"
+        if ($content -notlike "*#core/*") {
+            continue
+        }
+        $prefix = Get-CorePrefix -File $file.FullName -TargetRoot $Target
+        $newContent = $content.Replace("#core/", ($prefix + "core/src/"))
         if ($newContent -ne $content) {
             [System.IO.File]::WriteAllText($file.FullName, $newContent, [System.Text.Encoding]::UTF8)
-        }
-    }
-
-    # src/ui/ files: depth 2 from src/ → 4 levels up in source, 2 levels in dist
-    # From clients/<platform>/src/ui/:   ../../../../core/src/  (4 levels up to root)
-    # From dist/<platform>/src/ui/:      ../../core/src/         (2 levels up to dist root)
-    $uiSrcFiles = Get-ChildItem (Join-Path $Target "src\ui\*.js") -File -ErrorAction SilentlyContinue
-    foreach ($file in $uiSrcFiles) {
-        $content = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
-        $newContent = $content -replace "from '\.\./\.\./\.\./\.\./core/src/", "from '../../core/src/" `
-                               -replace "from '\.\./\.\./\.\./core/src/", "from '../../core/src/"
-        if ($newContent -ne $content) {
-            [System.IO.File]::WriteAllText($file.FullName, $newContent, [System.Text.Encoding]::UTF8)
-        }
-    }
-
-    # src/adapters/host/ files: depth 3 from src/ → 5 levels up in source, 3 levels in dist
-    # From clients/<platform>/src/adapters/host/:  ../../../../../core/src/  (5 levels up to root)
-    # From dist/<platform>/src/adapters/host/:     ../../../core/src/         (3 levels up to dist root)
-    $adapterFiles = Get-ChildItem (Join-Path $Target "src\adapters\host\*.js") -File -ErrorAction SilentlyContinue
-    foreach ($file in $adapterFiles) {
-        $content = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
-        $newContent = $content -replace "from '\.\./\.\./\.\./\.\./\.\./core/src/", "from '../../../core/src/" `
-                               -replace "from '\.\./\.\./\.\./\.\./core/src/", "from '../../../core/src/'"
-        if ($newContent -ne $content) {
-            [System.IO.File]::WriteAllText($file.FullName, $newContent, [System.Text.Encoding]::UTF8)
-        }
-    }
-
-    # Fix index.html fabric.js + jszip path.
-    $htmlFile = Join-Path $Target "src\index.html"
-    $htmlContent = [System.IO.File]::ReadAllText($htmlFile, [System.Text.Encoding]::UTF8)
-    $htmlNew = $htmlContent -replace 'src="\.\./\.\./\.\./core/src/lib/fabric\.min\.js"', 'src="../core/src/lib/fabric.min.js"'
-    $htmlNew = $htmlNew -replace 'src="\.\./\.\./\.\./core/src/lib/jszip\.min\.js"', 'src="../core/src/lib/jszip.min.js"'
-    $htmlNew = $htmlNew -replace 'href="\.\./\.\./\.\./core/src/style\.css"', 'href="../core/src/style.css"'
-    if ($htmlNew -ne $htmlContent) {
-        [System.IO.File]::WriteAllText($htmlFile, $htmlNew, [System.Text.Encoding]::UTF8)
-    }
-
-    # Fix root-level preload.js require path.
-    # From clients/<platform>/preload.js: require('../../../core/src/preloadHelpers.js')
-    # From dist/<platform>/preload.js:    require('./core/src/preloadHelpers.js')
-    $preloadFile = Join-Path $Target "preload.js"
-    if (Test-Path $preloadFile) {
-        $preloadContent = [System.IO.File]::ReadAllText($preloadFile, [System.Text.Encoding]::UTF8)
-        $preloadNew = $preloadContent -replace "require\('\.\./\.\./\.\./core/src/", "require('./core/src/"
-        if ($preloadNew -ne $preloadContent) {
-            [System.IO.File]::WriteAllText($preloadFile, $preloadNew, [System.Text.Encoding]::UTF8)
         }
     }
 }
@@ -103,6 +81,45 @@ function Test-BuildOutput {
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  FAIL: $($_.FullName.Replace($Target, "dist/$DistName"))" -ForegroundColor Red
             Write-Host $result -ForegroundColor Red
+            $ok = $false
+        }
+    }
+
+    # The build output must not contain unresolved aliases.
+    $leftover = Get-ChildItem $Target -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -eq '.js' -or $_.Extension -eq '.html' } |
+        Select-String -Pattern "#core/" -SimpleMatch -ErrorAction SilentlyContinue
+    if ($leftover) {
+        Write-Host "  FAIL: unresolved #core/ alias in dist/$DistName" -ForegroundColor Red
+        $leftover | ForEach-Object { Write-Host "    $($_.Path)" -ForegroundColor Red }
+        $ok = $false
+    }
+
+    # preload.js is loaded by Electron via CommonJS require(). If an ancestor
+    # package.json declares "type": "module", Node rejects it with
+    # "require() of ES Module ... not supported" and the plugin fails to load.
+    # This guard makes that failure explicit instead of a confusing syntax error.
+    $preload = Join-Path $Target "preload.js"
+    if (Test-Path $preload) {
+        # Walk up from preload.js to the nearest package.json and check its "type".
+        $dir = Split-Path $preload -Parent
+        $type = $null
+        while ($dir -and -not $type) {
+            $candidate = Join-Path $dir "package.json"
+            if (Test-Path $candidate) {
+                $json = [System.IO.File]::ReadAllText($candidate, [System.Text.Encoding]::UTF8)
+                if ($json -match '"type"\s*:\s*"module"') {
+                    $type = "module"
+                } else {
+                    $type = "commonjs"
+                }
+            }
+            $dir = Split-Path $dir -Parent
+        }
+        if ($type -eq "module") {
+            Write-Host "  FAIL: dist/$DistName/preload.js would be treated as an ES module." -ForegroundColor Red
+            Write-Host "        Electron requires it as CommonJS, so it would fail to load." -ForegroundColor Red
+            Write-Host "        Remove the 'type: module' field from the ancestor package.json." -ForegroundColor Red
             $ok = $false
         }
     }
@@ -139,7 +156,7 @@ foreach ($platform in $platforms) {
     New-Item -ItemType Directory -Path (Join-Path $target "src") -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $target "core\src") -Force | Out-Null
 
-    # 平台可选文件：plugin.json / preload.js 仅 Electron 插件平台需要
+    # Platform-optional files: plugin.json / preload.js are Electron-only.
     if (Test-Path (Join-Path $clientRoot "plugin.json")) {
         Copy-Item (Join-Path $clientRoot "plugin.json") $target
     }

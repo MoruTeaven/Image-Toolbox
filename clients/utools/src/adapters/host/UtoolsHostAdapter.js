@@ -3,7 +3,7 @@
  * uTools 平台宿主适配器，继承 BaseHostAdapter。
  */
 
-import BaseHostAdapter from '../../../../../core/src/adapters/BaseHostAdapter.js';
+import BaseHostAdapter from '#core/adapters/BaseHostAdapter.js';
 
 const DEFAULT_HOST_NAME = 'uTools';
 

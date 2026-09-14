@@ -16,7 +16,7 @@
  *     setupFontTools,
  *     setupUserAPI,
  *     setupMiscAPIs,
- *   } = require('../../../core/src/preloadHelpers.js');
+ *   } = require('#core/preloadHelpers.js');
  *
  *   // 提供平台特定函数
  *   const platform = {

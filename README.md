@@ -88,7 +88,8 @@
 
 - Node.js（用于构建时 `node --check` 语法校验）
 - PowerShell（执行构建脚本）
-- 无需 `npm install`，项目无外部依赖，Fabric.js 为本地引入
+- 构建本身无需 `npm install`，依赖均以本地文件形式引入（Fabric.js、JSZip、Teaven Identity SDK）
+- Teaven Identity SDK 如需升级，需访问公司私有 npm 源，见 `core/src/lib/identity-sdk/README.md`
 
 ### 构建
 
@@ -99,7 +100,7 @@
 构建流程：
 1. 清理 `dist/` 下旧的平台目录
 2. 对每个平台（uTools、zTools、web）：复制 `clients/<platform>/` 和 `core/src/` 到 `dist/<platform>/`
-3. 自动修正 import 路径
+3. 把 `#core/` 别名重写为按输出位置计算的相对路径
 4. 对所有 JS 文件执行 `node --check` 语法校验
 
 ### 部署 Web 端
@@ -120,7 +121,7 @@
 
 | 项目 | 选型 |
 |------|------|
-| 语言 | 纯 JavaScript（ES Module） |
+| 语言 | 纯 JavaScript（ES Module），`#core/` 别名引用共享核心 |
 | 引擎 | Fabric.js 5.x（本地引入，非 CDN） |
 | UI | 原生 HTML / CSS / JS，无前端框架 |
 | 构建 | PowerShell 脚本，无打包工具 |

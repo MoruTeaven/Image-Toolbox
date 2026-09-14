@@ -1,4 +1,4 @@
-const { initPlatformPreload } = require('../../../core/src/preloadHelpers.js');
+const { initPlatformPreload } = require('#core/preloadHelpers.js');
 
 // ═══════════════════════════════════════════════════════════════
 // ZTools 平台特定配置
