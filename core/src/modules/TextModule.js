@@ -302,6 +302,14 @@ class TextModule extends BaseModule {
           <input type="number" class="property-input" data-module-prop="fontSize" value="${opts.fontSize}" min="8" max="200" />
         </div>
         <div class="property-item">
+          <label>对齐</label>
+          <select class="property-select property-select--short" data-module-prop="textAlign">
+            ${this._getSelectOption('left', '左', opts.textAlign)}
+            ${this._getSelectOption('center', '中', opts.textAlign)}
+            ${this._getSelectOption('right', '右', opts.textAlign)}
+          </select>
+        </div>
+        <div class="property-item">
           <label>颜色</label>
           <input type="color" class="property-color" data-module-prop="fill" value="${opts.fill || '#000000'}" />
         </div>
@@ -335,14 +343,6 @@ class TextModule extends BaseModule {
         <div class="property-item property-item--toggle">
           <label>删除线</label>
           <input type="checkbox" class="property-checkbox" data-module-prop="linethrough" ${opts.linethrough ? 'checked' : ''} />
-        </div>
-        <div class="property-item">
-          <label>对齐</label>
-          <select class="property-select property-select--short" data-module-prop="textAlign">
-            ${this._getSelectOption('left', '左', opts.textAlign)}
-            ${this._getSelectOption('center', '中', opts.textAlign)}
-            ${this._getSelectOption('right', '右', opts.textAlign)}
-          </select>
         </div>
         <div class="property-empty">这些设置会用于接下来新增的文字。</div>
       `;

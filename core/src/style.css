@@ -1182,6 +1182,8 @@ html, body {
   font-size: 12px;
   line-height: 1.4;
   white-space: nowrap;
+  /* 选项栏内的提示文字保持垂直居中（容器已改为 stretch 对齐） */
+  align-self: center;
 }
 
 .shape-picker-trigger {
@@ -1369,13 +1371,161 @@ html, body {
 }
 
 /* 婊ら暅棰勮鎸夐挳锛堥€夐」鏍忥級 */
-.filter-preset-btn {
-  min-width: 44px;
-}
-
 .filter-preset-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/*
+ * 调色预设栏：预设以「效果缩略图 + 名称」卡片展示，横向排列可滚动。
+ *
+ * 高度说明（这里曾两次把卡片压成扁条）：
+ * 卡片高度来自「效果图铺满卡片」，而 flex 里的百分比高度会解析成父容器的高度；
+ * 只要父容器高度是内容驱动（例如归中布局把高度压成一行文字），100% 就只剩几像素。
+ * 上游 .optionsbar__controls 是 align-items: center（其他工具都依赖它，不能改），
+ * 因此这一支改用确定高度：直接取选项栏行高变量，再逐层向下传递，
+ * 不再依赖祖先的拉伸行为。
+ */
+.options-group--filter {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* 确定高度：与选项栏行高一致，自成一个高度来源，不受上游归中布局影响 */
+  height: var(--optionsbar-height);
+  align-self: center;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+/* 滚动区高度跟随父级（.options-group--filter 已有确定高度），卡片由此拿到高度 */
+.filter-preset-scroll {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* 默认不预留滚动条高度，卡片可占满整条选项栏；仅在内容溢出时再加（见 .is-scrollable） */
+  padding-bottom: 0;
+  box-sizing: border-box;
+  scrollbar-width: none;
+}
+
+/* 内容溢出（可横向滚动）时才显示滚动条并让出 6px，避免滚动条压住卡片底部 */
+.filter-preset-scroll.is-scrollable {
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+}
+
+.filter-preset-scroll::-webkit-scrollbar {
+  height: 0;
+}
+
+.filter-preset-scroll.is-scrollable::-webkit-scrollbar {
+  height: 6px;
+}
+
+.filter-preset-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+.filter-preset-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/*
+ * 单个预设卡片：效果缩略图铺满卡片，名称叠加在底部遮罩上。
+ *
+ * 尺寸：高度撑满整条选项栏；宽度按效果图的真实宽高比动态计算
+ * （--preset-aspect 由 JS 按源图比例注入），上下留 4px 边距，
+ * 保证 object-fit: cover 不裁切画面。aspect-ratio 不被支持时回退到 76px。
+ */
+.filter-preset-btn {
+  position: relative;
+  display: block;
+  /* 高度撑满卡片区，宽度由 --preset-aspect 按源图比例推导 */
+  height: 100%;
+  width: auto;
+  aspect-ratio: var(--preset-aspect, 74 / 42);
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-width: 44px;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background: var(--bg-canvas);
+  color: var(--color-text);
+  cursor: pointer;
+  line-height: 1;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.filter-preset-btn:hover {
+  border-color: var(--color-accent);
+}
+
+.filter-preset-btn.active {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+/* 效果缩略图铺满整个卡片，卡片高度跟随顶部选项栏 */
+.filter-preset-btn__preview {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+/* 缩略图生成失败时的占位 */
+.filter-preset-btn__preview--empty {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      var(--bg-card),
+      var(--bg-card) 6px,
+      var(--bg-panel) 6px,
+      var(--bg-panel) 12px
+    );
+}
+
+/* 名称遮罩：下半部分压暗，保证浅色/深色图片上文字都清晰可读 */
+.filter-preset-btn__label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 8px 2px 3px;
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #ffffff;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.45) 45%,
+    rgba(0, 0, 0, 0.68) 100%
+  );
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.filter-preset-btn.active .filter-preset-btn__label {
+  font-weight: 600;
 }
 
 .brush-color-btn {
@@ -1735,7 +1885,7 @@ html, body {
 .property-section-title {
   padding: 4px 6px 2px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.4px;
 }
@@ -1744,7 +1894,7 @@ html, body {
   padding: 8px;
   text-align: center;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .property-item {
@@ -1780,14 +1930,12 @@ html, body {
   grid-column: span 3;
 }
 
-/* 寮€鍏冲紡锛?5% + 绾靛悜鎺掑垪锛堝閫夋鍦ㄤ笂锛屾爣绛惧湪涓嬶級 */
+/* 复选框行：半行宽（一行两个），标签在左、勾选框在右 */
 .property-item--toggle {
-  grid-column: span 3;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 4px 2px;
+  grid-column: span 6;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 2px 6px;
 }
 
 .property-item--toggle .property-checkbox {
@@ -1796,7 +1944,7 @@ html, body {
 }
 
 .property-item--toggle label {
-  text-align: center;
+  text-align: left;
 }
 
 .property-item--stacked {
@@ -1903,7 +2051,7 @@ html, body {
 }
 
 .property-item label {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-secondary);
   flex-shrink: 0;
   text-align: right;
@@ -1917,7 +2065,7 @@ html, body {
   color: var(--color-text);
   border: none;
   padding: 1px 2px;
-  font-size: 11px;
+  font-size: 12px;
   outline: none;
   text-align: center;
   -moz-appearance: textfield;
@@ -1961,7 +2109,7 @@ html, body {
   border: 1px solid var(--color-border);
   border-radius: 3px;
   padding: 1px 4px;
-  font-size: 11px;
+  font-size: 12px;
   outline: none;
 }
 
@@ -1979,7 +2127,7 @@ html, body {
 .property-static {
   min-width: 34px;
   color: var(--color-text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .property-input:disabled,
