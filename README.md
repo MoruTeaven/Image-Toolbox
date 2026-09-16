@@ -63,7 +63,7 @@
 │       ├── LayerManager.js # 图层管理器
 │       ├── HistoryManager.js # 历史记录（撤销/重做）
 │       ├── ToolManager.js  # 工具管理器
-│       ├── updateRecords.js# 版本更新记录
+│       ├── changelog.js    # 版本号（APP_VERSION）+ 更新记录（唯一权威来源）
 │       ├── preloadHelpers.js # preload 公共逻辑
 │       ├── app/            # 跨平台应用入口
 │       ├── adapters/       # 宿主适配器基类
@@ -102,6 +102,7 @@
 2. 对每个平台（uTools、zTools、web）：复制 `clients/<platform>/` 和 `core/src/` 到 `dist/<platform>/`
 3. 把 `#core/` 别名重写为按输出位置计算的相对路径
 4. 对所有 JS 文件执行 `node --check` 语法校验
+5. 执行版本号一致性校验（`scripts/version-check.ps1`）：`core/src/changelog.js` 的 `APP_VERSION` 必须与两个 `plugin.json`、`package.json`、`README.md` 声明一致，不一致直接构建失败
 
 ### 部署 Web 端
 
@@ -131,7 +132,7 @@
 
 | 版本 | 日期 | 要点 |
 |------|------|------|
-| 2.5.0 | 2026-09-16 | 调色预设改为效果图卡片，直接显示当前图层调色效果；新增贴纸功能 |
+| 2.5.0 | 2026-09-17 | 调色预设改为效果图卡片，直接显示当前图层调色效果；新增贴纸功能；修复保存图片或 ORA 工程文件失败时没有任何提示的问题 |
 | 2.4.3 | 2026-08-31 | 新增五边形图形、画笔光标指示修复与增强 |
 | 2.4.2 | 2026-08-22 | ORA 工程文件导入/导出、马赛克/橡皮擦工具鼠标状态修复 |
 | 2.4.1 | 2026-08-21 | 字体检测跨平台兼容、图片加载与重复进入修复、滚轮缩放以鼠标位置为中心 |
@@ -146,4 +147,4 @@
 | 2.0 | 2026-06-12 | 面板布局切换、裁剪多项修复 |
 | 1.0 | 2026-06-10 | 首个可用版本 |
 
-完整更新记录见 `core/src/updateRecords.js`。
+完整更新记录与版本号定义见 `core/src/changelog.js`。

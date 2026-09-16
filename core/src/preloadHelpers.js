@@ -966,18 +966,22 @@ const setupMiscAPIs = (platform) => {
   };
 };
 
+/**
+ * 查找宿主 API 对象。
+ *
+ * 只在宿主 API 自身的键上查找（hostTools / ztools / utools），
+ * 不回写任何别名：过去这里会把 ZTools API 额外别名成 window.utools，
+ * 使页面侧「window.utools 存在即 uTools」的嗅探把 ZTools 误判成 uTools。
+ */
 const getHostTools = () => {
   if (typeof window === 'undefined') return null;
   const api = window.hostTools
-    || window.utools
     || window.ztools
-    || (typeof globalThis !== 'undefined' ? (globalThis.utools || globalThis.ztools) : null)
+    || window.utools
+    || (typeof globalThis !== 'undefined' ? (globalThis.ztools || globalThis.utools) : null)
     || null;
-  if (api) {
+  if (api && !window.hostTools) {
     window.hostTools = api;
-    if (!window.utools && window.ztools === api) {
-      window.utools = api;
-    }
   }
   return api;
 };
@@ -1004,6 +1008,61 @@ const getHostAppVersion = () => {
   return 'unknown';
 };
 
+/**
+ * 定位插件根目录（含 plugin.json 的那一层）。
+ *
+ * 不能用 path.dirname(__dirname)：本文件位于 <插件根>/core/src/ 下，
+ * 再向上一层得到的是 <插件根>/core，不是插件根。
+ * 这里从本文件所在目录逐级向上查找 plugin.json，因此对
+ * <插件根>/core/src/preloadHelpers.js 的实际位置不敏感。
+ *
+ * @returns {string} 插件根目录，未找到时为空字符串
+ */
+const findPluginRoot = () => {
+  let dir = __dirname;
+
+  for (let depth = 0; depth < 5; depth += 1) {
+    try {
+      if (fs.existsSync(path.join(dir, 'plugin.json'))) return dir;
+    } catch (e) {
+      return '';
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  return '';
+};
+
+/**
+ * 读取本插件自身的版本号（面向用户展示的发布版本）。
+ *
+ * 单一事实来源是插件根目录下的 plugin.json —— 它同时是 uTools / ZTools
+ * 应用市场读取的发布版本，因此「关于」页展示它才能与市场版本一致。
+ *
+ * 注意不要与 getHostAppVersion() 混淆：后者返回的是宿主程序（uTools /
+ * ZTools 客户端）自身的版本号。
+ *
+ * @returns {string} 版本号，读取失败时为空字符串
+ */
+const readPluginVersionFromManifest = () => {
+  try {
+    const pluginRoot = findPluginRoot();
+    if (!pluginRoot) return '';
+
+    const manifestPath = path.join(pluginRoot, 'plugin.json');
+    if (!fs.existsSync(manifestPath)) return '';
+
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    return manifest && manifest.version ? String(manifest.version).trim() : '';
+  } catch (e) {
+    console.warn('[preload] 读取 plugin.json 版本失败:', e);
+    return '';
+  }
+};
+
 const getHostVersion = () => getHostAppVersion();
 
 const getHostAppInfo = () => {
@@ -1027,10 +1086,6 @@ const _getHostName = () => {
     }
   } catch (e) {
     console.warn('[preload] 获取宿主名称失败:', e);
-  }
-  if (typeof window !== 'undefined') {
-    if (window.ztools) return 'ZTools';
-    if (window.utools) return 'uTools';
   }
   return '宿主';
 };
@@ -1114,6 +1169,25 @@ const initPlatformPreload = (opts) => {
   window.getHostAppVersion = getHostAppVersion;
   window.getHostName = () => name;
 
+  // 本插件版本号：优先读 plugin.json（发布版本的权威来源），
+  // 读不到时退回宿主 API 暴露的插件版本；都取不到返回空字符串，
+  // 由页面侧回退到 APP_VERSION。绝不返回宿主程序版本。
+  window.getPluginVersion = () => {
+    const fromManifest = readPluginVersionFromManifest();
+    if (fromManifest) return fromManifest;
+
+    const api = getHostTools();
+    try {
+      if (api && typeof api.getPluginVersion === 'function') {
+        const version = api.getPluginVersion();
+        if (version) return String(version);
+      }
+    } catch (e) {
+      console.warn(`[${name} preload] 获取插件版本失败:`, e);
+    }
+    return '';
+  };
+
   window[userFnName] = () => {
     const api = getHostTools();
     if (!api) return null;
@@ -1173,5 +1247,7 @@ module.exports = {
   getHostAppVersion,
   getHostVersion,
   getHostAppInfo,
+  readPluginVersionFromManifest,
+  findPluginRoot,
   _getHostName,
 };

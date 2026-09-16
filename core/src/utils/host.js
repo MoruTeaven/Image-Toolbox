@@ -1,11 +1,15 @@
+/**
+ * 宿主 API 对象（只读查找，不做任何别名写回）。
+ *
+ * 顺序上 ztools 先于 utools：ZTools 环境下 window.utools 可能是历史别名，
+ * 优先取 ztools 才能命中真正的宿主对象。
+ *
+ * 平台判定不要用本函数：请读取 HostAdapter.platform.id。
+ */
 function getHostApi() {
   if (typeof window === 'undefined') return null;
 
-  const api = window.hostTools || window.utools || window.ztools || null;
-  if (api && window.hostTools !== api) {
-    window.hostTools = api;
-  }
-  return api;
+  return window.hostTools || window.ztools || window.utools || null;
 }
 
 export function isHostDarkColors() {

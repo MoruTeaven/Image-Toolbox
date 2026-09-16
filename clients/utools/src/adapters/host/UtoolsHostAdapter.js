@@ -53,10 +53,9 @@ class UtoolsHostAdapter extends BaseHostAdapter {
       console.warn('[UtoolsHostAdapter] 获取宿主名称失败:', e);
     }
 
-    if (typeof window !== 'undefined') {
-      if (window.utools) return 'uTools';
-      if (window.ztools) return 'ZTools';
-    }
+    // 无 API 时的兜底：仅在 uTools 全局键存在时按 uTools 命名，
+    // 不再因为 window.ztools 存在就把本适配器的显示名改派成 ZTools。
+    if (typeof window !== 'undefined' && window.utools) return 'uTools';
 
     return DEFAULT_HOST_NAME;
   }

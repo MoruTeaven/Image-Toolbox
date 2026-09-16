@@ -127,6 +127,13 @@ function Test-BuildOutput {
     return $ok
 }
 
+
+# App version consistency gate (single source of truth: core/src/changelog.js).
+# The implementation lives in scripts/version-check.ps1 - it is kept out of this
+# file so the heavy CJK comment surface of the docs does not sit inside the
+# build script that Windows PowerShell has to tokenize.
+. (Join-Path $PSScriptRoot "scripts\version-check.ps1")
+
 # Clean + create
 New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
 
@@ -176,7 +183,16 @@ foreach ($platform in $platforms) {
     }
 }
 
+# App version consistency gate. Runs before anything is produced, so a
+# mismatched version can never reach a publishable dist.
+Write-Host "Checking app version consistency ..." -ForegroundColor Cyan
+if (-not (Test-AppVersion -Root $root -DistRoot $distRoot -Platforms $platforms)) {
+    $allOk = $false
+}
+
 if (-not $allOk) {
     Write-Host "Build failed!" -ForegroundColor Red
     exit 1
 }
+
+Write-Host "Build succeeded." -ForegroundColor Green

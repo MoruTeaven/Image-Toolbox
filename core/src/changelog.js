@@ -1,13 +1,73 @@
-export const updateRecords = [
+/**
+ * changelog.js — 面向用户的版本更新记录（唯一一份版本号数据源）
+ *
+ * ═══ 版本号单一事实来源（Single Source of Truth）═══
+ *
+ * APP_VERSION 是「插件版本号」的唯一权威定义，对应发布到 uTools / ZTools
+ * 应用市场的版本。以下位置必须始终与它保持一致：
+ *
+ *   clients/utools/plugin.json     ← uTools 市场读取的发布版本
+ *   clients/ztools/plugin.json     ← ZTools 市场读取的发布版本
+ *   package.json                   ← 仓库发布版本（与 plugin.json 同源）
+ *   README.md / agents.md          ← 文档中的「当前版本」
+ *
+ * 构建脚本 build.ps1 的 Test-AppVersion 会逐项比对并在不一致时直接构建失败。
+ *
+ * 本文件取代了历史上的 core/src/updateRecords.js：
+ *   - 记录数组从 updateRecords 改名为 CHANGELOG，专门表示「更新记录」，
+ *     不再承担「当前版本」的职责（过去「关于」页正是取它首条当版本号，
+ *     导致插件内显示 1.2.3、市场显示 2.3.2 的错乱）；
+ *   - 当前版本统一由 APP_VERSION / getAppVersion() 提供。
+ *
+ * ═══ 发版检查清单 ═══
+ *
+ *   1. 更新 APP_VERSION（仅这一处）
+ *   2. 在 CHANGELOG 顶部插入同版本号的记录条目
+ *   3. 同步两个 plugin.json 的 version 与 package.json 的 version
+ *   4. 同步 README.md / agents.md 中的「当前版本」
+ *   5. 执行 .\build.ps1，构建期校验通过才算发版完成
+ *
+ * ═══ 文案规范 ═══
+ *
+ *   记录只写用户可见的现象，不写实现细节、内部原因与受影响代码范围；
+ *   一条一行，能用一句话说清就不拆成多条。详见 agents.md §7.5。
+ */
+
+/**
+ * 插件当前版本号（唯一权威定义）。
+ *
+ * 修改此处即代表发版意图，其余引用点由构建期校验强制同步。
+ * @type {string}
+ */
+export const APP_VERSION = '2.5.0';
+
+/**
+ * 版本记录条目结构
+ * @typedef {Object} ChangelogRecord
+ * @property {string} version - 版本号（不含 v 前缀）
+ * @property {string} date - 发布日期 YYYY-MM-DD
+ * @property {Object} changes - 分类变更，键见 updateCategories
+ */
+
+/**
+ * 用户可见的版本更新记录（按版本从新到旧排列，最新一条在最上面）。
+ *
+ * 发布后不可更改：已发布的版本条目视为只读，不得修改或删除。
+ * @type {ChangelogRecord[]}
+ */
+export const CHANGELOG = [
   {
     version: '2.5.0',
-    date: '2026-09-16',
+    date: '2026-09-17',
     changes: {
       added: [
         { text: '调色预设改为效果图卡片，直接显示当前图层的调色效果', platforms: null },
         { text: '新增贴纸功能，支持从本地添加图片图层', platforms: null }
       ],
-      fixed: [],
+      fixed: [
+        { text: '修复保存图片或 ORA 工程文件失败时没有任何提示的问题', platforms: null },
+        { text: '修复插件内显示的版本号与市场发布版本不一致的问题', platforms: null }
+      ],
       improved: [],
       adjusted: [],
       removed: []
@@ -288,6 +348,7 @@ export const updateRecords = [
       removed: []
     }
   }
+
 ];
 
 export const updateCategories = [
@@ -311,3 +372,31 @@ export const PLATFORMS = {
   ZTOOLS: 'ztools',    // ZTools 专用
   LOCAL: 'local',      // 本地环境
 };
+
+/**
+ * 读取插件当前版本号。
+ *
+ * 「关于」页、更新记录页等一切需要展示插件自身版本的地方都必须走本函数，
+ * 不要再从更新记录里取第一条当版本号。
+ *
+ * @returns {string} 形如 '2.5.0' 的版本号（不含 v 前缀）
+ */
+export function getAppVersion() {
+  return APP_VERSION;
+}
+
+/**
+ * 读取版本更新记录。
+ * @returns {ChangelogRecord[]}
+ */
+export function getChangelog() {
+  return CHANGELOG;
+}
+
+/**
+ * 取最近一条更新记录（用于「最新更新」摘要，不用于版本号展示）。
+ * @returns {ChangelogRecord|null}
+ */
+export function getLatestChangelogRecord() {
+  return CHANGELOG.length > 0 ? CHANGELOG[0] : null;
+}

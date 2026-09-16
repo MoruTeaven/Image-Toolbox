@@ -11,7 +11,7 @@
  * - 无系统字体扫描能力（降级到内置字体列表）
  */
 
-import BaseHostAdapter from '#core/adapters/BaseHostAdapter.js';
+import BaseHostAdapter, { SAVE_STATUS, createSaveResult } from '#core/adapters/BaseHostAdapter.js';
 
 const DEFAULT_HOST_NAME = 'Web';
 
@@ -107,9 +107,15 @@ class WebHostAdapter extends BaseHostAdapter {
 
   /**
    * 保存图片 — 触发浏览器下载
+   *
+   * 返回结构化结果，与 BaseHostAdapter 契约一致；浏览器下载没有
+   * 「用户取消」概念，因此只有成功 / 失败（含能力缺失）两种结果。
+   * @returns {{ ok: boolean, status: string, filePath: string|null, reason: string|null }}
    */
   saveImage(data, suggestedName = 'edited.png') {
-    if (!data || typeof document === 'undefined') return false;
+    if (!data || typeof document === 'undefined') {
+      return createSaveResult(SAVE_STATUS.UNSUPPORTED, { reason: 'no-blob-or-dom' });
+    }
 
     try {
       const link = document.createElement('a');
@@ -118,10 +124,10 @@ class WebHostAdapter extends BaseHostAdapter {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      return true;
+      return createSaveResult(SAVE_STATUS.SAVED, { filePath: suggestedName });
     } catch (e) {
       console.warn('[WebHostAdapter] 浏览器下载失败:', e);
-      return false;
+      return createSaveResult(SAVE_STATUS.FAILED, { reason: e?.message || 'browser-download-failed' });
     }
   }
 
