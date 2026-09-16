@@ -1,7 +1,7 @@
 export const updateRecords = [
   {
     version: '2.5.0',
-    date: '2026-09-13',
+    date: '2026-09-16',
     changes: {
       added: [
         { text: '调色预设改为效果图卡片，直接显示当前图层的调色效果', platforms: null },
