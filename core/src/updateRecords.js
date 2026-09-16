@@ -4,14 +4,11 @@ export const updateRecords = [
     date: '2026-09-13',
     changes: {
       added: [
-        { text: '调色工具的滤镜预设改为效果图卡片，按图片比例展示当前图层的调色效果，名称叠在图片下方', platforms: null },
-        { text: '左侧栏新增「贴纸」功能，可从本地文件选择图片作为新图层添加到画布', platforms: null },
-        { text: '新增按 P 快速打开贴纸面板的快捷键', platforms: null }
+        { text: '调色预设改为效果图卡片，直接显示当前图层的调色效果', platforms: null },
+        { text: '新增贴纸功能，支持从本地添加图片图层', platforms: null }
       ],
       fixed: [],
-      improved: [
-        { text: '优化侧栏属性面板选项的排列与宽度对齐', platforms: null }
-      ],
+      improved: [],
       adjusted: [],
       removed: []
     }
