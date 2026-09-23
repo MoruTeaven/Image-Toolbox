@@ -6,6 +6,11 @@
   "main": "src/index.html",
   "logo": "logo.png",
   "preload": "preload.js",
+  "pluginSetting": {
+    "single": true,
+    "contextIsolation": true,
+    "nodeIntegration": false
+  },
   "features": [
     {
       "code": "image-edit",

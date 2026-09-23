@@ -16,6 +16,7 @@ class CanvasManager {
     this._isCropMode = false;
     this._resizeObserver = null;
     this._boundResize = null;
+    this._canvasListeners = [];
   }
 
   // ── 生命周期 ──
@@ -60,10 +61,21 @@ class CanvasManager {
     }
     if (this._historySaveTimer) {
       clearTimeout(this._historySaveTimer);
+      this._historySaveTimer = null;
     }
     if (this.canvas) {
+      // 先逐个解绑画布监听再 dispose()。
+      // 这些回调都通过闭包引用 this，仅在 dispose() 时清空内部监听表的话，
+      // 销毁后残留的回调仍会继续 emit 到全局 EventBus（旧画布被写入历史等）。
+      this._canvasListeners.forEach(({ event, handler }) => {
+        this.canvas.off(event, handler);
+      });
+      this._canvasListeners = [];
+
       this.canvas.dispose();
       this.canvas = null;
+    } else {
+      this._canvasListeners = [];
     }
     this.originalImage = null;
   }
@@ -570,49 +582,61 @@ class CanvasManager {
     }
   }
 
+  /**
+   * 注册画布监听，并记录解绑信息供 destroy() 使用。
+   * @param {string} event - Fabric 事件名
+   * @param {Function} handler
+   */
+  _onCanvas(event, handler) {
+    this.canvas.on(event, handler);
+    this._canvasListeners.push({ event, handler });
+  }
+
   _bindEvents() {
     if (!this.canvas) return;
 
+    this._canvasListeners = [];
+
     // 选择变化
-    this.canvas.on('selection:created', (e) => {
+    this._onCanvas('selection:created', (e) => {
       eventBus.emit('canvas:selectionCreated', e.selected);
     });
-    this.canvas.on('selection:updated', (e) => {
+    this._onCanvas('selection:updated', (e) => {
       eventBus.emit('canvas:selectionUpdated', e.selected);
     });
-    this.canvas.on('selection:cleared', () => {
+    this._onCanvas('selection:cleared', () => {
       eventBus.emit('canvas:selectionCleared');
     });
 
     // 物件修改
-    this.canvas.on('object:modified', (e) => {
+    this._onCanvas('object:modified', (e) => {
       eventBus.emit('canvas:objectModified', e.target);
     });
-    this.canvas.on('text:changed', (e) => {
+    this._onCanvas('text:changed', (e) => {
       eventBus.emit('canvas:objectMetadataChanged', e.target);
     });
-    this.canvas.on('text:editing:exited', (e) => {
+    this._onCanvas('text:editing:exited', (e) => {
       eventBus.emit('canvas:objectModified', e.target);
     });
 
     // 物件添加/删除
-    this.canvas.on('object:added', (e) => {
+    this._onCanvas('object:added', (e) => {
       eventBus.emit('canvas:objectAdded', e.target);
     });
 
     // 鼠标事件
-    this.canvas.on('mouse:down', (e) => {
+    this._onCanvas('mouse:down', (e) => {
       eventBus.emit('canvas:mouseDown', e);
     });
-    this.canvas.on('mouse:move', (e) => {
+    this._onCanvas('mouse:move', (e) => {
       eventBus.emit('canvas:mouseMove', e);
     });
-    this.canvas.on('mouse:up', (e) => {
+    this._onCanvas('mouse:up', (e) => {
       eventBus.emit('canvas:mouseUp', e);
     });
 
     // 渲染完成
-    this.canvas.on('after:render', () => {
+    this._onCanvas('after:render', () => {
       eventBus.emit('canvas:rendered');
     });
 

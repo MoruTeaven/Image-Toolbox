@@ -58,17 +58,20 @@ export const APP_VERSION = '2.5.0';
 export const CHANGELOG = [
   {
     version: '2.5.0',
-    date: '2026-09-17',
+    date: '2026-09-23',
     changes: {
       added: [
         { text: '调色预设改为效果图卡片，直接显示当前图层的调色效果', platforms: null },
-        { text: '新增贴纸功能，支持从本地添加图片图层', platforms: null }
+        { text: '新增贴纸功能，支持从本地添加图片图层', platforms: null },
+        { text: '橡皮擦新增框选模式，拖拽框选即可一次擦除整片区域', platforms: null }
       ],
       fixed: [
         { text: '修复保存图片或 ORA 工程文件失败时没有任何提示的问题', platforms: null },
-        { text: '修复插件内显示的版本号与市场发布版本不一致的问题', platforms: null }
+        { text: '修复 Web 版网页打开后样式丢失、ORA 工程文件无法导入导出的问题', platforms: ['web'] }
       ],
-      improved: [],
+      improved: [
+        { text: 'Web 版链接中的图片参数增加来源校验，不再加载外部站点的图片', platforms: ['web'] }
+      ],
       adjusted: [],
       removed: []
     }

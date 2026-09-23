@@ -245,8 +245,18 @@ class ToolManager {
    */
   destroy() {
     Object.values(this._modules).forEach(m => {
-      if (m.deactivate) m.deactivate();
-      if (m.destroy) m.destroy();
+      // 逐个模块 try/catch：单个模块清理抛异常不得阻断其余模块的 deactivate/destroy，
+      // 否则后续模块的 eventBus 解绑会被整条跳过，造成订阅泄漏。
+      try {
+        if (m.deactivate) m.deactivate();
+      } catch (err) {
+        console.error('[ToolManager] 模块 deactivate 失败:', err);
+      }
+      try {
+        if (m.destroy) m.destroy();
+      } catch (err) {
+        console.error('[ToolManager] 模块 destroy 失败:', err);
+      }
     });
     this._modules = {};
     this._currentTool = null;

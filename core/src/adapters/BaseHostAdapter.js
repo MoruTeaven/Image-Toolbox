@@ -7,12 +7,14 @@
  * - getDefaultHostName(): 默认宿主名称
  * - getHostApiPriority(): API 查找优先级数组
  * - getAppVersionPriority(): 宿主程序版本获取方法优先级数组
- * - getPluginVersion(): 本插件版本号（默认读 preload 透传的 window.getPluginVersion）
+ * - getPluginVersion(): 本插件版本号（读 preload 透传的插件版本，来源 plugin.json）
  * - getHostDisplayName(api): 获取宿主显示名称
  * - normalizeUser(user): 用户数据标准化
  * - getRawUser(api): 获取原始用户数据
  * - getContactUrl(): 联系链接
  */
+
+import { getBridgedApi } from '../utils/host.js';
 
 const _isUserValid = (user) => {
   return user && (user.nickname || user.name || user.userName || user.username || user.avatar || user.avatarUrl || user.photo);
@@ -451,6 +453,19 @@ class BaseHostAdapter {
         }
       }
     }
+
+    // contextIsolation 开启后宿主原始对象不再进入页面世界，this._api 为 null，
+    // 此时改走 preload 用 contextBridge 暴露的窄接口读取宿主版本。
+    const bridged = getBridgedApi();
+    if (bridged && typeof bridged.getHostAppVersion === 'function') {
+      try {
+        const version = bridged.getHostAppVersion();
+        if (version) return version;
+      } catch (e) {
+        console.warn(`[${this.platformId}HostAdapter] 从桥接接口获取宿主版本失败:`, e);
+      }
+    }
+
     return 'unknown';
   }
 
@@ -458,14 +473,31 @@ class BaseHostAdapter {
    * 获取本插件版本号（面向用户展示的发布版本）。
    *
    * 取值顺序：
-   *   1. preload 透传的 window.getPluginVersion()（来源于宿主插件配置，即 plugin.json）；
-   *   2. 宿主 API 自身的 getPluginVersion()（ZTools 支持）。
+   *   1. preload 桥接的 getPluginVersion()（contextIsolation 开启时页面唯一可读的入口）；
+   *   2. preload 直接挂在 window 上的 getPluginVersion()（未启用隔离的宿主）；
+   *   3. 宿主 API 自身的 getPluginVersion()（ZTools 支持）。
+   *
+   * 三者最终都指向插件根目录的 plugin.json，也就是应用市场读取的发布版本。
    *
    * 取不到时返回 ''，由调用方决定回退策略；绝不会回退成宿主程序版本，
    * 否则「关于」页会把 uTools 的版本号当成插件版本号展示。
    * @returns {string} 版本号，取不到时为空字符串
    */
   getPluginVersion() {
+    // 开启 contextIsolation 后 preload 与页面处在两个 JS 世界，
+    // preload 内部的 window.getPluginVersion 赋值页面侧读不到，
+    // 只能取 contextBridge 暴露的窄接口；漏掉这一步会让「关于」页
+    // 静默退回 core 常量，插件内版本又与市场发布版本脱节。
+    const bridged = getBridgedApi();
+    if (bridged && typeof bridged.getPluginVersion === 'function') {
+      try {
+        const version = bridged.getPluginVersion();
+        if (version && String(version).trim()) return String(version).trim();
+      } catch (e) {
+        console.warn(`[${this.platformId}HostAdapter] 从桥接接口获取插件版本失败:`, e);
+      }
+    }
+
     if (typeof window !== 'undefined' && typeof window.getPluginVersion === 'function') {
       try {
         const version = window.getPluginVersion();

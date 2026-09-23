@@ -5,18 +5,21 @@
  * 与 uTools/ZTools 不同，Web 平台：
  * - 不需要 preload.js（无 Electron 环境）
  * - 不需要 plugin.json（非插件形态）
- * - 支持 URL 参数导入图片（?img=<url>）
+ * - 支持 URL 参数导入图片（?img=<url>），但需通过来源校验
  */
 import App from '#core/app/App.js';
 import WebHostAdapter from './adapters/host/WebHostAdapter.js';
+import { applyImageSourceParam } from './imageSourceGuard.js';
 
 // ═══ URL 参数图片导入 ═══
-// 支持 ?img=<url> 从 URL 加载图片
+// 支持 ?img=<url> 从 URL 加载图片。
+// 参数经过协议/来源校验：只接受同源地址、data:image、blob: 与
+// 白名单内的 https 来源，其余一律拒绝（详见 imageSourceGuard.js）。
 if (typeof window !== 'undefined') {
   const params = new URLSearchParams(window.location.search);
   const imgSrc = params.get('img');
   if (imgSrc) {
-    window.__imageSource = imgSrc;
+    applyImageSourceParam(imgSrc);
   }
 }
 

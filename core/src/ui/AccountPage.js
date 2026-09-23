@@ -8,14 +8,16 @@ import IdentityClient from '../identity/IdentityClient.js';
 /**
  * 读取平台标识（全局变量嗅探的回退实现）。
  *
- * 仅在没有 HostAdapter 时使用（例如独立渲染）。禁止再用 window.utools
- * 嗅探 uTools：ZTools 环境下 window.utools 可能是 uTools API 的别名，
- * 这样会把 ZTools 误判成 uTools。正常路径一律走 HostAdapter.platform.id。
+ * 仅在没有 HostAdapter 时使用（例如独立渲染）。正常路径一律走
+ * HostAdapter.platform.id。
+ *
+ * 这里不再嗅探 window.utools / window.ztools：ZTools 环境下 window.utools
+ * 可能是 uTools API 的别名，会把 ZTools 误判成 uTools；而且开启
+ * contextIsolation 后宿主对象只存在于 preload 世界，页面侧读到的恒为
+ * undefined，继续嗅探只会给出错误结论。
  * @returns {string|null}
  */
 function inferPlatformFromGlobals() {
-  if (typeof window === 'undefined') return null;
-  if (window.ztools) return PLATFORMS.ZTOOLS;
   return null;
 }
 
@@ -968,13 +970,27 @@ class AccountPage {
   }
 
   /**
-   * 宿主 API 对象（用于调用宿主专有能力，如 uTools 一键登录）。
+   * 宿主能力对象，用于调用宿主专有能力（如 uTools 一键登录）。
+   *
+   * 注意：contextIsolation 开启后页面拿不到宿主原始对象了，
+   * 这里返回的是 preload 通过 contextBridge 暴露的窄接口集合。
+   * 目前只用到 fetchUserServerTemporaryToken 一项能力。
    * @returns {object|null}
    */
   _getHostApi() {
-    const api = this._host?._api;
-    if (api) return api;
-    return typeof window !== 'undefined' ? (window.hostTools || null) : null;
+    if (typeof window === 'undefined') return null;
+
+    const bridged = window.__imageToolboxApi || null;
+    if (bridged && typeof bridged.fetchUserServerTemporaryToken === 'function') {
+      return bridged;
+    }
+
+    // 未启用 contextIsolation 的老宿主：preload 把接口挂在页面 window 上
+    if (typeof window.fetchUserServerTemporaryToken === 'function') {
+      return { fetchUserServerTemporaryToken: window.fetchUserServerTemporaryToken };
+    }
+
+    return null;
   }
 
   _getHostName() {

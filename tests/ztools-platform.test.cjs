@@ -169,10 +169,12 @@ const run = async () => {
   check('宿主自报名 ZTools 归一化后匹配 ztools', shouldShow(['ztools'], 'ZTools') === true);
   check('宿主自报名 uTools 归一化后不匹配 ztools', shouldShow(['ztools'], 'uTools') === false);
 
-  // 无 HostAdapter 时的兜底嗅探不再把 ZTools 误判成 uTools
+  // AccountPage 已移除 window 嗅探（ZTools 下 window.utools 可能是别名，
+  // contextIsolation 后页面侧也读不到宿主对象）。无平台信息时，
+  // 平台专属项一律隐藏，两个宿主都不显示。
   global.window = { ztools: hostApi, utools: hostApi };
-  check('无 platform 时兜底嗅探返回 ztools', shouldShow(['ztools'], null) === true);
-  check('无 platform 时兜底嗅探不返回 utools', shouldShow(['utools'], null) === false);
+  check('无 platform 时不再嗅探，ztools 专属项隐藏', shouldShow(['ztools'], null) === false);
+  check('无 platform 时不返回 utools，utools 专属项隐藏', shouldShow(['utools'], null) === false);
 
   // 真实更新记录数据：ZTools 视角不得出现 uTools 专属项
   const leaked = [];
