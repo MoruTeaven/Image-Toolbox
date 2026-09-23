@@ -126,7 +126,8 @@ class App {
 
       this.layerPanel = new LayerPanel(
         document.getElementById('layer-panel'),
-        this.layerManager
+        this.layerManager,
+        this.historyManager
       );
 
       this.statusBar = new StatusBar(
@@ -386,6 +387,23 @@ class App {
         if (active && active.excludeFromHistory) return;
         this.historyManager?.saveState();
         this.canvasManager?.removeActiveObject();
+        return;
+      }
+
+      // Ctrl+D（mac: Cmd+D）复制当前选中图层
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'd' || e.key === 'D')) {
+        const active = this.canvasManager?.getActiveObject();
+        if (!active) return;
+        if (active.isEditing) return;                 // 文字编辑中，不拦截
+        if (active.excludeFromHistory) return;        // 裁剪框等辅助对象不可复制
+        if (active.type === 'activeSelection') return; // 多选暂不支持整体复制
+
+        const meta = this.layerManager?.getLayerByObject(active);
+        if (!meta || meta.isBackground) return;
+
+        e.preventDefault();
+        this.historyManager?.saveState();
+        this.layerManager.duplicateLayer(meta.id);
         return;
       }
 

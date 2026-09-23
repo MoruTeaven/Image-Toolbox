@@ -1,4 +1,5 @@
 import eventBus from './EventBus.js';
+import { serializeFabricObject, deserializeFabricObject } from './utils/objectClone.js';
 
 /**
  * 图层管理器 — 管理 Fabric.js 物件的 z-order、显隐、锁定
@@ -604,6 +605,97 @@ class LayerManager {
    */
   getCount() {
     return this._layers.length;
+  }
+
+  /**
+   * 复制图层 — 克隆指定图层对应的 Fabric 对象，生成位于其上方的新图层
+   *
+   * 克隆采用「序列化 → enlivenObjects 反序列化」的方式（与 ORA 工程导入还原
+   * 同一机制），可完整带出 filters、clipPath、马赛克 src 等无法浅拷贝的属性。
+   *
+   * @param {number} layerId 源图层 ID
+   * @returns {Promise<object|null>} 新图层元数据；背景图层或克隆失败时返回 null
+   */
+  async duplicateLayer(layerId) {
+    const meta = this._layers.find(l => l.id === layerId);
+    // 背景图层是画布基图，不参与复制
+    if (!meta || meta.isBackground) return null;
+
+    const canvas = this._cm.canvas;
+    if (!canvas) return null;
+
+    const sourceObj = meta.fabricObj;
+    let newObj = null;
+    try {
+      const json = serializeFabricObject(sourceObj);
+      // 重新生成对象 id（保留 mosaic_/brush_/sticker_ 等前缀，供图层类型判断使用）：
+      // syncLayers() 会按 obj.id 匹配已有元数据，id 重复会导致副本被认成源图层。
+      json.id = this._generateClonedObjectId(sourceObj.id);
+      newObj = await deserializeFabricObject(json);
+    } catch (e) {
+      console.error('[LayerManager] 复制图层失败:', e);
+      return null;
+    }
+    if (!newObj) return null;
+
+    // 名称：源名 + 「 (副本)」，重名时自动追加序号（固定名，不随内容变化自动改名）。
+    const name = this._getUniqueDefaultLayerName(`${meta.name} (副本)`, this._layers, null);
+    newObj._layerName = name;
+    newObj._layerNameAuto = false;
+    newObj._layerBaseName = '';
+    newObj.excludeFromLayer = false;
+
+    // 副本完整继承源图层的锁定状态：锁定层不允许选中/拖拽，
+    // 复制结果与源保持一致，避免「面板显示锁定、画布却可拖动」的矛盾。
+    newObj._layerLocked = meta.locked;
+    newObj.set({
+      selectable: !meta.locked,
+      evented: !meta.locked,
+      hasControls: true,
+      hasBorders: true,
+      lockMovementX: false,
+      lockMovementY: false,
+      lockRotation: false,
+      lockScalingX: false,
+      lockScalingY: false,
+      visible: meta.visible,
+    });
+
+    // 位置偏移 +8，使副本与原图层错开、可被感知
+    newObj.set({ left: (sourceObj.left || 0) + 8, top: (sourceObj.top || 0) + 8 });
+    newObj.setCoords();
+
+    // 入画布并置于源图层正上方。
+    // preserveObjectStacking=true，setActiveObject 不会改变对象叠序，
+    // 因此 add → moveTo 设定的 z 序是稳定的；副本随后设为选中，
+    // 便于 Ctrl+D 后直接用方向键/鼠标继续编辑副本。
+    canvas.add(newObj);
+    const sourceIndex = canvas.getObjects().indexOf(sourceObj);
+    if (sourceIndex >= 0) {
+      canvas.moveTo(newObj, sourceIndex + 1);
+    }
+    if (!meta.locked) {
+      canvas.setActiveObject(newObj);
+    }
+    canvas.renderAll();
+    // emit 触发 LayerPanel 的 syncLayers + 自动选中新图层
+    eventBus.emit('canvas:objectAdded', newObj);
+
+    this.syncLayers();
+    return this._layers.find(l => l.fabricObj === newObj) || null;
+  }
+
+  /**
+   * 为克隆对象生成不重复的 id，保留原前缀（mosaic_ / brush_ / sticker_ 等）
+   * @param {string} originalId
+   * @returns {string}
+   */
+  _generateClonedObjectId(originalId) {
+    const suffix = `${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+    if (typeof originalId === 'string' && originalId.includes('_')) {
+      return `${originalId.slice(0, originalId.indexOf('_') + 1)}${suffix}`;
+    }
+    return suffix;
   }
 }
 
