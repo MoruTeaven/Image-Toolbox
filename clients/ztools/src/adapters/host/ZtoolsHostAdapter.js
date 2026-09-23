@@ -3,7 +3,7 @@
  * ZTools 平台宿主适配器，继承 BaseHostAdapter。
  */
 
-import BaseHostAdapter from '../../../../../core/src/adapters/BaseHostAdapter.js';
+import BaseHostAdapter from '#core/adapters/BaseHostAdapter.js';
 
 const DEFAULT_HOST_NAME = 'ZTools';
 
@@ -53,11 +53,8 @@ class ZtoolsHostAdapter extends BaseHostAdapter {
       console.warn('[ZtoolsHostAdapter] 获取宿主名称失败:', e);
     }
 
-    if (typeof window !== 'undefined') {
-      if (window.ztools) return 'ZTools';
-      if (window.utools) return 'uTools';
-    }
-
+    // 注意：这里不能再用 "window.utools 存在" 嗅探 uTools ——
+    // ZTools 环境下的 window.utools 是历史别名产物，据此判断会误报平台。
     return DEFAULT_HOST_NAME;
   }
 
@@ -89,20 +86,25 @@ class ZtoolsHostAdapter extends BaseHostAdapter {
 export default ZtoolsHostAdapter;
 
 // 便捷导出函数（旧 UI 兼容；新代码优先注入 host adapter）
-const defaultAdapter = new ZtoolsHostAdapter();
+// 使用惰性实例化，避免模块加载时的副作用
+let _defaultAdapter = null;
+const _getDefaultAdapter = () => {
+  if (!_defaultAdapter) _defaultAdapter = new ZtoolsHostAdapter();
+  return _defaultAdapter;
+};
 
 export function getHostAppVersion() {
-  return defaultAdapter.getHostAppVersion();
+  return _getDefaultAdapter().getHostAppVersion();
 }
 
 export function getHostName() {
-  return defaultAdapter.getHostName();
+  return _getDefaultAdapter().getHostName();
 }
 
 export function getHostUser() {
-  return defaultAdapter.getHostUser();
+  return _getDefaultAdapter().getHostUser();
 }
 
 export function openHostExternal(url) {
-  return defaultAdapter.openHostExternal(url);
+  return _getDefaultAdapter().openHostExternal(url);
 }

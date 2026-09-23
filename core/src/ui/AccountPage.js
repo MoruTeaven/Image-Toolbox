@@ -1,31 +1,57 @@
 import { eventBus } from '../index.js';
 import { SIDE_PANEL_LAYOUT_KEY, SIDE_PANEL_LAYOUTS } from './SidePanelTabs.js';
 import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../utils/theme.js';
-import { updateCategories, updateRecords, PLATFORMS } from '../updateRecords.js';
+import { updateCategories, CHANGELOG, PLATFORMS, getAppVersion } from '../changelog.js';
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
 import IdentityClient from '../identity/IdentityClient.js';
 
 /**
- * 获取当前平台标识
+ * 读取平台标识（全局变量嗅探的回退实现）。
+ *
+ * 仅在没有 HostAdapter 时使用（例如独立渲染）。正常路径一律走
+ * HostAdapter.platform.id。
+ *
+ * 这里不再嗅探 window.utools / window.ztools：ZTools 环境下 window.utools
+ * 可能是 uTools API 的别名，会把 ZTools 误判成 uTools；而且开启
+ * contextIsolation 后宿主对象只存在于 preload 世界，页面侧读到的恒为
+ * undefined，继续嗅探只会给出错误结论。
+ * @returns {string|null}
  */
-function getCurrentPlatform() {
-  if (typeof window === 'undefined') return null;
-  if (window.ztools) return PLATFORMS.ZTOOLS;
-  if (window.utools) return PLATFORMS.UTOOLS;
+function inferPlatformFromGlobals() {
   return null;
+}
+
+/**
+ * 把平台标识拆成多个可比较的标记。
+ * HostAdapter.platform.id 使用 'utools' / 'ztools'；宿主自报名可能返回
+ * 'uTools' / 'ZTools'，本函数统一归一化为小写标记集合。
+ * @param {*} value
+ * @returns {string[]}
+ */
+function toPlatformTokens(value) {
+  const text = String(value ?? '').trim().toLowerCase();
+  if (!text) return [];
+  return Array.from(new Set(text.split(/[^a-z0-9]+/).filter(Boolean)));
 }
 
 /**
  * 检查更新项是否应在当前平台显示
  * @param {null|string[]} platforms - 平台限制 (null=所有平台, ['utools']=仅utools等)
+ * @param {*} currentPlatform - 当前平台标识（HostAdapter.platform.id）
  * @returns {boolean} 是否应显示
  */
-function shouldShowForCurrentPlatform(platforms) {
+function shouldShowForCurrentPlatform(platforms, currentPlatform) {
   if (platforms === null || platforms === undefined) return true;
   if (!Array.isArray(platforms)) return true;
-  
-  const currentPlatform = getCurrentPlatform();
-  return platforms.includes(currentPlatform);
+
+  const current = currentPlatform || inferPlatformFromGlobals();
+  if (!current) return false;
+
+  const tokens = toPlatformTokens(current);
+  return platforms.some((platform) => {
+    const wanted = toPlatformTokens(platform);
+    return wanted.length > 0 && wanted.every((token) => tokens.includes(token));
+  });
 }
 
 export const EDITOR_BARS_LAYOUT_KEY = 'image-toolbox-editor-bars-layout';
@@ -81,6 +107,19 @@ class AccountPage {
     this._profile = null;
     this._profileLoading = false;
     this._nicknameEditing = false;
+    this._magicLinkEmail = '';
+    this._magicLinkSending = false;
+
+    // 初始化 SDK（异步，不阻塞渲染）
+    this._identity.init().then(() => {
+      // 初始化后重新渲染，更新登录状态
+      this._render();
+      if (this._identity.isAuthenticated() && !this._profile) {
+        this._loadProfile();
+      }
+    }).catch((e) => {
+      console.warn('[AccountPage] Identity SDK 初始化失败:', e);
+    });
 
     this._render();
     this._bindEvents();
@@ -91,10 +130,12 @@ class AccountPage {
     this._render();
     this._editorEl?.classList.add('hidden');
     this._el?.classList.remove('hidden');
-    // 打开时尝试加载档案
-    if (this._identity.isAuthenticated() && !this._profile) {
-      this._loadProfile();
-    }
+    // 打开时尝试加载档案（SDK 初始化后）
+    this._identity.init().then(() => {
+      if (this._identity.isAuthenticated() && !this._profile) {
+        this._loadProfile();
+      }
+    }).catch(() => {});
   }
 
   close() {
@@ -135,7 +176,10 @@ class AccountPage {
               <div class="account-page__eyebrow">账户中心</div>
               <h1>${this._escapeHTML(sectionTitle)}</h1>
             </div>
-            <button class="account-page__header-back" type="button" data-action="back">返回编辑器</button>
+            <div class="account-page__header-actions">
+              ${this._activeSection === 'updates' ? '<button class="account-page__header-back" type="button" data-action="copy-updates">复制更新日志</button>' : ''}
+              <button class="account-page__header-back" type="button" data-action="back">返回编辑器</button>
+            </div>
           </header>
 
           <section class="account-page__content">
@@ -165,6 +209,11 @@ class AccountPage {
       const action = this._closest(e.target, '[data-action]')?.getAttribute('data-action');
       if (action === 'back') {
         this.close();
+        return;
+      }
+
+      if (action === 'copy-updates') {
+        this._copyUpdates();
         return;
       }
 
@@ -265,15 +314,14 @@ class AccountPage {
         this._handleUToolsLogin();
         return;
       }
-      if (modalAction === 'send-code') {
+      if (modalAction === 'send-magic-link') {
         const emailInput = document.getElementById('login-email-input');
-        if (emailInput) this._handleSendCode(emailInput.value);
+        if (emailInput) this._handleSendMagicLink(emailInput.value);
         return;
       }
-      if (modalAction === 'email-login') {
-        const emailInput = document.getElementById('login-email-input');
-        const codeInput = document.getElementById('login-code-input');
-        if (emailInput && codeInput) this._handleEmailLogin(emailInput.value, codeInput.value);
+      if (modalAction === 'verify-magic-link') {
+        const tokenInput = document.getElementById('login-token-input');
+        if (tokenInput) this._handleVerifyMagicLink(tokenInput.value);
         return;
       }
     });
@@ -545,7 +593,7 @@ class AccountPage {
   _renderUpdates() {
     return `
       <div class="updates-list">
-        ${updateRecords.map(record => this._renderUpdateRecord(record)).join('')}
+        ${CHANGELOG.map(record => this._renderUpdateRecord(record)).join('')}
       </div>
     `;
   }
@@ -573,7 +621,7 @@ class AccountPage {
        // 兼容旧格式（字符串）
        if (typeof item === 'string') return true;
        // 新格式（对象）- 检查平台限制
-       return shouldShowForCurrentPlatform(item.platforms);
+       return shouldShowForCurrentPlatform(item.platforms, this._getCurrentPlatform());
      });
 
      if (visibleItems.length === 0) return '';
@@ -589,7 +637,7 @@ class AccountPage {
    }
 
    /**
-    * 渲染单个更新项，处理平台限制标记
+    * 渲染单个更新项（仅展示文本内容，不展示平台标签）
     */
    _renderChangeItem(item) {
      // 兼容旧格式（字符串）
@@ -597,27 +645,108 @@ class AccountPage {
        return `<li>${this._escapeHTML(item)}</li>`;
      }
 
-     // 新格式（对象）
+     // 新格式（对象）— 仅展示文本，平台过滤已在 _renderChangeGroup 中完成
      const text = item.text || '';
-     const platforms = item.platforms;
-     const currentPlatform = getCurrentPlatform();
-
-     // 如果有平台限制且当前不是所有平台，添加平台标签
-     let badge = '';
-     if (Array.isArray(platforms) && platforms.length > 0 && platforms.length < 3) {
-       const platformLabels = {
-         'utools': 'uTools',
-         'ztools': 'ZTools',
-         'local': '本地环境'
-       };
-       const labels = platforms.map(p => platformLabels[p] || p).join('/');
-       const isCurrentPlatform = shouldShowForCurrentPlatform(platforms);
-       const badgeClass = isCurrentPlatform ? 'update-item__platform-badge--current' : 'update-item__platform-badge--other';
-       badge = `<span class="update-item__platform-badge ${badgeClass}">${this._escapeHTML(labels)}</span>`;
-     }
-
-     return `<li><span class="update-item__text">${this._escapeHTML(text)}</span>${badge}</li>`;
+     return `<li>${this._escapeHTML(text)}</li>`;
    }
+
+  /**
+   * 复制更新日志到剪贴板。
+   * 直接用纯文本拼接，避免依赖 DOM 选区（应用全局 user-select: none）。
+   */
+  async _copyUpdates() {
+    const text = this._getUpdatesPlainText();
+    if (!text) {
+      eventBus.emit('toast:show', { message: '没有可复制的更新日志', type: 'error' });
+      return;
+    }
+
+    const ok = await this._writeClipboardText(text);
+    eventBus.emit('toast:show', {
+      message: ok ? '更新日志已复制' : '复制失败，请手动选择文本复制',
+      type: ok ? 'success' : 'error',
+    });
+  }
+
+  /**
+   * 将可见的更新日志拼装为纯文本。
+   * @returns {string}
+   */
+  _getUpdatesPlainText() {
+    return CHANGELOG.map((record) => {
+      const lines = [`版本 ${record.version}（${record.date}）`];
+
+      updateCategories.forEach((category) => {
+        const items = record.changes?.[category.key] || [];
+        const visibleItems = items
+          .map((item) => (typeof item === 'string' ? item : item?.text || ''))
+          .filter((item) => {
+            if (typeof item === 'string') return true;
+            return shouldShowForCurrentPlatform(item.platforms, this._getCurrentPlatform());
+          })
+          .map((item) => String(item).trim())
+          .filter(Boolean);
+
+        if (visibleItems.length === 0) return;
+
+        lines.push(`【${category.title}】`);
+        visibleItems.forEach((item) => lines.push(`- ${item}`));
+      });
+
+      return lines.join('\n');
+    }).join('\n\n');
+  }
+
+  /**
+   * 写入文本到剪贴板：优先走宿主适配器，降级到 navigator.clipboard 与 execCommand。
+   * @param {string} text
+   * @returns {Promise<boolean>}
+   */
+  async _writeClipboardText(text) {
+    try {
+      const ok = await this._host?.clipboard?.writeText?.(text);
+      if (ok) return true;
+    } catch (e) {
+      console.warn('[AccountPage] 宿主剪贴板写入失败:', e);
+    }
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) {
+      console.warn('[AccountPage] navigator.clipboard 写入失败:', e);
+    }
+
+    return this._writeClipboardTextFallback(text);
+  }
+
+  /**
+   * 降级方案：临时 textarea + execCommand（无剪贴板权限时可用）。
+   * @param {string} text
+   * @returns {boolean}
+   */
+  _writeClipboardTextFallback(text) {
+    if (typeof document === 'undefined') return false;
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', 'readonly');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-1000px';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const ok = document.execCommand?.('copy') ?? false;
+      document.body.removeChild(textarea);
+      return ok;
+    } catch (e) {
+      console.warn('[AccountPage] execCommand 复制失败:', e);
+      return false;
+    }
+  }
 
   _renderAvatar(className) {
     const user = this._getUserView();
@@ -658,9 +787,38 @@ class AccountPage {
     applyThemeChoice(theme);
   }
 
+  /**
+   * 插件自身版本号。
+   *
+   * 单一事实来源是 HostAdapter.platform.appVersion（由各端适配器从 preload
+   * 透传的宿主插件版本读取，最终来自 plugin.json）。历史上这里取的是更新记录
+   * 的第一条（updateRecords[0].version），在更新记录与发布版本脱节时会显示
+   * 一个早已作废的版本号（如市场已发 2.3.2、插件内却显示 1.2.3）。
+   *
+   * 取不到宿主版本时才回退到 core 的 APP_VERSION，绝不再用更新记录冒充版本号。
+   * @returns {string}
+   */
   _getCurrentVersion() {
-    const version = updateRecords?.[0]?.version;
-    return this._formatVersion(version);
+    const hostVersion = this._getHostPluginVersion();
+    if (hostVersion) return this._formatVersion(hostVersion);
+
+    console.warn('[AccountPage] 未能从宿主读取插件版本，回退到 APP_VERSION');
+    return this._formatVersion(getAppVersion());
+  }
+
+  /**
+   * 从宿主适配器读取本插件版本（非宿主程序自身版本）。
+   * @returns {string} 版本号，取不到时返回空字符串
+   */
+  _getHostPluginVersion() {
+    try {
+      const version = this._host?.platform?.appVersion;
+      if (version && String(version).trim()) return String(version).trim();
+    } catch (e) {
+      console.warn('[AccountPage] 获取插件版本失败:', e);
+    }
+
+    return '';
   }
 
   _getHostVersion() {
@@ -783,6 +941,58 @@ class AccountPage {
     return null;
   }
 
+  /**
+   * 当前平台标识。
+   *
+   * 单一事实来源是注入的 HostAdapter.platform.id（'utools' / 'ztools' / 'web'），
+   * 不再嗅探 window.utools —— ZTools 环境下该全局值可能是 uTools API 的别名。
+   * @returns {string|null}
+   */
+  _getCurrentPlatform() {
+    try {
+      const id = this._host?.platform?.id;
+      if (id) return String(id);
+      const name = this._host?.platform?.name || this._host?.getHostName?.();
+      if (name) return String(name);
+    } catch (e) {
+      console.warn('[AccountPage] 获取平台标识失败:', e);
+    }
+    return inferPlatformFromGlobals();
+  }
+
+  /**
+   * 是否运行在 uTools 宿主中（决定是否展示 uTools 一键登录入口）。
+   * @returns {boolean}
+   */
+  _isUToolsPlatform() {
+    const tokens = toPlatformTokens(this._getCurrentPlatform());
+    return tokens.includes(PLATFORMS.UTOOLS) && !tokens.includes(PLATFORMS.ZTOOLS);
+  }
+
+  /**
+   * 宿主能力对象，用于调用宿主专有能力（如 uTools 一键登录）。
+   *
+   * 注意：contextIsolation 开启后页面拿不到宿主原始对象了，
+   * 这里返回的是 preload 通过 contextBridge 暴露的窄接口集合。
+   * 目前只用到 fetchUserServerTemporaryToken 一项能力。
+   * @returns {object|null}
+   */
+  _getHostApi() {
+    if (typeof window === 'undefined') return null;
+
+    const bridged = window.__imageToolboxApi || null;
+    if (bridged && typeof bridged.fetchUserServerTemporaryToken === 'function') {
+      return bridged;
+    }
+
+    // 未启用 contextIsolation 的老宿主：preload 把接口挂在页面 window 上
+    if (typeof window.fetchUserServerTemporaryToken === 'function') {
+      return { fetchUserServerTemporaryToken: window.fetchUserServerTemporaryToken };
+    }
+
+    return null;
+  }
+
   _getHostName() {
     return this._host?.platform?.name || this._host?.getHostName?.() || 'uTools';
   }
@@ -883,7 +1093,8 @@ class AccountPage {
       modal.className = 'login-modal';
       document.body.appendChild(modal);
     }
-    const isUTools = !!window.utools;
+    const isUTools = this._isUToolsPlatform();
+    const magicLinkSent = this._magicLinkSending === 'done';
     modal.innerHTML = `
       <div class="login-modal__backdrop" data-modal-action="close-login"></div>
       <div class="login-modal__card">
@@ -900,16 +1111,22 @@ class AccountPage {
           ` : ''}
           <div class="login-modal__field">
             <label>邮箱</label>
-            <input type="email" id="login-email-input" placeholder="请输入邮箱地址" autocomplete="email">
+            <input type="email" id="login-email-input" placeholder="请输入邮箱地址" autocomplete="email" value="${this._escapeAttr(this._magicLinkEmail)}">
           </div>
-          <div class="login-modal__field login-modal__field--code">
-            <label>验证码</label>
-            <div class="login-modal__code-row">
-              <input type="text" id="login-code-input" placeholder="6 位验证码" maxlength="6" autocomplete="code">
-              <button class="login-modal__btn login-modal__btn--small" type="button" data-modal-action="send-code" id="send-code-btn">发送验证码</button>
+          ${magicLinkSent ? `
+            <p class="login-modal__hint" style="text-align:center;color:var(--accent-color,#597EF7);">
+              登录链接已发送到您的邮箱，请查收邮件并点击链接完成登录。
+            </p>
+            <div class="login-modal__field">
+              <label>或手动输入链接中的 token</label>
+              <input type="text" id="login-token-input" placeholder="粘贴 Magic Link 中的 token" autocomplete="off">
             </div>
-          </div>
-          <button class="login-modal__btn login-modal__btn--primary" type="button" data-modal-action="email-login">登录</button>
+            <button class="login-modal__btn login-modal__btn--primary" type="button" data-modal-action="verify-magic-link">验证并登录</button>
+          ` : `
+            <button class="login-modal__btn login-modal__btn--primary" type="button" data-modal-action="send-magic-link" id="send-magic-link-btn">
+              ${this._magicLinkSending ? '发送中…' : '发送登录链接'}
+            </button>
+          `}
           <p class="login-modal__hint">首次登录将自动注册账号</p>
         </div>
       </div>
@@ -928,15 +1145,14 @@ class AccountPage {
         this._handleUToolsLogin();
         return;
       }
-      if (modalAction === 'send-code') {
+      if (modalAction === 'send-magic-link') {
         const emailInput = document.getElementById('login-email-input');
-        if (emailInput) this._handleSendCode(emailInput.value);
+        if (emailInput) this._handleSendMagicLink(emailInput.value);
         return;
       }
-      if (modalAction === 'email-login') {
-        const emailInput = document.getElementById('login-email-input');
-        const codeInput = document.getElementById('login-code-input');
-        if (emailInput && codeInput) this._handleEmailLogin(emailInput.value, codeInput.value);
+      if (modalAction === 'verify-magic-link') {
+        const tokenInput = document.getElementById('login-token-input');
+        if (tokenInput) this._handleVerifyMagicLink(tokenInput.value);
         return;
       }
     };
@@ -950,48 +1166,37 @@ class AccountPage {
     }
   }
 
-  async _handleSendCode(email) {
-    const btn = document.getElementById('send-code-btn');
+  async _handleSendMagicLink(email) {
+    const btn = document.getElementById('send-magic-link-btn');
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       eventBus.emit('toast:show', { message: '请输入有效的邮箱地址', type: 'error' });
       return;
     }
     try {
       if (btn) { btn.disabled = true; btn.textContent = '发送中…'; }
-      await this._identity.requestEmailCode(email, 'login');
-      eventBus.emit('toast:show', { message: '验证码已发送', type: 'success' });
-      this._startCountdown(btn, 60);
+      this._magicLinkSending = true;
+      this._magicLinkEmail = email;
+      await this._identity.requestMagicLink(email);
+      this._magicLinkSending = 'done';
+      eventBus.emit('toast:show', { message: '登录链接已发送，请查收邮件', type: 'success' });
+      this._openLoginModal(); // 重新渲染弹窗，显示 token 输入框
     } catch (e) {
       eventBus.emit('toast:show', { message: e?.message || '发送失败', type: 'error' });
-      if (btn) { btn.disabled = false; btn.textContent = '发送验证码'; }
+      this._magicLinkSending = false;
+      if (btn) { btn.disabled = false; btn.textContent = '发送登录链接'; }
     }
   }
 
-  _startCountdown(btn, seconds) {
-    if (!btn) return;
-    let remaining = seconds;
-    btn.disabled = true;
-    btn.textContent = `${remaining}s`;
-    const timer = setInterval(() => {
-      remaining--;
-      if (remaining <= 0) {
-        clearInterval(timer);
-        btn.disabled = false;
-        btn.textContent = '发送验证码';
-      } else {
-        btn.textContent = `${remaining}s`;
-      }
-    }, 1000);
-  }
-
-  async _handleEmailLogin(email, code) {
-    if (!email || !code) {
-      eventBus.emit('toast:show', { message: '请填写邮箱和验证码', type: 'error' });
+  async _handleVerifyMagicLink(token) {
+    if (!token || !token.trim()) {
+      eventBus.emit('toast:show', { message: '请输入登录链接中的 token', type: 'error' });
       return;
     }
     try {
-      await this._identity.loginWithEmailCode(email, code, 'login');
+      await this._identity.verifyMagicLink(token.trim());
       this._closeLoginModal();
+      this._magicLinkSending = false;
+      this._magicLinkEmail = '';
       eventBus.emit('toast:show', { message: '登录成功', type: 'success' });
       await this._loadProfile();
     } catch (e) {
@@ -1001,14 +1206,14 @@ class AccountPage {
 
   async _handleUToolsLogin() {
     try {
-      const api = window.utools;
+      const api = this._getHostApi();
       if (!api?.fetchUserServerTemporaryToken) {
         eventBus.emit('toast:show', { message: '当前环境不支持一键登录', type: 'error' });
         return;
       }
       const { token: accessToken } = await api.fetchUserServerTemporaryToken();
-      const deviceId = api.getDeviceId?.() || 'utools-device';
-      await this._identity.loginWithUTools(accessToken, deviceId);
+      // 新版 SDK 不再需要 deviceId
+      await this._identity.loginWithUTools(accessToken);
       this._closeLoginModal();
       eventBus.emit('toast:show', { message: '登录成功', type: 'success' });
       await this._loadProfile();

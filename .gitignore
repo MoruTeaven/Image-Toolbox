@@ -3,8 +3,19 @@
 /agents.md
 /.workbuddy/
 /.wrangler/
+/.codebuddy/
+/.maestro/
+/maestro.config.json
 
 # Architecture documents (not tracked)
 CORE_ARCHITECTURE.md
 DEVELOPMENT.md
 PLATFORM_ADAPTERS.md
+
+# AI tooling scratch / triage artifacts (never source)
+# 注：文件名形如 "CodeClosedSource...图片工具箱 - 客户端" 的目录是路径拼接事故
+# （绝对路径被当作相对路径使用，盘符与反斜杠被吞掉）产生的空壳目录，
+# 会干扰后续的路径探测并导致「文件不存在」的误判，禁止再提交。
+/CodeClosedSource*/
+/.dsh-vision-toolkit/
+/tmp/

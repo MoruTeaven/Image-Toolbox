@@ -1,0 +1,9 @@
+{
+  "name": "img-toolbox",
+  "version": "2.5.0",
+  "private": true,
+  "description": "图片工具箱 — 多端图片编辑工具（uTools / ZTools / Web）",
+  "imports": {
+    "#core/*": "./core/src/*"
+  }
+}
