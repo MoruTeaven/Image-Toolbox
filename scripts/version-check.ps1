@@ -10,6 +10,10 @@
 # Test-AppVersion compares every reference against it and fails the build on any
 # mismatch, so a stale version can never ship.
 #
+# Version format: MAJOR.MINOR.PATCH, optionally with a SemVer pre-release tag
+# (e.g. 2.5.1-dev) while a release has not been published yet. All references must
+# carry the same tag, so cutting a release is one coordinated change that drops it.
+#
 # NOTE: keep this file free of non-ASCII punctuation inside comments - some
 # Windows PowerShell hosts mis-decode it and report bogus parse errors.
 
@@ -71,16 +75,12 @@ function Test-AppVersion {
     }
 
     # 4. Documentation that states the current version.
-    $docPatterns = @(
-        @{ Path = 'README.md'; Pattern = '\*\*v([0-9]+\.[0-9]+(?:\.[0-9]+)?)\*\*' },
-        @{ Path = 'agents.md'; Pattern = '\*\*[^*]*\*\*.*?([0-9]+\.[0-9]+(?:\.[0-9]+)?)' }
-    )
     $readmePath = Join-Path $Root 'README.md'
     if (Test-Path $readmePath) {
         $docSrc = [System.IO.File]::ReadAllText($readmePath, [System.Text.Encoding]::UTF8)
         $docMatch = [regex]::Match($docSrc, 'Current version|\u5f53\u524d\u7248\u672c')
         if ($docMatch.Success) {
-            $verMatch = [regex]::Match($docSrc.Substring($docMatch.Index), 'v([0-9]+\.[0-9]+(?:\.[0-9]+)?)')
+            $verMatch = [regex]::Match($docSrc.Substring($docMatch.Index), 'v([0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[0-9A-Za-z.-]+)?)')
             if ($verMatch.Success -and $verMatch.Groups[1].Value -ne $version) {
                 Write-Host ("  FAIL: README.md declares {0}, expected {1}" -f $verMatch.Groups[1].Value, $version) -ForegroundColor Red
                 $ok = $false

@@ -19,6 +19,16 @@
  *     导致插件内显示 1.2.3、市场显示 2.3.2 的错乱）；
  *   - 当前版本统一由 APP_VERSION / getAppVersion() 提供。
  *
+ * ═══ 预发布版本（未发布即打标）═══
+ *
+ * 只要版本还没正式发布，APP_VERSION 就必须带上 SemVer 预发布标识，
+ * 形如 '2.5.1-dev'。原因：uTools / ZTools 市场读取的是 plugin.json 的
+ * version，一个尚未发布的版本号若写成干净的 '2.5.1'，无法与真正发布的
+ * 2.5.1 区分，本地调试包也可能被误当成正式版上传。
+ *
+ * 正式发布时把标识整体去掉（'2.5.1-dev' → '2.5.1'）即可，
+ * 其余引用点由构建期校验强制同步。
+ *
  * ═══ 发版检查清单 ═══
  *
  *   1. 更新 APP_VERSION（仅这一处）
@@ -39,7 +49,7 @@
  * 修改此处即代表发版意图，其余引用点由构建期校验强制同步。
  * @type {string}
  */
-export const APP_VERSION = '2.5.0';
+export const APP_VERSION = '2.5.1-dev';
 
 /**
  * 版本记录条目结构
@@ -56,6 +66,20 @@ export const APP_VERSION = '2.5.0';
  * @type {ChangelogRecord[]}
  */
 export const CHANGELOG = [
+  {
+    version: '2.5.1-dev',
+    date: '2026-09-23',
+    changes: {
+      added: [
+        { text: '新增图层复制功能，可通过右键菜单、Ctrl+D 或复制按钮复制图层', platforms: null },
+        { text: '图层新增右键菜单，支持复制、重命名与删除', platforms: null }
+      ],
+      fixed: [],
+      improved: [],
+      adjusted: [],
+      removed: []
+    }
+  },
   {
     version: '2.5.0',
     date: '2026-09-23',
