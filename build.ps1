@@ -684,6 +684,40 @@ if (-not (Test-AppVersion -Root $root -DistRoot $distRoot -Platforms $platforms)
     $allOk = $false
 }
 
+# Security regression gate. Two checks, both required:
+#   1. verify-security-hardening.mjs must pass on the current code.
+#   2. mutation-check-sanitizers.mjs proves those assertions can actually
+#      FAIL when the sanitizers are removed - the suite once reported
+#      all-green while the bugs it claimed to cover were still present,
+#      so a red-free gate would protect nothing.
+# Set SKIP_SECURITY_GATE=1 to skip both during local iteration.
+#
+# Both scripts intentionally write probe warnings to stderr. PowerShell
+# wraps native stderr lines into ErrorRecords, which abort the build under
+# $ErrorActionPreference = "Stop" BEFORE any exit code is checked (stream
+# redirection alone does not prevent that). So EAP is relaxed only while
+# the two probes run, all output goes to a log, and the verdict is the
+# exit code; the log is printed on failure so failing assertions stay
+# visible.
+Write-Host "Running security regression gate ..." -ForegroundColor Cyan
+if ($env:SKIP_SECURITY_GATE -eq '1') {
+    Write-Host "SKIP_SECURITY_GATE=1 set - security gate skipped." -ForegroundColor Yellow
+} else {
+    $gateLog = Join-Path $distRoot "security-gate.log"
+    if (Test-Path $gateLog) { Remove-Item -Force $gateLog }
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & node (Join-Path $root "scripts\verify-security-hardening.mjs") *>> $gateLog
+    $verifyExit = $LASTEXITCODE
+    & node (Join-Path $root "scripts\mutation-check-sanitizers.mjs") *>> $gateLog
+    $mutationExit = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
+    if ($verifyExit -ne 0 -or $mutationExit -ne 0) {
+        $allOk = $false
+        Get-Content $gateLog | Write-Host
+    }
+}
+
 if (-not $allOk) {
     Write-Host "Build failed!" -ForegroundColor Red
     exit 1
