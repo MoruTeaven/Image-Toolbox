@@ -75,7 +75,9 @@ export const CHANGELOG = [
         { text: '背景图层也支持复制，复制出的图层为普通图层', platforms: null },
         { text: '图层新增右键菜单，支持复制、重命名与删除', platforms: null }
       ],
-      fixed: [],
+      fixed: [
+        { text: '修复保存图片或 ORA 工程文件时，默认保存位置可能被带出常用目录的问题', platforms: null }
+      ],
       improved: [],
       adjusted: [
         { text: 'Web 版链接中的图片参数重新支持外部图片链接', platforms: ['web'] }
