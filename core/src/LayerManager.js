@@ -614,12 +614,11 @@ class LayerManager {
    * 同一机制），可完整带出 filters、clipPath、马赛克 src 等无法浅拷贝的属性。
    *
    * @param {number} layerId 源图层 ID
-   * @returns {Promise<object|null>} 新图层元数据；背景图层或克隆失败时返回 null
+   * @returns {Promise<object|null>} 新图层元数据；图层不存在或克隆失败时返回 null
    */
   async duplicateLayer(layerId) {
     const meta = this._layers.find(l => l.id === layerId);
-    // 背景图层是画布基图，不参与复制
-    if (!meta || meta.isBackground) return null;
+    if (!meta) return null;
 
     const canvas = this._cm.canvas;
     if (!canvas) return null;
@@ -645,12 +644,13 @@ class LayerManager {
     newObj._layerBaseName = '';
     newObj.excludeFromLayer = false;
 
-    // 副本完整继承源图层的锁定状态：锁定层不允许选中/拖拽，
-    // 复制结果与源保持一致，避免「面板显示锁定、画布却可拖动」的矛盾。
-    newObj._layerLocked = meta.locked;
+    // 副本继承源图层的锁定状态（锁定层不允许选中/拖拽），
+    // 但背景源除外：背景恒为锁定态，复制出的必须是可编辑的普通图层。
+    const clonedLocked = meta.isBackground ? false : meta.locked;
+    newObj._layerLocked = clonedLocked;
     newObj.set({
-      selectable: !meta.locked,
-      evented: !meta.locked,
+      selectable: !clonedLocked,
+      evented: !clonedLocked,
       hasControls: true,
       hasBorders: true,
       lockMovementX: false,
@@ -674,7 +674,7 @@ class LayerManager {
     if (sourceIndex >= 0) {
       canvas.moveTo(newObj, sourceIndex + 1);
     }
-    if (!meta.locked) {
+    if (!clonedLocked) {
       canvas.setActiveObject(newObj);
     }
     canvas.renderAll();

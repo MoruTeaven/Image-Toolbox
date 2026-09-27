@@ -399,7 +399,7 @@ class App {
         if (active.type === 'activeSelection') return; // 多选暂不支持整体复制
 
         const meta = this.layerManager?.getLayerByObject(active);
-        if (!meta || meta.isBackground) return;
+        if (!meta) return;
 
         e.preventDefault();
         this.historyManager?.saveState();

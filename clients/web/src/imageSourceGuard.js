@@ -12,45 +12,26 @@
  *
  * 允许的来源：
  *   1. data:image/*;base64,...  —— 站内粘贴/上传形成的 dataURL
- *   2. blob:                    —— 站内 Blob URL
+ *   2. blob:                    —— 站内 Blob URL（限同源）
  *   3. 同源相对路径（/foo.png、foo.png、./foo.png、../foo.png）
  *   4. 同源绝对地址（与当前页面 protocol + host + port 完全一致）
- *   5. 显式白名单中的 https 域名
+ *   5. 任意 https: 跨源地址（图床不支持 CORS 时浏览器会拦截加载，
+ *      行为由浏览器安全模型决定，见 CanvasManager 的 crossOrigin 处理）
  *
- * 明确拒绝：http:、javascript:、file:、ftp: 等非白名单协议，
- * 以及所有未列入白名单的跨源地址。
+ * 明确拒绝：http: 明文、javascript: 伪协议、file:、ftp: 等非白名单协议。
+ *
+ * 关于放开跨源：本模块位于纯前端静态站，没有可信后端代理，
+ * 来源白名单只是「防诱导」的软约束（任何人可改自己浏览器里的副本），
+ * 不构成真正的安全边界；协议限制（仅 https:）才是有意义的硬约束，
+ * 它挡掉 http: 明文、javascript: 伪协议、file: 本地读取等真实攻击面。
+ * 经确认后按此模型放开：跨源 https 一律放行，不再维护域名白名单。
  */
-
-/**
- * 允许外部加载的图片来源白名单（host 精确匹配，含其子域）。
- * 为空表示不信任任何跨源地址；需要时在此按需追加可信图床。
- * @type {string[]}
- */
-export const TRUSTED_IMAGE_HOSTS = [];
 
 /** 允许的协议白名单：只有这些协议可以作为图片源。 */
 const ALLOWED_PROTOCOLS = new Set(['https:', 'data:', 'blob:']);
 
 /** dataURL 允许的 MIME 前缀：必须是图片，避免把 data:text/html 当图片加载。 */
 const DATA_URL_IMAGE_PREFIX = /^data:image\/[a-z0-9.+-]+;base64,/i;
-
-/**
- * 判断 host 是否命中白名单（精确匹配或为其子域）。
- * @param {string} host
- * @returns {boolean}
- */
-function _isTrustedHost(host) {
-  const target = String(host || '').toLowerCase();
-  if (!target) return false;
-
-  return TRUSTED_IMAGE_HOSTS.some((entry) => {
-    const allowed = String(entry || '').toLowerCase().trim();
-    if (!allowed) return false;
-    if (target === allowed) return true;
-    // 允许子域：img.example.com 命中 example.com
-    return target.endsWith(`.${allowed}`);
-  });
-}
 
 /**
  * 校验一个候选图片源是否允许加载。
@@ -139,9 +120,10 @@ export function validateImageSource(raw, pageHref) {
     return { ok: true, value: resolved.href, reason: 'same-origin' };
   }
 
-  // 跨源的 https 地址：仅白名单域名放行
-  if (resolved.protocol === 'https:' && _isTrustedHost(resolved.hostname)) {
-    return { ok: true, value: resolved.href, reason: 'trusted-host' };
+  // 跨源的 https 地址一律放行（白名单已按约定移除，见文件头注释）；
+  // 非 https 的跨源协议已在上面的 ALLOWED_PROTOCOLS 检查处被拒。
+  if (resolved.protocol === 'https:') {
+    return { ok: true, value: resolved.href, reason: 'cross-origin-https' };
   }
 
   return { ok: false, value: null, reason: 'untrusted-origin' };
@@ -163,7 +145,7 @@ export function applyImageSourceParam(raw, win, pageHref) {
   const result = validateImageSource(raw, href);
 
   if (!result.ok) {
-    console.warn('[web] 已拒绝非白名单的 ?img= 参数:', result.reason);
+    console.warn('[web] 已拒绝非法的 ?img= 参数:', result.reason);
     return { ok: false, reason: result.reason };
   }
 

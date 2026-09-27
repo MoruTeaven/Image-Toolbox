@@ -194,7 +194,7 @@ class LayerPanel {
     const canDelete = !isBg && !meta.locked;
 
     this._menuEl.innerHTML = `
-      <div class="layer-context-menu__item ${isBg ? 'layer-context-menu__item--disabled' : ''}" data-action="duplicate" title="${isBg ? '背景图层不可复制' : '复制当前图层'}">复制图层</div>
+      <div class="layer-context-menu__item" data-action="duplicate" title="复制当前图层">复制图层</div>
       <div class="layer-context-menu__item" data-action="rename">重命名</div>
       <div class="layer-context-menu__item ${canDelete ? '' : 'layer-context-menu__item--disabled'}" data-action="delete" title="${isBg ? '背景图层不可删除' : (meta.locked ? '图层已锁定，请先解锁' : '删除当前图层')}">删除图层</div>
     `;
@@ -228,7 +228,6 @@ class LayerPanel {
     if (!meta) return;
 
     if (action === 'duplicate') {
-      if (meta.isBackground) return;
       await this._duplicateLayer(layerId);
       return;
     }
@@ -253,7 +252,7 @@ class LayerPanel {
    */
   async _duplicateLayer(layerId) {
     const meta = this._lm.getLayerById(layerId);
-    if (!meta || meta.isBackground) return;
+    if (!meta) return;
 
     this._hm?.saveState();
     const newMeta = await this._lm.duplicateLayer(layerId);
