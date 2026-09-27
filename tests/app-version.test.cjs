@@ -60,7 +60,11 @@ const run = async () => {
   );
   const version = APP_VERSION;
 
-  check('APP_VERSION 存在且形如 x.y.z', /^[0-9]+\.[0-9]+(?:\.[0-9]+)?$/.test(version), version);
+  // 形如 x.y.z 或 x.y，可带 SemVer 预发布标识（如 2.5.1-dev）。
+  // 未发布的版本必须带 -dev 等标识（见 agents.md §7.4），
+  // 旧正则只接受纯数字版本，会把合规的 dev 版本误判为失败。
+  check('APP_VERSION 形如 x.y.z（允许 -dev 等预发布标识）',
+    /^[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[0-9A-Za-z.-]+)?$/.test(version), version);
   check('getAppVersion() 返回 APP_VERSION', getAppVersion() === version, getAppVersion());
 
   const utoolsPlugin = readJson('clients/utools/plugin.json');

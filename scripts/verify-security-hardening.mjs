@@ -6,7 +6,8 @@
  *
  *   1. Web 端 ?img= 校验逻辑（直接调用 imageSourceGuard.mjs 的纯函数）
  *   2. preload 路径白名单逻辑（在伪造的 window/electron 环境里加载 preloadHelpers）
- *   3. 静态断言：preload 不再把宿主对象挂到页面 window；各宿主已声明 contextIsolation
+ *   3. 静态断言：preload 不再把宿主对象挂到页面 window；宿主 plugin.json 不再声明
+ *      不生效的 contextIsolation / nodeIntegration 死配置
  *
  * 用法：node scripts/verify-security-hardening.mjs
  * 退出码 0 = 全部通过；非 0 = 有断言失败
@@ -149,6 +150,48 @@ globalThis.window.hostTools.showOpenDialog = () => tmpFile;
 const authorized = win.showOpenDialog({ properties: ['openFile'] });
 check('showOpenDialog 返回用户选定路径', authorized === tmpFile);
 
+// —— V4：打开对话框的 options 白名单透传 ——
+// 页面曾可逐字透传 options，把 defaultPath 指到任意目录（引导用户在
+// 错误位置确认）、用 title/buttonLabel 伪装对话框文案。
+let receivedOpenOptions = null;
+globalThis.window.hostTools.showOpenDialog = (opts) => {
+  receivedOpenOptions = opts;
+  return tmpFile;
+};
+win.showOpenDialog({
+  properties: ['openFile', 'multiSelections'],
+  filters: [{ name: '图片', extensions: ['png'] }],
+  defaultPath: path.join(os.homedir(), '.ssh'),
+  title: '伪装的对话框标题',
+  buttonLabel: '立即授权',
+});
+check('V4: defaultPath 不透传给宿主', !receivedOpenOptions || receivedOpenOptions.defaultPath === undefined,
+  `实际 defaultPath=${receivedOpenOptions && receivedOpenOptions.defaultPath}`);
+check('V4: title 不透传给宿主', !receivedOpenOptions || receivedOpenOptions.title === undefined,
+  `实际 title=${receivedOpenOptions && receivedOpenOptions.title}`);
+check('V4: buttonLabel 不透传给宿主', !receivedOpenOptions || receivedOpenOptions.buttonLabel === undefined,
+  `实际 buttonLabel=${receivedOpenOptions && receivedOpenOptions.buttonLabel}`);
+check('V4: properties/filters 正常透传（不误伤功能）',
+  receivedOpenOptions
+  && Array.isArray(receivedOpenOptions.properties)
+  && receivedOpenOptions.properties.includes('openFile')
+  && Array.isArray(receivedOpenOptions.filters)
+  && receivedOpenOptions.filters[0] && receivedOpenOptions.filters[0].name === '图片');
+
+// —— V4 后半段：宿主返回对象不整体回传，只提取干净路径结构 ——
+globalThis.window.hostTools.showOpenDialog = () => ({
+  canceled: false,
+  filePaths: [tmpFile],
+  __hostInternalProbe: 'host-secret-method-ref',
+});
+const sanitizedResult = win.showOpenDialog({ properties: ['openFile'] });
+check('V4: 返回对象不携带宿主内部字段',
+  sanitizedResult && sanitizedResult.__hostInternalProbe === undefined,
+  `实际=${Object.keys(sanitizedResult || {}).join(',')}`);
+check('V4: 返回对象仍保留 filePaths（功能不回归）',
+  sanitizedResult && Array.isArray(sanitizedResult.filePaths)
+  && sanitizedResult.filePaths[0] === tmpFile);
+
 const readBack = win.readBinaryFile(tmpFile);
 check('授权后 readBinaryFile 可读取', readBack !== null && readBack.byteLength === 5);
 
@@ -165,6 +208,11 @@ check('前缀相似的兄弟目录不被误放行',
 // —— 对话框建议名不得让默认路径逃出目标目录 ——
 // suggestedName 由页面完全控制，path.join 会吃掉其中的 '..'，
 // 若不净化即可把 defaultPath 指到任意位置，用户回车后该路径就被授权。
+//
+// 断言用「净化后的精确文件名」而非只看 dirname：净化函数被删空时，
+// 目录兜底断言会把 defaultPath 拉回 ~/Desktop（得到兜底名而非
+// 期望文件名），只查 dirname 会误判为通过 —— 变异自验要求套件
+// 对「净化函数失效」也必须变红，见 mutation-check-sanitizers.mjs。
 const desktopDir = path.join(os.homedir(), 'Desktop');
 const escapePayloads = [
   ['Windows 分隔符逃逸', '..\\..\\..\\..\\Windows\\System32\\pwn.png'],
@@ -174,16 +222,17 @@ const escapePayloads = [
 for (const [label, payload] of escapePayloads) {
   globalThis.window.hostTools.showSaveDialog = (opts) => opts.defaultPath;
   const escaped = win.showSaveImageDialog(payload);
+  const expected = path.join(desktopDir, path.posix.basename(payload.replace(/\\/g, '/')));
   check(`保存对话框默认路径不被「${label}」带出目标目录`,
-    typeof escaped === 'string' && path.dirname(escaped) === desktopDir,
-    `实际 defaultPath=${escaped}`);
+    escaped === expected,
+    `期望=${expected}，实际 defaultPath=${escaped}`);
 }
 // ORA 保存走同一个净化路径，单独验一次
 globalThis.window.hostTools.showSaveDialog = (opts) => opts.defaultPath;
 const oraEscaped = win.showSaveOraDialog('..\\..\\..\\evil.ora');
 check('ORA 保存对话框默认路径不被带出目标目录',
-  typeof oraEscaped === 'string' && path.dirname(oraEscaped) === desktopDir,
-  `实际 defaultPath=${oraEscaped}`);
+  oraEscaped === path.join(desktopDir, 'evil.ora'),
+  `期望=${path.join(desktopDir, 'evil.ora')}，实际=${oraEscaped}`);
 
 // —— 字体目录是「只读」授权，绝不能被当作可写目录 ——
 // 这是关键回归项：getFontsDirectory 曾把系统字体目录注入可写白名单，
@@ -263,7 +312,6 @@ const PAGE = 'https://toolbox.example.com/editor/index.html';
 
 const rejectCases = [
   ['http:// 明文外部源', 'http://evil.example.net/x.png'],
-  ['https 非同源外部源', 'https://evil.example.net/x.png'],
   ['javascript: 伪协议', 'javascript:alert(1)'],
   ['file: 本地文件', 'file:///C:/Windows/win.ini'],
   ['ftp: 协议', 'ftp://evil.example.net/x.png'],
@@ -283,6 +331,10 @@ const acceptCases = [
   ['同源绝对地址', 'https://toolbox.example.com/a.png'],
   ['data:image base64', 'data:image/png;base64,iVBORw0KGgo='],
   ['blob: URL', 'blob:https://toolbox.example.com/uuid'],
+  // 跨源 https 一律放行（经确认的安全模型，见 imageSourceGuard.js 文件头）；
+  // 图床不支持 CORS 时由浏览器拦截加载，不构成可利用面。
+  ['跨源 https 外部图片', 'https://cdn.example.org/pic.png'],
+  ['协议相对 // 跨源（解析为 https）', '//cdn.example.org/pic.png'],
 ];
 
 for (const [label, value] of acceptCases) {
@@ -292,7 +344,7 @@ for (const [label, value] of acceptCases) {
 
 // —— 拒绝时不得写入 __imageSource ——
 const fakeWin = {};
-const applied = guard.applyImageSourceParam('https://evil.example.net/x.png', fakeWin);
+const applied = guard.applyImageSourceParam('http://evil.example.net/x.png', fakeWin);
 check('被拒绝的参数不写入 __imageSource',
   applied.ok === false && fakeWin.__imageSource === undefined);
 
@@ -335,18 +387,46 @@ check('Web 入口不再直接赋值 __imageSource',
 check('Web 入口调用来源校验函数',
   /applyImageSourceParam/.test(webIndexSrc));
 
-// 各宿主 plugin.json 的隔离配置（缺失时按宿主默认，需显式声明才可审计）
+// 各宿主 plugin.json 的 pluginSetting：**不要**在这里断言 contextIsolation === true。
+//
+// 历史事故：本套件曾断言 plugin.json 里 pluginSetting.contextIsolation === true 并
+// 据此认为「页面拿不到宿主全量 API」，从而给出虚假安全感。实际上 uTools 在创建
+// 插件窗口时把 webPreferences 写死为字面量对象（contextIsolation: !1），
+// 只在存在 preload 时补一项 preload，从不合并 pluginSetting —— 该字段无人读取。
+// ZTools 同族实现，行为一致。
+//
+// 也就是说：隔离**关闭**是本项目的既定运行前提，页面里 window.hostTools / utools /
+// ztools 是可读的。防护不能建立在「隔离存在」这个不成立的前提上，必须落在
+// 「页面源码不主动读宿主原始对象」这一真实可控的约束上（由下方 core 遍历断言保障）。
 for (const platform of ['utools', 'ztools']) {
   const manifestPath = path.join(ROOT, 'clients', platform, 'plugin.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const setting = manifest.pluginSetting || {};
-  check(`${platform} plugin.json 显式声明 contextIsolation`,
-    setting.contextIsolation === true,
-    `实际 = ${JSON.stringify(setting.contextIsolation)}`);
-  check(`${platform} plugin.json 显式关闭 nodeIntegration`,
-    setting.nodeIntegration === false,
-    `实际 = ${JSON.stringify(setting.nodeIntegration)}`);
+
+  // pluginSetting 里不得再出现 contextIsolation / nodeIntegration。
+  //
+  // uTools 的插件加载代码只从 pluginSetting 里取这几个键（已反查 7.8.0 的
+  // dist/main.js）：single / height / outKill / enterDetach / runAtAppOpen /
+  // mainPushPower，然后整体替换内部配置对象。contextIsolation 与
+  // nodeIntegration 不在白名单内 —— 窗口的 webPreferences 在另一处被写死为
+  // contextIsolation: !1（关闭），与 plugin.json 无关。
+  //
+  // 也就是说这两个字段是「死配置」：写了不会生效，却会让审阅者以为隔离已开启。
+  // 断言它们缺席，避免后来者重新写回去。
+  for (const deadKey of ['contextIsolation', 'nodeIntegration']) {
+    check(`${platform} plugin.json 不再声明无效的 ${deadKey}`,
+      !Object.prototype.hasOwnProperty.call(setting, deadKey),
+      `实际 = ${JSON.stringify(setting[deadKey])}（宿主不读取该字段，写了不生效反而误导）`);
+  }
 }
+
+// preload 必须显式探测隔离状态，而不是「contextBridge 存在就桥接」。
+// 否则 uTools 每次初始化都会刷出 contextBridge 报错噪音，掩盖真正的 preload 告警。
+const preloadBridgeSrc = fs.readFileSync(preloadSrcPath, 'utf8');
+check('preload 显式探测 contextIsolation 后再桥接',
+  /_isContextIsolationEnabled\s*\(/.test(preloadBridgeSrc));
+check('preload 用 process.contextIsolated 作为权威信号',
+  /process\.contextIsolated/.test(preloadBridgeSrc));
 
 // 页面源码不得再直接引用宿主原始对象
 const coreDir = path.join(ROOT, 'core', 'src');

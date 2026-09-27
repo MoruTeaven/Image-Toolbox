@@ -454,8 +454,10 @@ class BaseHostAdapter {
       }
     }
 
-    // contextIsolation 开启后宿主原始对象不再进入页面世界，this._api 为 null，
-    // 此时改走 preload 用 contextBridge 暴露的窄接口读取宿主版本。
+    // 若将来宿主启用了 contextIsolation，宿主原始对象不会进入页面世界，
+    // this._api 为 null，此时改走 preload 用 contextBridge 暴露的窄接口。
+    // 注意 uTools / ZTools 当前强制关闭隔离，页面侧 this._api 实际可取到值，
+    // 这段是能力探测而非当前主路径。
     const bridged = getBridgedApi();
     if (bridged && typeof bridged.getHostAppVersion === 'function') {
       try {
@@ -473,7 +475,7 @@ class BaseHostAdapter {
    * 获取本插件版本号（面向用户展示的发布版本）。
    *
    * 取值顺序：
-   *   1. preload 桥接的 getPluginVersion()（contextIsolation 开启时页面唯一可读的入口）；
+   *   1. preload 桥接的 getPluginVersion()（宿主启用 contextIsolation 时的入口）；
    *   2. preload 直接挂在 window 上的 getPluginVersion()（未启用隔离的宿主）；
    *   3. 宿主 API 自身的 getPluginVersion()（ZTools 支持）。
    *
@@ -484,10 +486,12 @@ class BaseHostAdapter {
    * @returns {string} 版本号，取不到时为空字符串
    */
   getPluginVersion() {
-    // 开启 contextIsolation 后 preload 与页面处在两个 JS 世界，
+    // 宿主启用 contextIsolation 时 preload 与页面处在两个 JS 世界，
     // preload 内部的 window.getPluginVersion 赋值页面侧读不到，
     // 只能取 contextBridge 暴露的窄接口；漏掉这一步会让「关于」页
     // 静默退回 core 常量，插件内版本又与市场发布版本脱节。
+    // uTools / ZTools 当前强制关闭隔离，所以下面的 window.getPluginVersion
+    // 分支才是实际命中的那条。
     const bridged = getBridgedApi();
     if (bridged && typeof bridged.getPluginVersion === 'function') {
       try {

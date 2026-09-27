@@ -8,9 +8,7 @@
   "preload": "preload.js",
   "pluginSetting": {
     "single": true,
-    "height": 560,
-    "contextIsolation": true,
-    "nodeIntegration": false
+    "height": 560
   },
   "features": [
     {

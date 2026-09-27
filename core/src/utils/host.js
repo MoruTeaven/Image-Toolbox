@@ -6,11 +6,13 @@
  *
  * 平台判定不要用本函数：请读取 HostAdapter.platform.id。
  *
- * ⚠️ contextIsolation 开启后，宿主原始对象只存在于 preload 世界，
+ * ⚠️ 宿主若启用 contextIsolation，原始对象只存在于 preload 世界，
  * 页面侧读这里的 window.hostTools / window.utools 会拿到 null。
- * 依赖宿主能力的页面代码应改走 preload 暴露的窄接口
- * （window.__imageToolboxApi 或直接 window.<能力名>），
- * 本函数仅保留给未启用隔离的老宿主作兼容探测。
+ * 依赖宿主能力的页面代码一律改走 preload 暴露的窄接口
+ * （window.__imageToolboxApi 或直接 window.<能力名>），不要依赖本函数。
+ *
+ * uTools / ZTools 当前强制关闭 contextIsolation（插件无法通过 plugin.json 开启），
+ * 本函数因此仍能取到对象 —— 但它只是遗留探测，新代码不得依赖。
  */
 function getHostApi() {
   if (typeof window === 'undefined') return null;

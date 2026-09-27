@@ -20,4 +20,8 @@ PLATFORM_ADAPTERS.md
 # 会干扰后续的路径探测并导致「文件不存在」的误判，禁止再提交。
 /CodeClosedSource*/
 /.dsh-vision-toolkit/
+/.dsh-worktrees/
 /tmp/
+
+# Agent 记忆/便签数据（含个人配置，绝不入仓）
+/.mnemon/
