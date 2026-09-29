@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>PROTOTYPE — input[type=color] 取色效果演示（用完即弃）</title>
+<style>
+  /* PROTOTYPE — 非生产代码。演示原生取色控件的三种接入形态，配合本项目深色主题观感。 */
+  :root {
+    --bg: #1e1f24; --panel: #26282f; --text: #e7e7ea; --sub: #97979c;
+    --border: #3a3d45; --accent: #d83b31;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--text); font: 14px/1.6 system-ui, "Segoe UI", sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .q { color: var(--sub); margin-bottom: 20px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card h2 { font-size: 14px; margin: 0 0 4px; }
+  .card p { color: var(--sub); font-size: 12px; margin: 0 0 12px; }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  input[type=color] { width: 77px; height: 40px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); padding: 2px; cursor: pointer; }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 2px; }
+  input[type=color]::-webkit-color-swatch { border: none; border-radius: 6px; }
+  .swatch-btn { width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; }
+  .hidden { position: absolute; left: -9999px; opacity: 0; pointer-events: none; }
+  .hex { font-family: Consolas, monospace; color: var(--accent); }
+  canvas { width: 100%; height: 120px; border-radius: 8px; border: 1px solid var(--border); }
+  .note { margin-top: 20px; padding: 12px 16px; border: 1px dashed var(--border); border-radius: 10px; color: var(--sub); font-size: 12px; }
+  .note b { color: var(--text); }
+  #feed { margin-top: 8px; font-size: 12px; color: var(--sub); min-height: 1.6em; }
+</style>
+</head>
+<body>
+  <h1>原型：原生 <code>&lt;input type="color"&gt;</code> 能不能当取色兜底？</h1>
+  <div class="q">一次性演示文件 —— 双击浏览器打开即可。点击任意色块都会弹出原生取色面板；注意面板里的<b>吸管按钮</b>（Chromium 面板自带全屏吸色）。</div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>形态 A：可见色块</h2>
+      <p>最朴素的用法，色块常驻，点了就弹面板。</p>
+      <div class="row">
+        <input type="color" id="a" value="#d83b31">
+        <span class="hex" id="a-out">#d83b31</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>形态 B：隐藏控件 + 程序触发</h2>
+      <p>未来接到工具栏色块按钮的方式：按钮 click() 唤起隐藏 input，面板关了就关了，不打扰布局。</p>
+      <div class="row">
+        <button class="swatch-btn" id="b-btn" style="background:#4f77d8"></button>
+        <input type="color" id="b" class="hidden" value="#4f77d8">
+        <span class="hex" id="b-out">#4f77d8</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>形态 C：选色即时反映到画布</h2>
+      <p>模拟“取色 → 画笔/文字上色”联动：面板里拖到哪个色，画布实时变。</p>
+      <div class="row">
+        <input type="color" id="c" value="#31d877">
+        <span class="hex" id="c-out">#31d877</span>
+      </div>
+      <canvas id="cv" width="600" height="240" style="margin-top:10px"></canvas>
+      <div id="feed"></div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>已知限制（评估要点）：</b>只输出 6 位 HEX，<b>不支持 Alpha 通道</b>；面板形态由浏览器/Chromium 决定，样式不可定制（色板数量、布局都一样）；
+    Windows 下三端（Chrome/Edge/uTools/ZTools 的 Electron）弹的是同一套 Chromium 面板，在本文件里看到的效果 ≈ 插件里的效果。<br>
+    <b>看点清单：</b>① 面板里的吸管工具能不能满足“从屏幕取色”② 拖色时画布实时联动跟不跟手（input 事件）③ 面板默认值回填逻辑（取消不改变、确认才 change）。
+  </div>
+
+<script>
+// PROTOTYPE — 无抽象、无防御、用完即弃。
+const on = (id, fn) => document.getElementById(id).addEventListener('input', fn);
+
+on('a', e => { document.getElementById('a-out').textContent = e.target.value; });
+document.getElementById('b-btn').addEventListener('click', () => document.getElementById('b').click());
+on('b', e => {
+  e.target.value && (document.getElementById('b-btn').style.background = e.target.value);
+  document.getElementById('b-out').textContent = e.target.value;
+});
+
+const cv = document.getElementById('cv').getContext('2d');
+function paint(c) {
+  cv.clearRect(0, 0, 600, 240);
+  cv.fillStyle = '#777777';
+  cv.fillRect(0, 0, 600, 240);                       // 中性灰底（数字 7，用户偏好:)
+  cv.globalAlpha = 0.35; cv.fillStyle = c; cv.fillRect(0, 0, 600, 150); cv.globalAlpha = 1;
+  cv.fillStyle = c; cv.beginPath(); cv.arc(90, 190, 38, 0, 7); cv.fill();   // 7 > 2π，整圆
+  cv.font = 'bold 30px system-ui'; cv.fillStyle = c; cv.fillText('Ag 文字色 77', 160, 200);
+}
+let n = 0;
+on('c', e => {
+  const v = e.target.value;
+  document.getElementById('c-out').textContent = v;
+  paint(v);
+  document.getElementById('feed').textContent = '第 ' + (++n) + ' 次 input 事件 · ' + v + ' · ' + new Date().toLocaleTimeString();
+});
+paint('#31d877');
+</script>
+</body>
+</html>

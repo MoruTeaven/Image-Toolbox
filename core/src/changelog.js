@@ -68,12 +68,14 @@ export const APP_VERSION = '2.5.1-dev';
 export const CHANGELOG = [
   {
     version: '2.5.1-dev',
-    date: '2026-09-27',
+    date: '2026-09-29',
     changes: {
       added: [
         { text: '新增图层复制功能，可通过右键菜单、Ctrl+D 或复制按钮复制图层', platforms: null },
         { text: '背景图层也支持复制，复制出的图层为普通图层', platforms: null },
-        { text: '图层新增右键菜单，支持复制、重命名与删除', platforms: null }
+        { text: '图层新增右键菜单，支持复制、重命名与删除', platforms: null },
+        { text: '新增图层对齐与分布，支持多层互相排列或单层对齐画布', platforms: null },
+        { text: '新增图层混合模式，支持正片叠底、滤色、叠加等效果', platforms: null }
       ],
       fixed: [],
       improved: [],
