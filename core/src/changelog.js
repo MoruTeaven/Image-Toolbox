@@ -76,7 +76,8 @@ export const CHANGELOG = [
         { text: '图层新增右键菜单，支持复制、重命名与删除', platforms: null },
         { text: '新增图层对齐与分布，支持多层互相排列或单层对齐画布', platforms: null },
         { text: '新增图层混合模式，支持正片叠底、滤色、叠加等效果', platforms: null },
-        { text: '画笔与图形工具栏新增吸管，可从屏幕任意位置取色', platforms: null }
+        { text: '画笔与图形工具栏新增吸管，可从屏幕任意位置取色', platforms: null },
+        { text: '调色新增自然饱和度参数，提高鲜艳度时不易过艳', platforms: null }
       ],
       fixed: [],
       improved: [],
