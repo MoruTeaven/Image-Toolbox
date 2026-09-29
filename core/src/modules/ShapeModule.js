@@ -1,6 +1,7 @@
 import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { clamp, escapeAttr, normalizeColor } from '../utils/helpers.js';
+import { pickColorFromScreen } from '../utils/colorPicker.js';
 
 /**
  * 图形绘制模块 - 支持矩形、椭圆、星星、心形、梯形、平行四边形、菱形、五边形、直线、箭头等多种图形
@@ -129,6 +130,11 @@ class ShapeModule extends BaseModule {
   }
 
   applyPreset(presetName) {
+    if (presetName === 'shape-pick-color') {
+      this._pickStrokeColorFromScreen();
+      return;
+    }
+
     const stylePreset = ShapeModule.SHAPE_STYLE_PRESETS.find(item => item.preset === presetName);
     if (stylePreset) {
       this.options.fill = this._getPresetColor(stylePreset, 'fill');
@@ -164,6 +170,18 @@ class ShapeModule extends BaseModule {
     if (preset.shapeType !== undefined) this.setShapeType(preset.shapeType);
   }
 
+  /**
+   * 屏幕取色应用到描边主色（setStroke 内部会保留既有描边透明度）。
+   */
+  _pickStrokeColorFromScreen() {
+    const current = normalizeColor(this.options.stroke, '#d83b31', false);
+    pickColorFromScreen(current).then((color) => {
+      if (!color) return;
+      this.setStroke(color);
+      eventBus.emit('tool:propertiesChanged');
+    });
+  }
+
   getOptionsBarHTML() {
     const shapeType = this.options.shapeType;
     const currentShape = ShapeModule.SHAPE_OPTIONS.find(item => item.type === shapeType) || ShapeModule.SHAPE_OPTIONS[0];
@@ -193,6 +211,7 @@ class ShapeModule extends BaseModule {
         </div>
       </div>
       <div class="options-group">
+        <button class="options-btn options-btn-sm" data-preset="shape-pick-color" title="从屏幕任意位置取描边色">吸管</button>
         <button class="options-btn options-btn-sm ${strokeWidth === 1 ? 'active' : ''}" data-preset="shape-width-thin">细</button>
         <button class="options-btn options-btn-sm ${strokeWidth === 2 ? 'active' : ''}" data-preset="shape-width-medium">中</button>
         <button class="options-btn options-btn-sm ${strokeWidth === 4 ? 'active' : ''}" data-preset="shape-width-thick">粗</button>

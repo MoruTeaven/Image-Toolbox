@@ -75,7 +75,8 @@ export const CHANGELOG = [
         { text: '背景图层也支持复制，复制出的图层为普通图层', platforms: null },
         { text: '图层新增右键菜单，支持复制、重命名与删除', platforms: null },
         { text: '新增图层对齐与分布，支持多层互相排列或单层对齐画布', platforms: null },
-        { text: '新增图层混合模式，支持正片叠底、滤色、叠加等效果', platforms: null }
+        { text: '新增图层混合模式，支持正片叠底、滤色、叠加等效果', platforms: null },
+        { text: '画笔与图形工具栏新增吸管，可从屏幕任意位置取色', platforms: null }
       ],
       fixed: [],
       improved: [],
