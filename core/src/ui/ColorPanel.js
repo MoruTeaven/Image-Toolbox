@@ -1,9 +1,9 @@
 import { eventBus } from '../index.js';
-import { FILTER_RANGES, FILTER_PRESETS, getFilterUiValue, setFilter, clearFilters, applyFilterPreset, isPresetActive } from '../utils/filters.js';
+import { getUiFilterItems, FILTER_PRESETS, getFilterUiValue, setFilter, clearFilters, applyFilterPreset, isPresetActive } from '../utils/filters.js';
 
 /**
  * 调色面板 — 侧栏「调色」Tab
- * 选中图片图层时显示滤镜预设、亮度/对比度/饱和度/色相/模糊滑块与重置按钮。
+ * 选中图片图层时显示滤镜预设、参数滑块（清单来自滤镜参数表）与重置按钮。
  * 非图片图层或未选中时显示提示文本。
  */
 class ColorPanel {
@@ -70,22 +70,14 @@ class ColorPanel {
   }
 
   _getColorAdjustHTML(active) {
-    const items = [
-      { type: 'brightness', label: '亮度' },
-      { type: 'contrast',  label: '对比' },
-      { type: 'saturation',label: '饱和' },
-      { type: 'hue',       label: '色相' },
-      { type: 'blur',      label: '模糊' },
-    ];
-
-    const sliders = items.map(({ type, label }) => {
-      const range = FILTER_RANGES[type];
+    // 滑块清单由 utils/filters.js 的参数表派生：新增调色参数只改那一处
+    const sliders = getUiFilterItems().map(({ type, label, min, max, step }) => {
       const value = getFilterUiValue(active, type);
       return `
         <div class="property-item property-item--wide">
           <label>${label}</label>
           <input type="range" class="property-range" data-prop="filter:${type}"
-                 min="${range.min}" max="${range.max}" step="${range.step}" value="${value}" />
+                 min="${min}" max="${max}" step="${step}" value="${value}" />
           <span class="property-value">${value}</span>
         </div>
       `;
