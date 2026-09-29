@@ -1,4 +1,6 @@
 /dist/
+/dist-proto/
+/.npm-cache/
 /node_modules/
 /agents.md
 /.workbuddy/
