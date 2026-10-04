@@ -4,6 +4,8 @@
 > 结论：**有条件推荐采纳**——技术可行性已全部实证，收益明确（体积 −38%、首屏请求 56→3、消灭最易出错的根镜像逻辑）；非紧急，属性价比改造。建议按文末方案先在 web 端试点。
 >
 > 评估日期：2026-09-29 ｜ 原型代码：`scripts/proto-esbuild-web.mjs`、`scripts/proto-smoke-bundle.mjs`、`scripts/lib/proto-vendor-wrapper.mjs`、`scripts/proto-verify-web.ps1`（产物输出在 `dist-proto/`，已加入 .gitignore）
+>
+> **状态（2026-10-04）：已采纳，三端全量上线。** 正式链为 `build.ps1` + `scripts/prepare-build.mjs` + esbuild；包管理已迁移 pnpm（`pnpm install` 后 `.\build.ps1`）；门禁清单见 AGENTS.md §6.1。原型脚本使命完成，随迁移提交删除，其中 smoke 逻辑升级为正式门禁 `scripts/verify-bundle-smoke.mjs`。迁移期新发现：`core/src/preloadHelpers.js` 是 CJS 却位于 `type: module` 包内，esbuild 按 ESM 解析导致 `module.exports` 被当全局赋值（preload 运行时拿不到函数），已按 Node 规范改名 `preloadHelpers.cjs`。
 
 ---
 

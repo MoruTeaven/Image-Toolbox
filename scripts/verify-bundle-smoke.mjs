@@ -1,5 +1,5 @@
 /**
- * proto-smoke-bundle.mjs — 对 esbuild 打包产物做运行时冒烟（评估用）
+ * verify-bundle-smoke.mjs — esbuild 打包产物的运行时冒烟门禁（正式）
  *
  * 深度与仓库安全门禁一致：Node + scripts/test-env.mjs 的 DOM 桩件，
  * 真实执行 bundle 本身（不是重新 import 源码）。验证：
@@ -7,7 +7,8 @@
  *   2. 顶层无未解析引用（#core/、裸 require jsdom、jsdom 分支已消除）
  *   3. App / WebHostAdapter / EventBus 从 bundle 内可用
  *
- * 用法：node scripts/proto-smoke-bundle.mjs <bundle.mjs>
+ * 用法：node scripts/verify-bundle-smoke.mjs <bundle.mjs>
+ * 由 build.ps1 调用：page bundle 复制为临时 .mjs 后传入，退出码非 0 即构建失败。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,7 +17,7 @@ import { installTestEnvironment } from './test-env.mjs';
 
 const bundlePath = process.argv[2];
 if (!bundlePath) {
-  console.error('用法: node scripts/proto-smoke-bundle.mjs <bundle.mjs>');
+  console.error('用法: node scripts/verify-bundle-smoke.mjs <bundle.mjs>');
   process.exit(2);
 }
 

@@ -1,6 +1,6 @@
 /**
- * preloadHelpers.js
- * 跨平台 preload 公共逻辑提取。
+ * preloadHelpers.cjs
+ * 跨平台 preload 公共逻辑提取（CommonJS；core 包是 type:module，CJS 文件必须用 .cjs 扩展名）。
  *
  * 两个平台的 preload.js 共享约 600+ 行相同代码，本模块提取了其中
  * 所有平台无关的函数，平台特定逻辑（API 查找优先级等）由各平台文件注入。
@@ -16,7 +16,7 @@
  *     setupFontTools,
  *     setupUserAPI,
  *     setupMiscAPIs,
- *   } = require('#core/preloadHelpers.js');
+ *   } = require('#core/preloadHelpers.cjs');
  *
  *   // 提供平台特定函数
  *   const platform = {
@@ -1699,7 +1699,7 @@ const getHostAppVersion = () => {
  * 不能用 path.dirname(__dirname)：本文件位于 <插件根>/core/src/ 下，
  * 再向上一层得到的是 <插件根>/core，不是插件根。
  * 这里从本文件所在目录逐级向上查找 plugin.json，因此对
- * <插件根>/core/src/preloadHelpers.js 的实际位置不敏感。
+ * <插件根>/core/src/preloadHelpers.cjs 的实际位置不敏感。
  *
  * @returns {string} 插件根目录，未找到时为空字符串
  */

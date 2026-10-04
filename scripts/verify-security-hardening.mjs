@@ -55,12 +55,12 @@ function stripComments(src) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 1. 路径白名单（preloadHelpers.js）
+// 1. 路径白名单（preloadHelpers.cjs）
 // ══════════════════════════════════════════════════════════════
 
 section('1. preload 路径白名单');
 
-// 构造一个最小的伪造环境来加载 CommonJS 的 preloadHelpers.js。
+// 构造一个最小的伪造环境来加载 CommonJS 的 preloadHelpers.cjs。
 // 它 require('electron') 只为拿 contextBridge / clipboard / nativeImage，
 // 这里给出最小替身即可让模块正常加载。
 const stubElectron = {
@@ -95,7 +95,7 @@ globalThis.window.open = () => null;
 // core/package.json 声明了 "type": "module"，直接 require 源码会被当成 ESM。
 // 但 preload 在真实运行时是 CommonJS（见 AGENTS.md §5.5：dist 中由 Electron
 // 的 require() 加载），因此这里把源码复制成 .cjs 再加载，与产物形态一致。
-const preloadSrcPath = path.join(ROOT, 'core', 'src', 'preloadHelpers.js');
+const preloadSrcPath = path.join(ROOT, 'core', 'src', 'preloadHelpers.cjs');
 const tmpPreloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'img-toolbox-preload-'));
 const tmpPreloadPath = path.join(tmpPreloadDir, 'preloadHelpers.cjs');
 fs.copyFileSync(preloadSrcPath, tmpPreloadPath);
@@ -444,8 +444,8 @@ for (const file of walk(coreDir)) {
   const rel = path.relative(ROOT, file).replace(/\\/g, '/');
   // 两处允许的例外：
   //  - utils/host.js：兼容探测，已加注释说明
-  //  - preloadHelpers.js：preload 自身，宿主对象本就存在于它的世界里
-  if (rel.endsWith('utils/host.js') || rel.endsWith('preloadHelpers.js')) continue;
+  //  - preloadHelpers.cjs：preload 自身，宿主对象本就存在于它的世界里
+  if (rel.endsWith('utils/host.js') || rel.endsWith('preloadHelpers.cjs')) continue;
   const src = stripComments(fs.readFileSync(file, 'utf8'));
   if (/window\.(hostTools|utools|ztools)\b/.test(src)) offenders.push(rel);
 }

@@ -64,7 +64,7 @@
 │       ├── HistoryManager.js # 历史记录（撤销/重做）
 │       ├── ToolManager.js  # 工具管理器
 │       ├── changelog.js    # 版本号（APP_VERSION）+ 更新记录（唯一权威来源）
-│       ├── preloadHelpers.js # preload 公共逻辑
+│       ├── preloadHelpers.cjs # preload 公共逻辑（CJS，见 AGENTS.md §7.2）
 │       ├── app/            # 跨平台应用入口
 │       ├── adapters/       # 宿主适配器基类
 │       ├── identity/       # 轻量认证客户端
@@ -88,7 +88,7 @@
 
 - Node.js（用于构建时 `node --check` 语法校验）
 - PowerShell（执行构建脚本）
-- 构建本身无需 `npm install`，依赖均以本地文件形式引入（Fabric.js、JSZip、Teaven Identity SDK）
+- 构建前需 `pnpm install`（esbuild 是构建期 devDependency）；运行时依赖（Fabric.js、JSZip、Teaven Identity SDK）仍以本地文件形式引入，不依赖 CDN
 - Teaven Identity SDK 如需升级，需访问公司私有 npm 源，见 `core/src/lib/identity-sdk/README.md`
 
 ### 构建
@@ -125,7 +125,7 @@
 | 语言 | 纯 JavaScript（ES Module），`#core/` 别名引用共享核心 |
 | 引擎 | Fabric.js 5.x（本地引入，非 CDN） |
 | UI | 原生 HTML / CSS / JS，无前端框架 |
-| 构建 | PowerShell 脚本，无打包工具 |
+| 构建 | PowerShell 脚本调用 esbuild 打包（`pnpm install` 后 `.\build.ps1`） |
 | 部署 | Cloudflare Pages（Web 端） |
 
 ## 更新日志

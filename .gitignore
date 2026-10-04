@@ -2,6 +2,8 @@
 /dist-proto/
 /.npm-cache/
 /node_modules/
+/package-lock.json
+/.pnpm-store/
 /agents.md
 /.workbuddy/
 /.wrangler/
@@ -27,3 +29,10 @@ PLATFORM_ADAPTERS.md
 
 # Agent 记忆/便签数据（含个人配置，绝不入仓）
 /.mnemon/
+/.acl-recovery/
+
+# ESLint 临时产物（违规报告，可由 eslint -f json 重新生成）
+/dsh-lint-*
+
+# pnpm 本地元数据缓存
+/.pnpm-meta/
