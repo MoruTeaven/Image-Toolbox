@@ -18,6 +18,8 @@
 
 import eventBus from '../EventBus.js';
 import { SAVE_STATUS, normalizeSaveResult } from '../adapters/BaseHostAdapter.js';
+import { createCanvas as createOffscreenCanvas } from '../ports/CanvasPort.js';
+import { downloadFile as downloadViaBrowser } from '../ports/DownloadPort.js';
 
 const ORA_MIMETYPE = 'image/openraster';
 
@@ -157,9 +159,11 @@ function _renderObjectToPng(obj, canvasWidth, canvasHeight) {
     const height = Math.max(1, Math.round(canvasHeight));
 
     // 创建与画布同尺寸的透明 canvas
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = width;
-    tempCanvas.height = height;
+    const tempCanvas = createOffscreenCanvas(width, height);
+    if (!tempCanvas) {
+      console.warn('[ORA] 当前环境无法创建离屏画布');
+      return null;
+    }
     const ctx = tempCanvas.getContext('2d');
 
     // 直接用对象的 render 方法将对象绘制到 canvas 上
@@ -187,9 +191,11 @@ function _renderBackgroundToPng(canvasManager, canvasWidth, canvasHeight) {
     const width = Math.max(1, Math.round(canvasWidth));
     const height = Math.max(1, Math.round(canvasHeight));
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = width;
-    tempCanvas.height = height;
+    const tempCanvas = createOffscreenCanvas(width, height);
+    if (!tempCanvas) {
+      console.warn('[ORA] 当前环境无法创建离屏画布');
+      return null;
+    }
     const ctx = tempCanvas.getContext('2d');
 
     img.render(ctx);
@@ -294,9 +300,10 @@ export async function exportORA(canvasManager, layerManager, hostAdapter = null)
     }
 
     // 3. 生成合并预览图 — 渲染到与画布同尺寸的 canvas，不含 viewportTransform
-    const mergedCanvas = document.createElement('canvas');
-    mergedCanvas.width = canvasWidth;
-    mergedCanvas.height = canvasHeight;
+    const mergedCanvas = createOffscreenCanvas(canvasWidth, canvasHeight);
+    if (!mergedCanvas) {
+      throw new Error('[ORA] 当前环境无法创建离屏画布，无法生成合并预览图');
+    }
     const mergedCtx = mergedCanvas.getContext('2d');
     // 按顺序渲染所有可见对象
     const visibleObjects = objects.filter(obj => obj.visible !== false);
@@ -385,9 +392,12 @@ ${layerXml}
 }
 
 async function _saveOraFile(zipBlob, hostAdapter) {
-  // 优先使用宿主 ORA 保存对话框（Electron 环境）
-  if (typeof window.showSaveOraDialog === 'function' && typeof window.writeBinaryFile === 'function') {
-    const filePath = window.showSaveOraDialog('project.ora');
+  // 优先使用宿主 ORA 保存对话框（Electron 环境）。
+  // 这条路径经 hostAdapter.binaryFile 取得，不再直接嗅探页面 window 上的
+  // preload 注入函数 —— 非 UI 层不感知宿主全局，是本次边界收敛的一部分。
+  const binaryFile = hostAdapter?.binaryFile;
+  if (binaryFile?.showSaveDialog && binaryFile?.write) {
+    const filePath = binaryFile.showSaveDialog('project.ora');
     // 用户主动取消：不是错误，也不应提示成功
     if (!filePath) {
       return SAVE_STATUS.CANCELED;
@@ -396,11 +406,10 @@ async function _saveOraFile(zipBlob, hostAdapter) {
     const oraPath = filePath.replace(/\.[^.]+$/, '') + '.ora';
     const arrayBuffer = await zipBlob.arrayBuffer();
 
-    // writeBinaryFile 失败时返回 false（异常已在 preload 内被吞掉），
-    // 这里必须转成明确失败，不能与「取消」混为一谈。
+    // 写入失败必须转成明确失败，不能与「取消」混为一谈。
     let saved = false;
     try {
-      saved = window.writeBinaryFile(oraPath, arrayBuffer) !== false;
+      saved = binaryFile.write(oraPath, arrayBuffer) !== false;
     } catch (err) {
       console.error('[ORA] 写入文件失败:', err);
       saved = false;
@@ -441,15 +450,8 @@ async function _saveOraFile(zipBlob, hostAdapter) {
   }
 
   // 降级 2：浏览器下载
-  const url = URL.createObjectURL(zipBlob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'project.ora';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-  return SAVE_STATUS.SAVED;
+  const result = downloadViaBrowser(zipBlob, 'project.ora');
+  return result.ok ? SAVE_STATUS.SAVED : SAVE_STATUS.FAILED;
 }
 
 // ═══════════════════════════════════════

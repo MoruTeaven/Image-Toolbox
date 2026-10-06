@@ -49,7 +49,7 @@
  * 修改此处即代表发版意图，其余引用点由构建期校验强制同步。
  * @type {string}
  */
-export const APP_VERSION = '2.5.1-dev';
+export const APP_VERSION = '2.6.0';
 
 /**
  * 版本记录条目结构
@@ -67,22 +67,23 @@ export const APP_VERSION = '2.5.1-dev';
  */
 export const CHANGELOG = [
   {
-    version: '2.5.1-dev',
-    date: '2026-09-29',
+    version: '2.6.0',
+    date: '2026-10-05',
     changes: {
       added: [
-        { text: '新增图层复制功能，可通过右键菜单、Ctrl+D 或复制按钮复制图层', platforms: null },
-        { text: '背景图层也支持复制，复制出的图层为普通图层', platforms: null },
-        { text: '图层新增右键菜单，支持复制、重命名与删除', platforms: null },
-        { text: '新增图层对齐与分布，支持多层互相排列或单层对齐画布', platforms: null },
-        { text: '新增图层混合模式，支持正片叠底、滤色、叠加等效果', platforms: null },
-        { text: '画笔与图形工具栏新增吸管，可从屏幕任意位置取色', platforms: null },
-        { text: '调色新增自然饱和度参数，提高鲜艳度时不易过艳', platforms: null }
+        { text: '新增图层复制功能，可通过右键菜单、快捷键或按钮复制', platforms: null },
+        { text: '图层右键菜单支持复制、重命名与删除', platforms: null },
+        { text: '新增图层对齐与分布，支持多图层排列或对齐画布', platforms: null },
+        { text: '新增图层混合模式，支持正片叠底、滤色、叠加等', platforms: null },
+        { text: '画笔与图形工具新增吸管，可从屏幕取色', platforms: null },
+        { text: '调色新增自然饱和度参数', platforms: null }
       ],
-      fixed: [],
+      fixed: [
+        { text: '修复打开插件时初始化失败、面板无法显示的问题', platforms: null }
+      ],
       improved: [],
       adjusted: [
-        { text: 'Web 版链接中的图片参数重新支持外部图片链接', platforms: ['web'] }
+        { text: 'Web 版重新支持通过链接参数加载外部图片', platforms: ['web'] }
       ],
       removed: []
     }

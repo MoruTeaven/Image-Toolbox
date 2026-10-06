@@ -18,10 +18,14 @@ const { default: StubAdapter } = await import('./stub-host-adapter.mjs');
 
 eventBus.clear();
 
-// 统计 App._showToast 的实际调用次数（用户可见的 Toast）
+// 统计 Toast 的实际渲染次数（用户可见的 Toast）。
+// 收敛 core 浏览器 API 后，Toast 的 DOM 渲染由 EditorShell 承担（App 只做事件编排，
+// 经 shell.showToast 转发），因此 patch 目标从 App.prototype._showToast 改为
+// EditorShell.prototype.showToast —— 统计的仍是「用户实际看到几次 Toast」。
+const { default: EditorShell } = await import('../core/src/app/EditorShell.js');
 let toastCount = 0;
-const originalShowToast = App.prototype._showToast;
-App.prototype._showToast = function patched(message, type) {
+const originalShowToast = EditorShell.prototype.showToast;
+EditorShell.prototype.showToast = function patched(message, type) {
   toastCount++;
   return originalShowToast.call(this, message, type);
 };

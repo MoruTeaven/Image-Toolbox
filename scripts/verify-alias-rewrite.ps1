@@ -163,7 +163,9 @@ function Test-AliasRewriteSafety {
             }
             # The same fixture must prove the alias itself still resolves -
             # "do not rewrite" must not quietly become "do not resolve".
-            & $check 'real #core/ import still resolves (alias works)' ($bundleText.Contains('2.5.1')) ''
+            $changelogSrc = [System.IO.File]::ReadAllText((Join-Path $Root 'core\src\changelog.js'), (New-Object System.Text.UTF8Encoding($false)))
+            $appVersion = ([regex]::Match($changelogSrc, "export\s+const\s+APP_VERSION\s*=\s*'([^']+)'")).Groups[1].Value
+            & $check 'real #core/ import still resolves (alias works)' ($bundleText.Contains($appVersion)) ''
             & $check 'fixture bundle has no rewrite trace' (-not (Test-RewriteFingerprint $bundleText)) ''
         }
     } catch {

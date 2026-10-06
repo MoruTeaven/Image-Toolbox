@@ -1,4 +1,7 @@
-﻿const FALLBACK_FONT_OPTIONS = [
+import { getSystemFonts, getSystemFontsAsync } from '../ports/FontPort.js';
+import { getJSONPreference, setJSONPreference } from './preferences.js';
+
+const FALLBACK_FONT_OPTIONS = [
   { value: 'Microsoft YaHei, PingFang SC, sans-serif', label: '微软雅黑' },
   { value: 'SimSun, STSong, serif', label: '宋体' },
   { value: 'SimHei, STHeiti, sans-serif', label: '黑体' },
@@ -63,13 +66,8 @@ function _loadSystemFontsAsync() {
   if (systemFontLoading) return;
   systemFontLoading = true;
 
-  const asyncLoader = typeof window !== 'undefined' && typeof window.getSystemFontsAsync === 'function'
-    ? window.getSystemFontsAsync()
-    : Promise.resolve().then(() => {
-        return typeof window !== 'undefined' && typeof window.getSystemFonts === 'function'
-          ? window.getSystemFonts()
-          : [];
-      });
+  // 经 FontPort 取得，不再直接嗅探 window.getSystemFonts*
+  const asyncLoader = getSystemFontsAsync();
 
   asyncLoader.then((fonts) => {
     systemFontOptionsCache = Array.isArray(fonts)
@@ -134,10 +132,8 @@ function _getSystemFontOptions() {
   if (systemFontOptionsCache) return systemFontOptionsCache;
 
   try {
-    const fonts = typeof window.getSystemFonts === 'function' ? window.getSystemFonts() : [];
-    systemFontOptionsCache = Array.isArray(fonts)
-      ? fonts.map((font) => String(font || '').trim()).filter(Boolean).map((font) => ({ value: font, label: font }))
-      : [];
+    const fonts = getSystemFonts();
+    systemFontOptionsCache = fonts.map((font) => ({ value: font, label: font }));
   } catch (e) {
     console.error('[fonts] 获取系统字体失败:', e);
     systemFontOptionsCache = [];
@@ -165,21 +161,14 @@ function _sortFontOptions(options) {
 }
 
 function _readFontUsage() {
-  try {
-    const value = localStorage.getItem(FONT_USAGE_STORAGE_KEY);
-    const usage = value ? JSON.parse(value) : {};
-    return usage && typeof usage === 'object' ? usage : {};
-  } catch (e) {
-    return {};
-  }
+  // 经 PreferenceStore：宿主存储优先，localStorage 兜底，失败返回空表
+  const usage = getJSONPreference(FONT_USAGE_STORAGE_KEY, null);
+  return usage && typeof usage === 'object' ? usage : {};
 }
 
 function _writeFontUsage(usage) {
-  try {
-    localStorage.setItem(FONT_USAGE_STORAGE_KEY, JSON.stringify(usage));
-  } catch (e) {
-    // localStorage 不可用时仅失去排序记忆，不影响字体选择。
-  }
+  // 存储不可用时仅失去排序记忆，不影响字体选择
+  setJSONPreference(FONT_USAGE_STORAGE_KEY, usage);
 }
 
 function _getFontKey(value) {

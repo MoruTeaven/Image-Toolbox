@@ -3,6 +3,12 @@
  * 跨平台共享的应用初始化逻辑。
  *
  * 各平台 index.js 只需传入 HostAdapter 构造函数即可复用。
+ *
+ * 架构边界（AGENTS.md §3）
+ * -----------------------
+ * 本文件**不得**出现 `document` / `window` / `navigator` / `localStorage`。
+ * 界面装配与浏览器事件经 `EditorShell`，环境能力经 `ports/` 下的各端口。
+ * 需要新增宿主能力时，先补端口再使用 —— 不要在编排层开洞。
  */
 
 import {
@@ -31,9 +37,16 @@ import AccountPage, {
 } from '../ui/AccountPage.js';
 import { initTheme } from '../utils/theme.js';
 
-// ═══════════════════════════════════════
-// 应用入口
-// ═══════════════════════════════════════
+import EditorShell from './EditorShell.js';
+
+import { createBrowserDomPort, setDomPort } from '../ports/DomPort.js';
+import { setPreferenceHost, getPreference } from '../utils/preferences.js';
+import { setClipboardHost } from '../ports/ClipboardPort.js';
+import { setFontHost } from '../ports/FontPort.js';
+import { setColorHost } from '../ports/ColorPort.js';
+
+const IMAGE_ACCEPT = '.ora,.png,.jpg,.jpeg,.webp,.bmp,.gif,.svg,image/*,application/zip';
+const EDITOR_WINDOW_HEIGHT = 560;
 
 class App {
   constructor(HostAdapter) {
@@ -42,6 +55,8 @@ class App {
     this.layerManager = null;
     this.historyManager = null;
     this.toolManager = null;
+
+    this.shell = new EditorShell();
 
     this.toolbar = null;
     this.optionsBar = null;
@@ -53,7 +68,6 @@ class App {
     this.hostAdapter = null;
     this._destroyed = false;
     this._eventBusUnsubscribers = [];
-    this._boundGlobalListeners = null;
     this._externalSourceTimer = null;
     this._externalSourceFallbackTimer = null;
     this._saveTimer = null;
@@ -63,10 +77,14 @@ class App {
   }
 
   _init() {
+    // 注入浏览器环境端口。这是 core 唯一一次「把真实浏览器接进来」的地方，
+    // 之后所有非 UI 层都只与端口交互。
+    setDomPort(createBrowserDomPort());
+
     // 确保 Fabric.js 已加载
     if (typeof fabric === 'undefined') {
       console.error('[App] Fabric.js 未加载，请检查 CDN');
-      document.body.innerHTML = '<div class="loading">Fabric.js 加载失败，请检查网络连接</div>';
+      this.shell.showFatalError('<div class="loading">Fabric.js 加载失败，请检查网络连接</div>');
       return;
     }
 
@@ -94,62 +112,46 @@ class App {
       // 3. 初始化历史记录
       this.historyManager = new HistoryManager(this.canvasManager, 30);
 
-      // 4. 初始化工具管理器（注入 host adapter）
+      // 4. 初始化宿主适配器，并把能力域注入各端口
       this.hostAdapter = new this.HostAdapter();
+      this._injectHostCapabilities(this.hostAdapter);
+
+      // 5. 初始化工具管理器（注入 host adapter）
       this.toolManager = new ToolManager(this.canvasManager, this.historyManager, {
         host: this.hostAdapter,
       });
 
-      // 5. 初始化 UI 组件
-      this.toolbar = new Toolbar(
-        document.getElementById('toolbar'),
-        this.toolManager,
-        this.hostAdapter
-      );
+      // 6. 初始化 UI 组件 —— 挂载点由 shell 统一解析
+      const mounts = this.shell.getMountPoints();
 
-      this.optionsBar = new OptionsBar(
-        document.getElementById('optionsbar'),
-        this.toolManager
-      );
-
-      this.sidePanelTabs = new SidePanelTabs(
-        document.getElementById('panel-area'),
-        this.layerManager
-      );
-
+      this.toolbar = new Toolbar(mounts.toolbar, this.toolManager, this.hostAdapter);
+      this.optionsBar = new OptionsBar(mounts.optionsBar, this.toolManager);
+      // SidePanelTabs._render() 会动态写入 #property-panel / #layer-panel，
+      // 这两个挂载点必须在它构造之后才能取到。
+      this.sidePanelTabs = new SidePanelTabs(mounts.sidePanel, this.layerManager);
+      const panelMounts = this.shell.getPanelMountPoints();
       this.propertyPanel = new PropertyPanel(
-        document.getElementById('property-panel'),
+        panelMounts.propertyPanel,
         this.toolManager,
         this.canvasManager,
         this.layerManager
       );
-
-      this.layerPanel = new LayerPanel(
-        document.getElementById('layer-panel'),
-        this.layerManager,
-        this.historyManager
-      );
-
-      this.statusBar = new StatusBar(
-        document.getElementById('statusbar'),
-        this.canvasManager,
-        this.layerManager
-      );
-
+      this.layerPanel = new LayerPanel(panelMounts.layerPanel, this.layerManager, this.historyManager);
+      this.statusBar = new StatusBar(mounts.statusBar, this.canvasManager, this.layerManager);
       this.accountPage = new AccountPage(
-        document.getElementById('account-page'),
-        document.getElementById('app'),
+        mounts.accountPage,
+        mounts.appRoot,
         this.sidePanelTabs,
         this.hostAdapter
       );
 
-      // 6. 绑定全局事件
+      // 7. 绑定全局事件
       this._bindGlobalEvents();
 
-      // 7. 默认激活选择工具
+      // 8. 默认激活选择工具
       this.toolManager.activateTool('select');
 
-      // 8. 检查是否有外部传入的图片源
+      // 9. 检查是否有外部传入的图片源
       this._checkExternalSource();
 
       console.log('[App] 图片工具箱初始化完成');
@@ -158,117 +160,49 @@ class App {
     }
   }
 
+  /**
+   * 把宿主能力域接到各端口上。
+   *
+   * 端口保留「注入优先」的设计，所以这里只做接线，不改变端口的降级语义：
+   * 宿主没有实现某能力时，端口会自动继续往浏览器原生路径降级。
+   * @param {object} host
+   */
+  _injectHostCapabilities(host) {
+    setPreferenceHost(host);
+    setClipboardHost(host);
+    setFontHost(host);
+    setColorHost(host);
+  }
+
   _bindGlobalEvents() {
-    // ═══ 图片导入 ═══
+    // ═══ 全局交互事件（由 shell 翻译为语义回调）═══
+    this.shell.bindGlobalEvents({
+      onImageFile: (file) => this._loadImage(file),
+      onOraFile: (file) => eventBus.emit('ora:import', file),
 
-    // 拖拽导入
-    const onDragOver = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
+      onPickImage: () => this._handlePickImage(),
 
-    const onDrop = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+      onZoomIn: () => {
+        this.canvasManager?.zoomIn();
+        this._updateZoomLabel();
+      },
+      onZoomOut: () => {
+        this.canvasManager?.zoomOut();
+        this._updateZoomLabel();
+      },
+      onZoomReset: () => {
+        this.canvasManager?.resetZoom();
+        this._updateZoomLabel();
+      },
 
-      const files = e.dataTransfer.files;
-      if (files.length > 0) {
-        const file = files[0];
-        // ORA 工程文件
-        if (file.name.toLowerCase().endsWith('.ora')) {
-          eventBus.emit('ora:import', file);
-          return;
-        }
-        if (file.type.startsWith('image/')) {
-          this._loadImage(file);
-        }
-      }
-    };
+      onWheelZoom: (delta) => {
+        const canvas = this.canvasManager?.canvas;
+        if (!canvas) return;
+        this.canvasManager.zoomIn(delta);
+        this._updateZoomLabel();
+      },
 
-    // 粘贴导入
-    const onPaste = (e) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          const file = item.getAsFile();
-          if (file) {
-            this._loadImage(file);
-          }
-          break;
-        }
-      }
-    };
-
-    // 文件选择对话框（宿主 API）
-    document.getElementById('welcome-btn')?.addEventListener('click', () => {
-      if (typeof window.showOpenImageDialog === 'function') {
-        // showOpenImageDialog 返回文件路径字符串或 null
-        const filePath = window.showOpenImageDialog();
-        if (filePath) {
-          // ORA 工程文件走单独导入流程
-          if (filePath.toLowerCase().endsWith('.ora')) {
-            if (typeof window.readImageFile === 'function') {
-              const dataURL = window.readImageFile(filePath);
-              if (dataURL) {
-                // dataURL → Blob → ora:import
-                const match = dataURL.match(/^data:[^;]+;base64,(.+)$/i);
-                if (match) {
-                  const binary = atob(match[1]);
-                  const bytes = new Uint8Array(binary.length);
-                  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                  const blob = new Blob([bytes], { type: 'application/zip' });
-                  eventBus.emit('ora:import', blob);
-                }
-              }
-            }
-            return;
-          }
-          // 普通图片
-          const dataURL = window.readImageFile(filePath);
-          if (dataURL) {
-            this._loadImage(dataURL);
-          }
-        }
-      } else {
-        // 降级方案：浏览器 file input
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.ora,.png,.jpg,.jpeg,.webp,.bmp,.gif,.svg,image/*,application/zip';
-        input.onchange = (e) => {
-          const file = e.target.files[0];
-          if (!file) return;
-          // ORA 工程文件
-          if (file.name.toLowerCase().endsWith('.ora')) {
-            eventBus.emit('ora:import', file);
-            return;
-          }
-          this._loadImage(file);
-        };
-        input.click();
-      }
-    });
-
-    // 点击欢迎图标导入
-    document.getElementById('welcome-drop')?.addEventListener('click', () => {
-      document.getElementById('welcome-btn')?.click();
-    });
-
-    // ═══ 缩放控制 ═══
-    document.getElementById('zoom-in')?.addEventListener('click', () => {
-      this.canvasManager?.zoomIn();
-      this._updateZoomLabel();
-    });
-
-    document.getElementById('zoom-out')?.addEventListener('click', () => {
-      this.canvasManager?.zoomOut();
-      this._updateZoomLabel();
-    });
-
-    document.getElementById('zoom-value')?.addEventListener('click', () => {
-      this.canvasManager?.resetZoom();
-      this._updateZoomLabel();
+      onKeyDown: (e) => this._handleKeyDown(e),
     });
 
     // ═══ EventBus 订阅 ═══
@@ -309,7 +243,7 @@ class App {
       eventBus.on('file:open', async (source) => {
         if (source) {
           await this._loadImage(source);
-          this.hostAdapter?.setWindowHeight(560);
+          this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
         }
       })
     );
@@ -326,11 +260,9 @@ class App {
 
       eventBus.on('ora:import', async (file) => {
         if (file instanceof Blob) {
-          document.getElementById('welcome')?.classList.add('hidden');
-          document.getElementById('canvas-container')?.classList.remove('hidden');
-          document.getElementById('zoom-control')?.classList.remove('hidden');
+          this.shell.setEditorVisible(true);
           await importORA(file, this.canvasManager, this.layerManager, this.historyManager);
-          this.hostAdapter?.setWindowHeight(560);
+          this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
         }
       })
     );
@@ -364,89 +296,6 @@ class App {
       })
     );
 
-    // ═══ 快捷键 ═══
-    const onKeyDown = (e) => {
-      // Ctrl+Z 撤销
-      if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
-        e.preventDefault();
-        this.historyManager?.undo();
-        return;
-      }
-
-      // Ctrl+Shift+Z 或 Ctrl+Y 重做
-      if ((e.ctrlKey && e.shiftKey && e.key === 'z') || (e.ctrlKey && !e.shiftKey && e.key === 'y')) {
-        e.preventDefault();
-        this.historyManager?.redo();
-        return;
-      }
-
-      // Delete 删除选中物件
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        const active = this.canvasManager?.getActiveObject();
-        if (active && active.isEditing) return;
-        if (active && active.excludeFromHistory) return;
-        this.historyManager?.saveState();
-        this.canvasManager?.removeActiveObject();
-        return;
-      }
-
-      // Ctrl+D（mac: Cmd+D）复制当前选中图层
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'd' || e.key === 'D')) {
-        const active = this.canvasManager?.getActiveObject();
-        if (!active) return;
-        if (active.isEditing) return;                 // 文字编辑中，不拦截
-        if (active.excludeFromHistory) return;        // 裁剪框等辅助对象不可复制
-        if (active.type === 'activeSelection') return; // 多选暂不支持整体复制
-
-        const meta = this.layerManager?.getLayerByObject(active);
-        if (!meta) return;
-
-        e.preventDefault();
-        this.historyManager?.saveState();
-        this.layerManager.duplicateLayer(meta.id);
-        return;
-      }
-
-      // 工具快捷键
-      if (!e.ctrlKey && !e.metaKey) {
-        const activeElement = document.activeElement;
-        const tagName = activeElement?.tagName?.toUpperCase();
-        if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return;
-        if (activeElement?.isContentEditable) return;
-
-        const active = this.canvasManager?.getActiveObject();
-        if (active && active.isEditing) return;
-
-        const key = e.key.toUpperCase();
-
-        const tools = this.toolManager?.getTools() || [];
-        const tool = tools.find(t => t.shortcut === key);
-        if (tool) {
-          e.preventDefault();
-          this.toolManager?.activateTool(tool.name);
-        }
-      }
-    };
-
-    // ═══ 滚轮缩放 ═══
-    const onWheel = (e) => {
-      if (!this.canvasManager?.canvas) return;
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.05 : 0.05;
-      const pointer = this.canvasManager.canvas.getPointer(e);
-      this.canvasManager.zoomIn(delta, new fabric.Point(pointer.x, pointer.y));
-      this._updateZoomLabel();
-    };
-
-    // 注册所有全局监听器并保存引用以便销毁时移除
-    document.addEventListener('dragover', onDragOver);
-    document.addEventListener('drop', onDrop);
-    document.addEventListener('paste', onPaste);
-    document.addEventListener('keydown', onKeyDown);
-    document.getElementById('canvas-area')?.addEventListener('wheel', onWheel, { passive: false });
-
-    this._boundGlobalListeners = { onDragOver, onDrop, onPaste, onKeyDown, onWheel };
-
     // ═══ 画布操作后自动保存历史 ═══
     this._eventBusUnsubscribers.push(
       eventBus.on('canvas:objectModified', (target) => {
@@ -469,36 +318,113 @@ class App {
 
       // ═══ Toast ═══
       eventBus.on('toast:show', ({ message, type }) => {
-        this._showToast(message, type);
+        this.shell.showToast(message, type);
       })
     );
 
     // ═══ 插件重复进入 ═══
-    // preload.js 已在插件加载时注册了 onPluginEnter，将首次进入的图片
-    // payload 暂存到 window.__imageSource，由 _checkExternalSource() 拾取。
-    // 此处重新注册 onPluginEnter 处理后续进入（覆盖 preload 中的回调）。
+    // preload.js 已在插件加载时注册了 onPluginEnter，把首次进入的图片 payload
+    // 交给宿主适配器暂存，由此处的回调拾取。此处理后续进入的情况。
     this._onPluginEnterCallback = ({ code, type, payload, from }) => {
       console.log('[App] onPluginEnter:', { code, type, from, payload });
-      if (code === 'image-edit') {
-        const source = this._getExternalImageSource(type, payload);
-        console.log('[App] 外部图片源:', source ? 'ok' : 'empty', { type, from });
-        if (source) {
-          if (window.__imageSource === source) {
-            window.__imageSource = null;
-          }
-          this._loadImage(source);
-        } else if (type === 'img' && window.__imageSource) {
-          const fallbackSource = window.__imageSource;
-          if (fallbackSource) {
-            window.__imageSource = null;
-            this._loadImage(fallbackSource);
-          }
-        }
+      if (code !== 'image-edit') return;
 
-        this.hostAdapter?.setWindowHeight(560);
+      const source = this._getExternalImageSource(type, payload);
+      console.log('[App] 外部图片源:', source ? 'ok' : 'empty', { type, from });
+
+      if (source) {
+        this._consumePendingSource(source);
+        this._loadImage(source);
+      } else if (type === 'img') {
+        const fallbackSource = this._consumePendingSource();
+        if (fallbackSource) this._loadImage(fallbackSource);
       }
+
+      this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
     };
-    this.hostAdapter?.onPluginEnter(this._onPluginEnterCallback);
+    this.hostAdapter?.lifecycle?.onEnter?.(this._onPluginEnterCallback);
+  }
+
+  /**
+   * 处理「选择图片」：宿主 pickImage 优先，降级到浏览器文件选择框。
+   */
+  _handlePickImage() {
+    const picked = this.hostAdapter?.file?.pickImage?.();
+    if (picked) {
+      this._loadImage(picked);
+      return;
+    }
+
+    this.shell.openFilePicker(IMAGE_ACCEPT, (file) => {
+      if (String(file.name).toLowerCase().endsWith('.ora')) {
+        eventBus.emit('ora:import', file);
+        return;
+      }
+      this._loadImage(file);
+    });
+  }
+
+  /**
+   * 处理快捷键。只处理编辑器自己关心的键，其余放行给输入控件。
+   * @param {KeyboardEvent} e
+   */
+  _handleKeyDown(e) {
+    // Ctrl+Z 撤销
+    if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
+      e.preventDefault();
+      this.historyManager?.undo();
+      return;
+    }
+
+    // Ctrl+Shift+Z 或 Ctrl+Y 重做
+    if ((e.ctrlKey && e.shiftKey && e.key === 'z') || (e.ctrlKey && !e.shiftKey && e.key === 'y')) {
+      e.preventDefault();
+      this.historyManager?.redo();
+      return;
+    }
+
+    // Delete 删除选中物件
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      const active = this.canvasManager?.getActiveObject();
+      if (active && active.isEditing) return;
+      if (active && active.excludeFromHistory) return;
+      this.historyManager?.saveState();
+      this.canvasManager?.removeActiveObject();
+      return;
+    }
+
+    // Ctrl+D（mac: Cmd+D）复制当前选中图层
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'd' || e.key === 'D')) {
+      const active = this.canvasManager?.getActiveObject();
+      if (!active) return;
+      if (active.isEditing) return;                  // 文字编辑中，不拦截
+      if (active.excludeFromHistory) return;         // 裁剪框等辅助对象不可复制
+      if (active.type === 'activeSelection') return; // 多选暂不支持整体复制
+
+      const meta = this.layerManager?.getLayerByObject(active);
+      if (!meta) return;
+
+      e.preventDefault();
+      this.historyManager?.saveState();
+      this.layerManager.duplicateLayer(meta.id);
+      return;
+    }
+
+    // 工具快捷键：在输入控件里打字时不抢键
+    if (!e.ctrlKey && !e.metaKey) {
+      if (this.shell.isTextInputFocused()) return;
+
+      const active = this.canvasManager?.getActiveObject();
+      if (active && active.isEditing) return;
+
+      const key = e.key.toUpperCase();
+      const tools = this.toolManager?.getTools() || [];
+      const tool = tools.find(t => t.shortcut === key);
+      if (tool) {
+        e.preventDefault();
+        this.toolManager?.activateTool(tool.name);
+      }
+    }
   }
 
   destroy() {
@@ -526,15 +452,7 @@ class App {
     this._eventBusUnsubscribers = [];
 
     // 移除全局事件监听器
-    if (this._boundGlobalListeners) {
-      const { onDragOver, onDrop, onPaste, onKeyDown, onWheel } = this._boundGlobalListeners;
-      document.removeEventListener('dragover', onDragOver);
-      document.removeEventListener('drop', onDrop);
-      document.removeEventListener('paste', onPaste);
-      document.removeEventListener('keydown', onKeyDown);
-      document.getElementById('canvas-area')?.removeEventListener('wheel', onWheel);
-      this._boundGlobalListeners = null;
-    }
+    this.shell.unbindGlobalEvents();
 
     // 解绑宿主生命周期回调
     this._onPluginEnterCallback = null;
@@ -553,33 +471,9 @@ class App {
     this.canvasManager?.destroy?.();
   }
 
-  _showToast(message, type = 'success') {
-    const existing = document.querySelector('.toast');
-    if (existing) existing.remove();
-
-    const icons = {
-      success: '<svg class="toast__icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-      error: '<svg class="toast__icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v4M8 11h0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
-    };
-
-    const toast = document.createElement('div');
-    toast.className = `toast toast--${type}`;
-    toast.innerHTML = icons[type] || '';
-    const textEl = document.createElement('span');
-    textEl.textContent = message;
-    toast.appendChild(textEl);
-    document.body.appendChild(toast);
-
-    toast.addEventListener('animationend', () => {
-      if (toast.parentNode) toast.parentNode.removeChild(toast);
-    });
-  }
-
   async _loadImage(source) {
     try {
-      document.getElementById('welcome')?.classList.add('hidden');
-      document.getElementById('canvas-container')?.classList.remove('hidden');
-      document.getElementById('zoom-control')?.classList.remove('hidden');
+      this.shell.setEditorVisible(true);
 
       await this.canvasManager.loadImage(source);
       this.canvasManager.fitToCanvas(40);
@@ -589,58 +483,71 @@ class App {
       this.historyManager.clear();
       this.historyManager.saveState();
 
-      this.hostAdapter?.setWindowHeight(560);
+      this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
     } catch (err) {
       console.error('[App] 图片加载失败:', err);
-      document.getElementById('welcome')?.classList.remove('hidden');
-      document.getElementById('canvas-container')?.classList.add('hidden');
-      document.getElementById('zoom-control')?.classList.add('hidden');
+      this.shell.setEditorVisible(false);
       eventBus.emit('toast:show', { message: '图片加载失败，请重试', type: 'error' });
     }
   }
 
+  /**
+   * 解析插件传入的外部图片源。
+   * @param {string} type
+   * @param {*} payload
+   * @returns {string|null}
+   */
   _getExternalImageSource(type, payload) {
-    if (typeof window.getImageSourceFromPluginPayload === 'function') {
-      try {
-        const source = window.getImageSourceFromPluginPayload(type, payload);
-        if (source) return source;
-      } catch (e) {
-        console.error('[App] 解析外部图片 payload 失败:', e);
-      }
-    }
+    const bridged = this.hostAdapter?.getImageSourceFromPayload?.(type, payload);
+    if (bridged) return bridged;
 
     if (type !== 'file' && type !== 'files') return null;
 
     const files = Array.isArray(payload) ? payload : [payload];
     const fileInfo = files.find(item => item && item.path);
-    if (!fileInfo || typeof window.readImageFile !== 'function') return null;
+    if (!fileInfo) return null;
 
     try {
-      return window.readImageFile(fileInfo.path);
+      return this.hostAdapter?.file?.readImageFile?.(fileInfo.path) ?? null;
     } catch (e) {
       console.error('[App] 文件匹配读取失败:', e);
       return null;
     }
   }
 
+  /**
+   * 取走宿主适配器暂存的待加载图片源（取后即清，避免重复加载）。
+   * @param {string} [expected] 传值时仅在匹配时消费
+   * @returns {string|null}
+   */
+  _consumePendingSource(expected) {
+    const pending = this.hostAdapter?.consumePendingImageSource?.();
+    if (!pending) return null;
+
+    if (expected !== undefined && pending !== expected) {
+      // 不匹配：放回，交给下一次进入处理
+      this.hostAdapter?.setPendingImageSource?.(pending);
+      return null;
+    }
+
+    return pending;
+  }
+
   _checkExternalSource() {
     // 使用事件驱动 + 轮询降级：先检查是否已有图片源，
-    // 如果没有则设置一个更长的轮询窗口（10s），等待 preload 回调写入。
+    // 如果没有则设置一个更长的轮询窗口（10s），等待宿主回调写入。
     const check = () => {
-      if (window.__imageSource) {
-        const source = window.__imageSource;
-        window.__imageSource = null;
+      const source = this._consumePendingSource();
+      if (source) {
         console.log('[App] _checkExternalSource 发现图片源，开始加载');
-        if (source) {
-          this._loadImage(source);
-        }
+        this._loadImage(source);
         return;
       }
       // 继续等待，直到超时
       this._externalSourceTimer = setTimeout(check, 200);
     };
 
-    // 先等待 100ms 再开始检查，给 preload 回调留出时间
+    // 先等 100ms 再开始检查，给宿主回调留出时间
     this._externalSourceTimer = setTimeout(check, 100);
 
     // 安全兜底：10 秒后清理定时器。
@@ -656,14 +563,13 @@ class App {
   }
 
   _updateZoomLabel() {
-    const label = document.getElementById('zoom-value');
-    if (label && this.canvasManager) {
-      label.textContent = Math.round(this.canvasManager.zoomLevel * 100) + '%';
+    if (this.canvasManager) {
+      this.shell.setZoomLabel(this.canvasManager.zoomLevel);
     }
   }
 
   _getEditorBarsLayout() {
-    const saved = localStorage.getItem(EDITOR_BARS_LAYOUT_KEY);
+    const saved = getPreference(EDITOR_BARS_LAYOUT_KEY);
     return Object.values(EDITOR_BARS_LAYOUTS).includes(saved) ? saved : EDITOR_BARS_LAYOUTS.PRESETS_TOP;
   }
 
@@ -672,15 +578,17 @@ class App {
       ? layout
       : EDITOR_BARS_LAYOUTS.PRESETS_TOP;
 
-    document.getElementById('app')?.classList.toggle(
+    this.shell.toggleAppClass(
       'app--bars-swapped',
       normalized === EDITOR_BARS_LAYOUTS.STATUS_TOP
     );
   }
 
   _getEditorSidePanelPosition() {
-    const saved = localStorage.getItem(EDITOR_SIDE_PANEL_POSITION_KEY);
-    return Object.values(EDITOR_SIDE_PANEL_POSITIONS).includes(saved) ? saved : EDITOR_SIDE_PANEL_POSITIONS.RIGHT;
+    const saved = getPreference(EDITOR_SIDE_PANEL_POSITION_KEY);
+    return Object.values(EDITOR_SIDE_PANEL_POSITIONS).includes(saved)
+      ? saved
+      : EDITOR_SIDE_PANEL_POSITIONS.RIGHT;
   }
 
   _applyEditorSidePanelPosition(position) {
@@ -688,15 +596,17 @@ class App {
       ? position
       : EDITOR_SIDE_PANEL_POSITIONS.RIGHT;
 
-    document.getElementById('app')?.classList.toggle(
+    this.shell.toggleAppClass(
       'app--panel-left',
       normalized === EDITOR_SIDE_PANEL_POSITIONS.LEFT
     );
   }
 
   _getToolbarCollapsed() {
-    const saved = localStorage.getItem(TOOLBAR_COLLAPSED_KEY);
-    return Object.values(TOOLBAR_COLLAPSED).includes(saved) ? saved : TOOLBAR_COLLAPSED.COLLAPSED;
+    const saved = getPreference(TOOLBAR_COLLAPSED_KEY);
+    return Object.values(TOOLBAR_COLLAPSED).includes(saved)
+      ? saved
+      : TOOLBAR_COLLAPSED.COLLAPSED;
   }
 
   _applyToolbarCollapsed(value) {
@@ -704,7 +614,7 @@ class App {
       ? value
       : TOOLBAR_COLLAPSED.COLLAPSED;
 
-    document.getElementById('app')?.classList.toggle(
+    this.shell.toggleAppClass(
       'app--toolbar-expanded',
       normalized === TOOLBAR_COLLAPSED.EXPANDED
     );

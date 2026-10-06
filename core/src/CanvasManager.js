@@ -1,5 +1,6 @@
 import eventBus from './EventBus.js';
 import { CANVAS_DEFAULTS } from './utils/constants.js';
+import { getDomPort } from './ports/DomPort.js';
 
 const CLIP_PATH_SERIALIZED_PROPS = ['clipPath', 'absolutePositioned', 'inverted'];
 
@@ -26,7 +27,7 @@ class CanvasManager {
    * @param {object} [options] - Fabric.Canvas 配置
    */
   init(options = {}) {
-    const el = document.getElementById(this._canvasElId);
+    const el = getDomPort()?.getElementById?.(this._canvasElId);
     if (!el) {
       throw new Error(`[CanvasManager] 找不到画布元素 #${this._canvasElId}`);
     }
@@ -56,7 +57,7 @@ class CanvasManager {
       this._resizeObserver = null;
     }
     if (this._boundResize) {
-      window.removeEventListener('resize', this._boundResize);
+      getDomPort()?.offWindow?.('resize', this._boundResize);
       this._boundResize = null;
     }
     if (this._historySaveTimer) {
@@ -642,15 +643,15 @@ class CanvasManager {
 
     // 窗口大小变化
     this._boundResize = () => this._updateCanvasSize();
-    window.addEventListener('resize', this._boundResize);
+    getDomPort()?.onWindow?.('resize', this._boundResize);
 
     // 使用 ResizeObserver 监听容器变化
     const container = this.canvas.wrapperEl?.parentElement;
-    if (container && window.ResizeObserver) {
-      this._resizeObserver = new ResizeObserver(() => {
+    if (container) {
+      this._resizeObserver = getDomPort()?.createResizeObserver?.(() => {
         this._updateCanvasSize();
-      });
-      this._resizeObserver.observe(container);
+      }) ?? null;
+      this._resizeObserver?.observe?.(container);
     }
   }
 }
