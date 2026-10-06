@@ -17,8 +17,8 @@
 
 ## 为什么是 vendored 而不是 npm 依赖
 
-uTools 禁止加载网络资源（`AGENTS.md` §8.3），且本项目无打包工具，第三方库
-必须以本地文件形式引入。因此 SDK 以源码副本形式随仓库提交，构建时直接复制进 dist。
+uTools 禁止加载网络资源（`AGENTS.md` §8.3），第三方库必须以本地文件形式引入。
+因此 SDK 以源码副本形式随仓库提交，构建时由 esbuild 直接打进 bundle。
 
 带来的好处是可以按需裁剪：本目录保留了 Taro / uni-app 适配器
 （`adapters/`），但当前客户端只使用 `TeavenIdentityClient` 和 `createWebStorage`。

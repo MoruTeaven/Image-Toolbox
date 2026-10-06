@@ -1,6 +1,7 @@
-﻿import BaseModule from './BaseModule.js';
+import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { clamp, escapeAttr, normalizeColor, requestRender as _requestRender } from '../utils/helpers.js';
+import { pickColorFromScreen } from '../utils/colorPicker.js';
 
 /**
  * 画笔模块 - 使用 Fabric 自由绘制生成可编辑的 path 图层。
@@ -92,6 +93,11 @@ class BrushModule extends BaseModule {
   }
 
   applyPreset(presetName) {
+    if (presetName === 'brush-pick-color') {
+      this._pickColorFromScreen();
+      return;
+    }
+
     const presets = {
       'brush-red': { color: '#d83b31' },
       'brush-blue': { color: '#1677ff' },
@@ -112,6 +118,18 @@ class BrushModule extends BaseModule {
     if (preset.width) this.setWidth(preset.width);
   }
 
+  /**
+   * 屏幕取色应用到画笔颜色。取色界面是异步的，完成后广播属性变更
+   * 让选项栏刷新色块 active 态（applyPreset 同步返回时取色还没结束）。
+   */
+  _pickColorFromScreen() {
+    pickColorFromScreen(normalizeColor(this.options.color)).then((color) => {
+      if (!color) return;
+      this.setColor(color);
+      eventBus.emit('tool:propertiesChanged');
+    });
+  }
+
   getOptionsBarHTML() {
     const color = normalizeColor(this.options.color);
     const width = this.options.width;
@@ -124,6 +142,7 @@ class BrushModule extends BaseModule {
         ${this._getColorPresetButton('brush-green', '绿', '#2ead4a', color)}
         ${this._getColorPresetButton('brush-white', '白', '#ffffff', color)}
         ${this._getColorPresetButton('brush-black', '黑', '#111111', color)}
+        <button class="options-btn options-btn-sm" data-preset="brush-pick-color" title="从屏幕任意位置取色">吸管</button>
       </div>
       <div class="options-group">
         <button class="options-btn options-btn-sm ${width === 3 ? 'active' : ''}" data-preset="brush-thin">细</button>

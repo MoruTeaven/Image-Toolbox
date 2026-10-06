@@ -19,6 +19,16 @@
  *     导致插件内显示 1.2.3、市场显示 2.3.2 的错乱）；
  *   - 当前版本统一由 APP_VERSION / getAppVersion() 提供。
  *
+ * ═══ 预发布版本（未发布即打标）═══
+ *
+ * 只要版本还没正式发布，APP_VERSION 就必须带上 SemVer 预发布标识，
+ * 形如 '2.5.1-dev'。原因：uTools / ZTools 市场读取的是 plugin.json 的
+ * version，一个尚未发布的版本号若写成干净的 '2.5.1'，无法与真正发布的
+ * 2.5.1 区分，本地调试包也可能被误当成正式版上传。
+ *
+ * 正式发布时把标识整体去掉（'2.5.1-dev' → '2.5.1'）即可，
+ * 其余引用点由构建期校验强制同步。
+ *
  * ═══ 发版检查清单 ═══
  *
  *   1. 更新 APP_VERSION（仅这一处）
@@ -39,7 +49,7 @@
  * 修改此处即代表发版意图，其余引用点由构建期校验强制同步。
  * @type {string}
  */
-export const APP_VERSION = '2.5.0';
+export const APP_VERSION = '2.6.0';
 
 /**
  * 版本记录条目结构
@@ -56,6 +66,27 @@ export const APP_VERSION = '2.5.0';
  * @type {ChangelogRecord[]}
  */
 export const CHANGELOG = [
+  {
+    version: '2.6.0',
+    date: '2026-10-06',
+    changes: {
+      added: [
+        { text: '新增图层复制功能，可通过右键菜单、快捷键或按钮复制', platforms: null },
+        { text: '图层右键菜单支持复制、重命名与删除', platforms: null },
+        { text: '新增图层对齐与分布，支持多图层排列或对齐画布', platforms: null },
+        { text: '新增图层混合模式，支持正片叠底、滤色、叠加等', platforms: null },
+        { text: '调色新增自然饱和度参数', platforms: null }
+      ],
+      fixed: [
+        { text: '修复打开插件时初始化失败、面板无法显示的问题', platforms: null }
+      ],
+      improved: [],
+      adjusted: [
+        { text: 'Web 版重新支持通过链接参数加载外部图片', platforms: ['web'] }
+      ],
+      removed: []
+    }
+  },
   {
     version: '2.5.0',
     date: '2026-09-23',

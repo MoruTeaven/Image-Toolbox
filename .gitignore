@@ -1,5 +1,9 @@
 /dist/
+/dist-proto/
+/.npm-cache/
 /node_modules/
+/package-lock.json
+/.pnpm-store/
 /agents.md
 /.workbuddy/
 /.wrangler/
@@ -13,9 +17,22 @@ DEVELOPMENT.md
 PLATFORM_ADAPTERS.md
 
 # AI tooling scratch / triage artifacts (never source)
+/.mimosa/
+/.zcode/
 # 注：文件名形如 "CodeClosedSource...图片工具箱 - 客户端" 的目录是路径拼接事故
 # （绝对路径被当作相对路径使用，盘符与反斜杠被吞掉）产生的空壳目录，
 # 会干扰后续的路径探测并导致「文件不存在」的误判，禁止再提交。
 /CodeClosedSource*/
 /.dsh-vision-toolkit/
+/.dsh-worktrees/
 /tmp/
+
+# Agent 记忆/便签数据（含个人配置，绝不入仓）
+/.mnemon/
+/.acl-recovery/
+
+# ESLint 临时产物（违规报告，可由 eslint -f json 重新生成）
+/dsh-lint-*
+
+# pnpm 本地元数据缓存
+/.pnpm-meta/

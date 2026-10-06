@@ -15,6 +15,7 @@
  */
 
 import { getBridgedApi } from '../utils/host.js';
+import { getDomPort } from '../ports/DomPort.js';
 
 const _isUserValid = (user) => {
   return user && (user.nickname || user.name || user.userName || user.username || user.avatar || user.avatarUrl || user.photo);
@@ -118,6 +119,14 @@ class BaseHostAdapter {
       saveImage: (data, suggestedName) => this.saveImage(data, suggestedName),
     };
 
+    // 二进制文件读写（ORA 工程文件导出用）。
+    // 过去 ora.js 直接嗅探 page window 上的 showSaveOraDialog/writeBinaryFile，
+    // 现在收敛到能力域，非 UI 层不再感知宿主全局。
+    this.binaryFile = {
+      showSaveDialog: (suggestedName) => this.showSaveOraDialog(suggestedName),
+      write: (filePath, data) => this.writeBinaryFile(filePath, data),
+    };
+
     this.clipboard = {
       writeImage: (data) => this.copyImage(data),
       readText: () => this.readClipboard(),
@@ -133,6 +142,7 @@ class BaseHostAdapter {
     this.system = {
       openExternal: (url) => this.openHostExternal(url),
       getSystemFonts: () => this.getSystemFonts(),
+      getSystemFontsAsync: () => this.getSystemFontsAsync(),
       showNotification: (message, type) => this.showNotification(message, type),
     };
 
@@ -140,6 +150,28 @@ class BaseHostAdapter {
       onEnter: (callback) => this.onPluginEnter(callback),
       onExit: (callback) => this.onPluginOut(callback),
     };
+
+    // 插件进入时携带的待加载图片源。preload 的 onPluginEnter 先一步写入，
+    // App 通过 consume 取走（取后即清），避免首次进入与重复进入重复加载。
+    this._pendingImageSource = null;
+  }
+
+  /**
+   * 暂存待加载的图片源（由 preload 侧回调写入）。
+   * @param {string|null} source
+   */
+  setPendingImageSource(source) {
+    this._pendingImageSource = source || null;
+  }
+
+  /**
+   * 取走待加载的图片源，取后即清。
+   * @returns {string|null}
+   */
+  consumePendingImageSource() {
+    const source = this._pendingImageSource;
+    this._pendingImageSource = null;
+    return source;
   }
 
   // ═══ 平台特定覆盖点 ═══
@@ -185,7 +217,9 @@ class BaseHostAdapter {
     try {
       if (target && typeof target.getUser === 'function') return target.getUser();
       if (target && typeof target.getUserInfo === 'function') return target.getUserInfo();
-      if (typeof window !== 'undefined' && typeof window.getHostUser === 'function') return window.getHostUser();
+
+      const injected = getDomPort()?.getHostGlobal?.()?.getHostUser;
+      if (typeof injected === 'function') return injected();
     } catch (e) {
       console.warn(`[${this.platformId}HostAdapter] 获取宿主用户失败:`, e);
     }
@@ -200,10 +234,11 @@ class BaseHostAdapter {
 
   _getHostApi() {
     const priorities = this.getHostApiPriority();
+    const hostGlobal = getDomPort()?.getHostGlobal?.();
 
-    if (typeof window !== 'undefined') {
+    if (hostGlobal) {
       for (const key of priorities) {
-        if (window[key]) return window[key];
+        if (hostGlobal[key]) return hostGlobal[key];
       }
     }
 
@@ -294,25 +329,36 @@ class BaseHostAdapter {
   }
 
   /**
+   * 取 preload 注入到页面上的能力函数（未启用 contextIsolation 的宿主路径）。
+   *
+   * 这是适配器内部唯一的「读页面注入函数」出口：适配器本身就是平台桥接层，
+   * 允许知道宿主把什么挂在哪儿，但访问统一走 DomPort，不再直接写 window。
+   * @param {string} name 函数名
+   * @returns {Function|null}
+   */
+  _getInjected(name) {
+    const fn = getDomPort()?.getHostGlobal?.()?.[name];
+    return typeof fn === 'function' ? fn : null;
+  }
+
+  /**
    * 选择图片文件并返回 dataURL
    */
   pickImage() {
-    if (typeof window !== 'undefined' && typeof window.showOpenImageDialog === 'function') {
-      // showOpenImageDialog 返回文件路径字符串或 null
-      const filePath = window.showOpenImageDialog();
-      return filePath ? this.readImageFile(filePath) : null;
-    }
-    return null;
+    const showOpenImageDialog = this._getInjected('showOpenImageDialog');
+    if (!showOpenImageDialog) return null;
+
+    // showOpenImageDialog 返回文件路径字符串或 null
+    const filePath = showOpenImageDialog();
+    return filePath ? this.readImageFile(filePath) : null;
   }
 
   /**
    * 读取图片文件为 dataURL
    */
   readImageFile(filePath) {
-    if (typeof window !== 'undefined' && typeof window.readImageFile === 'function') {
-      return window.readImageFile(filePath);
-    }
-    return null;
+    const readImageFile = this._getInjected('readImageFile');
+    return readImageFile ? readImageFile(filePath) : null;
   }
 
   /**
@@ -335,16 +381,16 @@ class BaseHostAdapter {
    * @returns {{ ok: boolean, status: string, filePath: string|null, reason: string|null }}
    */
   saveImage(data, suggestedName = 'edited.png') {
-    if (typeof window === 'undefined') {
-      return createSaveResult(SAVE_STATUS.UNSUPPORTED, { reason: 'no-window' });
-    }
-    if (typeof window.showSaveImageDialog !== 'function' || typeof window.writeImageFile !== 'function') {
+    const showSaveImageDialog = this._getInjected('showSaveImageDialog');
+    const writeImageFile = this._getInjected('writeImageFile');
+
+    if (!showSaveImageDialog || !writeImageFile) {
       return createSaveResult(SAVE_STATUS.UNSUPPORTED, { reason: 'no-native-save-api' });
     }
 
     // 对话框返回 null 表示用户取消，或对话框本身抛错被宿主吞掉；
     // 二者都无法与「写入失败」区分，按用户取消处理避免误报错误。
-    const filePath = window.showSaveImageDialog(suggestedName);
+    const filePath = showSaveImageDialog(suggestedName);
     if (!filePath) {
       return createSaveResult(SAVE_STATUS.CANCELED);
     }
@@ -356,10 +402,8 @@ class BaseHostAdapter {
    * 显示保存对话框（仅返回路径）
    */
   showSaveImageDialog(suggestedName = 'edited.png', format = null) {
-    if (typeof window !== 'undefined' && typeof window.showSaveImageDialog === 'function') {
-      return window.showSaveImageDialog(suggestedName, format);
-    }
-    return null;
+    const showSaveImageDialog = this._getInjected('showSaveImageDialog');
+    return showSaveImageDialog ? showSaveImageDialog(suggestedName, format) : null;
   }
 
   /**
@@ -370,14 +414,15 @@ class BaseHostAdapter {
    * @returns {{ ok: boolean, status: string, filePath: string|null, reason: string|null }}
    */
   writeImageFile(filePath, data) {
-    if (typeof window === 'undefined' || typeof window.writeImageFile !== 'function') {
+    const writeImageFile = this._getInjected('writeImageFile');
+    if (!writeImageFile) {
       return createSaveResult(SAVE_STATUS.UNSUPPORTED, { filePath, reason: 'no-native-write-api' });
     }
 
     try {
       // preload 的 writeImageFile 写入失败时返回 false（异常已被其内部吞掉），
       // 这里必须显式转成 failed，不能再让调用方拿到无法区分的裸 false。
-      const result = normalizeSaveResult(window.writeImageFile(filePath, data));
+      const result = normalizeSaveResult(writeImageFile(filePath, data));
       if (result.status === SAVE_STATUS.FAILED) {
         return createSaveResult(SAVE_STATUS.FAILED, { filePath, reason: 'write-rejected' });
       }
@@ -392,19 +437,20 @@ class BaseHostAdapter {
    * 复制图片到剪贴板
    */
   copyImage(data) {
-    if (typeof window !== 'undefined' && typeof window.copyImageToClipboard === 'function') {
-      window.copyImageToClipboard(data);
-      return true;
-    }
-    return false;
+    const copyImageToClipboard = this._getInjected('copyImageToClipboard');
+    if (!copyImageToClipboard) return false;
+
+    copyImageToClipboard(data);
+    return true;
   }
 
   /**
    * 写入文本到剪贴板
    */
   writeClipboard(text) {
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      return navigator.clipboard.writeText(text).then(() => true);
+    const clipboard = getDomPort()?.getNavigator?.()?.clipboard;
+    if (clipboard?.writeText) {
+      return clipboard.writeText(text).then(() => true);
     }
     return Promise.resolve(false);
   }
@@ -413,8 +459,9 @@ class BaseHostAdapter {
    * 从剪贴板读取文本
    */
   readClipboard() {
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
-      return navigator.clipboard.readText();
+    const clipboard = getDomPort()?.getNavigator?.()?.clipboard;
+    if (clipboard?.readText) {
+      return clipboard.readText();
     }
     return Promise.resolve(null);
   }
@@ -454,8 +501,10 @@ class BaseHostAdapter {
       }
     }
 
-    // contextIsolation 开启后宿主原始对象不再进入页面世界，this._api 为 null，
-    // 此时改走 preload 用 contextBridge 暴露的窄接口读取宿主版本。
+    // 若将来宿主启用了 contextIsolation，宿主原始对象不会进入页面世界，
+    // this._api 为 null，此时改走 preload 用 contextBridge 暴露的窄接口。
+    // 注意 uTools / ZTools 当前强制关闭隔离，页面侧 this._api 实际可取到值，
+    // 这段是能力探测而非当前主路径。
     const bridged = getBridgedApi();
     if (bridged && typeof bridged.getHostAppVersion === 'function') {
       try {
@@ -473,7 +522,7 @@ class BaseHostAdapter {
    * 获取本插件版本号（面向用户展示的发布版本）。
    *
    * 取值顺序：
-   *   1. preload 桥接的 getPluginVersion()（contextIsolation 开启时页面唯一可读的入口）；
+   *   1. preload 桥接的 getPluginVersion()（宿主启用 contextIsolation 时的入口）；
    *   2. preload 直接挂在 window 上的 getPluginVersion()（未启用隔离的宿主）；
    *   3. 宿主 API 自身的 getPluginVersion()（ZTools 支持）。
    *
@@ -484,10 +533,12 @@ class BaseHostAdapter {
    * @returns {string} 版本号，取不到时为空字符串
    */
   getPluginVersion() {
-    // 开启 contextIsolation 后 preload 与页面处在两个 JS 世界，
+    // 宿主启用 contextIsolation 时 preload 与页面处在两个 JS 世界，
     // preload 内部的 window.getPluginVersion 赋值页面侧读不到，
     // 只能取 contextBridge 暴露的窄接口；漏掉这一步会让「关于」页
     // 静默退回 core 常量，插件内版本又与市场发布版本脱节。
+    // uTools / ZTools 当前强制关闭隔离，所以下面的 window.getPluginVersion
+    // 分支才是实际命中的那条。
     const bridged = getBridgedApi();
     if (bridged && typeof bridged.getPluginVersion === 'function') {
       try {
@@ -498,9 +549,10 @@ class BaseHostAdapter {
       }
     }
 
-    if (typeof window !== 'undefined' && typeof window.getPluginVersion === 'function') {
+    const injected = this._getInjected('getPluginVersion');
+    if (injected) {
       try {
-        const version = window.getPluginVersion();
+        const version = injected();
         if (version && String(version).trim()) return String(version).trim();
       } catch (e) {
         console.warn(`[${this.platformId}HostAdapter] 获取插件版本失败:`, e);
@@ -550,8 +602,9 @@ class BaseHostAdapter {
   getStorageItem(key) {
     const storage = this._api?.dbStorage;
     if (storage && typeof storage.getItem === 'function') return storage.getItem(key);
-    if (typeof localStorage !== 'undefined') return localStorage.getItem(key);
-    return null;
+
+    const webStorage = getDomPort()?.getStorage?.();
+    return webStorage ? webStorage.getItem(key) : null;
   }
 
   /**
@@ -563,7 +616,7 @@ class BaseHostAdapter {
       storage.setItem(key, value);
       return;
     }
-    if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+    getDomPort()?.getStorage?.()?.setItem?.(key, value);
   }
 
   /**
@@ -575,26 +628,23 @@ class BaseHostAdapter {
       storage.removeItem(key);
       return;
     }
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
+    getDomPort()?.getStorage?.()?.removeItem?.(key);
   }
 
   /**
    * 获取系统字体
    */
   getSystemFonts() {
-    if (typeof window !== 'undefined' && typeof window.getSystemFonts === 'function') {
-      return window.getSystemFonts();
-    }
-    return [];
+    const injected = this._getInjected('getSystemFonts');
+    return injected ? injected() : [];
   }
 
   /**
    * 异步获取系统字体
    */
   getSystemFontsAsync() {
-    if (typeof window !== 'undefined' && typeof window.getSystemFontsAsync === 'function') {
-      return window.getSystemFontsAsync();
-    }
+    const injected = this._getInjected('getSystemFontsAsync');
+    if (injected) return Promise.resolve(injected());
     return Promise.resolve([]);
   }
 
@@ -613,12 +663,54 @@ class BaseHostAdapter {
       console.warn(`[${this.platformId}HostAdapter] 使用宿主打开外部链接失败:`, e);
     }
 
-    if (typeof window !== 'undefined') {
-      window.open(url, '_blank', 'noopener,noreferrer');
-      return true;
-    }
+    return getDomPort()?.openExternalWindow?.(url) ?? false;
+  }
 
-    return false;
+  /**
+   * 显示 ORA 工程文件保存对话框。
+   * @param {string} [suggestedName]
+   * @returns {string|null} 用户选定的路径；取消时 null
+   */
+  showSaveOraDialog(suggestedName = 'project.ora') {
+    const showSaveOraDialog = this._getInjected('showSaveOraDialog');
+    return showSaveOraDialog ? showSaveOraDialog(suggestedName) : null;
+  }
+
+  /**
+   * 写入二进制文件。
+   * @param {string} filePath
+   * @param {ArrayBuffer} data
+   * @returns {boolean} 是否写入成功
+   */
+  writeBinaryFile(filePath, data) {
+    const writeBinaryFile = this._getInjected('writeBinaryFile');
+    if (!writeBinaryFile) return false;
+
+    try {
+      return writeBinaryFile(filePath, data) !== false;
+    } catch (e) {
+      console.error('[BaseHostAdapter] 写入二进制文件失败:', e);
+      return false;
+    }
+  }
+
+  /**
+   * 解析插件 payload 中的图片源。
+   * @param {string} type
+   * @param {*} payload
+   * @returns {string|null}
+   */
+  getImageSourceFromPayload(type, payload) {
+    const parser = this._getInjected('getImageSourceFromPluginPayload');
+    if (!parser) return null;
+
+    try {
+      const source = parser(type, payload);
+      return source || null;
+    } catch (e) {
+      console.error('[BaseHostAdapter] 解析外部图片 payload 失败:', e);
+      return null;
+    }
   }
 }
 

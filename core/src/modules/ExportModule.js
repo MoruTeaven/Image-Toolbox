@@ -1,6 +1,8 @@
 import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { SAVE_STATUS, normalizeSaveResult } from '../adapters/BaseHostAdapter.js';
+import { downloadFile as downloadViaBrowser } from '../ports/DownloadPort.js';
+import { writeImage as writeImageToClipboard } from '../ports/ClipboardPort.js';
 
 /**
  * 导出模块 — 将编辑结果导出为图片文件或复制到剪贴板
@@ -124,24 +126,9 @@ class ExportModule extends BaseModule {
     const dataURL = this.exportToDataURL('png', 1, { trimToImage: true });
     if (!dataURL) return;
 
-    // 优先使用 host adapter
-    if (this._host?.copyImage) {
-      const ok = await this._host.copyImage(dataURL);
-      this._notifyToast(ok ? '已复制到剪贴板' : '复制失败', ok ? 'success' : 'error');
-      return;
-    }
-
-    // 降级：Clipboard API
-    try {
-      const blob = await (await fetch(dataURL)).blob();
-      await navigator.clipboard.write([
-        new ClipboardItem({ [blob.type]: blob }),
-      ]);
-      this._notifyToast('已复制到剪贴板', 'success');
-    } catch (err) {
-      console.error('[ExportModule] 剪贴板操作失败:', err);
-      this._notifyToast('复制失败', 'error');
-    }
+    // 宿主原生剪贴板优先，Web 端由 ClipboardPort 自动降级到 ClipboardItem API
+    const ok = await writeImageToClipboard(dataURL);
+    this._notifyToast(ok ? '已复制到剪贴板' : '复制失败', ok ? 'success' : 'error');
   }
 
   /**
@@ -283,15 +270,10 @@ class ExportModule extends BaseModule {
   }
 
   /**
-   * 浏览器下载（降级方案）
+   * 浏览器下载（降级方案）—— 经 DownloadPort，不再直接造 <a> 标签
    */
   _browserDownload(dataURL, filename) {
-    const link = document.createElement('a');
-    link.href = dataURL;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadViaBrowser(dataURL, filename);
   }
 
   /**

@@ -117,6 +117,7 @@ class PropertyPanel {
     const renameDisabled = (!meta || isBackground) ? ' disabled' : '';
     const lockDisabled = isBackground ? ' disabled' : '';
     const opacity = active.opacity == null ? 1 : active.opacity;
+    const blend = active.globalCompositeOperation || 'source-over';
     const typeLabel = this._getTypeLabel(active, meta);
     const layerName = meta?.name || typeLabel;
     const width = this._getScaledWidth(active);
@@ -184,6 +185,22 @@ class PropertyPanel {
         <input type="range" class="property-range" data-prop="opacity"
                min="0" max="100" value="${Math.round(opacity * 100)}"${editDisabled} />
         <span class="property-value">${Math.round(opacity * 100)}%</span>
+      </div>
+    `;
+
+    // Blend mode.
+    html += `
+      <div class="property-item">
+        <label>混合</label>
+        <select class="property-select property-select--short" data-prop="blendMode"${editDisabled}>
+          ${this._getSelectOption('source-over', '正常', blend)}
+          ${this._getSelectOption('multiply', '正片叠底', blend)}
+          ${this._getSelectOption('screen', '滤色', blend)}
+          ${this._getSelectOption('overlay', '叠加', blend)}
+          ${this._getSelectOption('soft-light', '柔光', blend)}
+          ${this._getSelectOption('lighten', '变亮', blend)}
+          ${this._getSelectOption('darken', '变暗', blend)}
+        </select>
       </div>
     `;
 
@@ -400,6 +417,9 @@ class PropertyPanel {
       case 'strokePosition':
         active.set('paintFirst', value === 'inside' ? 'fill' : 'stroke');
         active.set('_strokePosition', value);
+        break;
+      case 'blendMode':
+        active.set('globalCompositeOperation', value);
         break;
       default:
         return;

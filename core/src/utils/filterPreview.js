@@ -7,6 +7,8 @@
  *     避免 ImageBitmap / HTMLImageElement 在同源或异步解码上的兼容问题。
  */
 
+import { createCanvas as createOffscreenCanvas } from '../ports/CanvasPort.js';
+
 /**
  * 预览缩略图的渲染高度（CSS 像素）
  *
@@ -76,9 +78,8 @@ function buildPreviewSource(image) {
   const baseW = Math.max(1, Math.round(srcW * ratio));
   const baseH = Math.max(1, Math.round(srcH * ratio));
 
-  const baseCanvas = document.createElement('canvas');
-  baseCanvas.width = baseW;
-  baseCanvas.height = baseH;
+  const baseCanvas = createOffscreenCanvas(baseW, baseH);
+  if (!baseCanvas) return null;
   const ctx = baseCanvas.getContext('2d');
   if (!ctx) return null;
 

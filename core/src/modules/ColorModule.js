@@ -2,7 +2,7 @@ import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { requestRender as _requestRender } from '../utils/helpers.js';
 import {
-  FILTER_RANGES,
+  getUiFilterItems,
   FILTER_PRESETS,
   getFilterUiValue,
   getPresetFilterValues,
@@ -26,7 +26,7 @@ let previewIdSeed = 0;
  * 激活后保持画布可选（与移动/框选一致），用户选中图片图层后：
  *   - 顶部预设栏以「效果缩略图 + 名称」卡片展示滤镜预设（原图/暖色/冷色/复古/黑白/鲜艳/柔光/锐利），
  *     缩略图取当前选中图层并实时套用对应预设，直观对比调色前后差异
- *   - 右侧属性面板显示调色滑块（亮度/对比/饱和/色相/模糊）+ 重置按钮
+ *   - 右侧属性面板显示调色滑块（亮度/对比/饱和/自然饱和/色相/模糊）+ 重置按钮
  */
 class ColorModule extends BaseModule {
   constructor(canvasManager, historyManager, defaultOptions = {}) {
@@ -183,22 +183,14 @@ class ColorModule extends BaseModule {
       return `${scopeControl}<div class="property-empty">${hint}</div>`;
     }
 
-    const items = [
-      { type: 'brightness', label: '亮度' },
-      { type: 'contrast',   label: '对比' },
-      { type: 'saturation', label: '饱和' },
-      { type: 'hue',        label: '色相' },
-      { type: 'blur',       label: '模糊' },
-    ];
-
-    const sliders = items.map(({ type, label }) => {
-      const range = FILTER_RANGES[type];
+    // 滑块清单由 utils/filters.js 的参数表派生：新增调色参数只改那一处
+    const sliders = getUiFilterItems().map(({ type, label, min, max, step }) => {
       const value = getFilterUiValue(reference, type);
       return `
         <div class="property-item property-item--wide">
           <label>${label}</label>
           <input type="range" class="property-range" data-module-prop="filter:${type}"
-                 min="${range.min}" max="${range.max}" step="${range.step}" value="${value}" data-value-suffix="" />
+                 min="${min}" max="${max}" step="${step}" value="${value}" data-value-suffix="" />
           <span class="property-value">${value}</span>
         </div>
       `;

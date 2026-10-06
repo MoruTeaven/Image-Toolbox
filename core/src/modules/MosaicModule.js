@@ -1,6 +1,7 @@
 import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { clamp, requestRender as _requestRender, createClipPathFromSource, normalizeBounds, intersectBounds, getPointsBounds } from '../utils/helpers.js';
+import { createCanvas as createOffscreenCanvas } from '../ports/CanvasPort.js';
 
 const SELECTION_FILL = 'rgba(47,127,134,0.16)';
 const SELECTION_STROKE = '#2f7f86';
@@ -685,14 +686,14 @@ class MosaicModule extends BaseModule {
     const radius = blurRadius || this.options.blurRadius || 8;
 
     // 源 canvas：放原始像素
-    const srcCanvas = document.createElement('canvas');
+    const srcCanvas = createOffscreenCanvas();
     srcCanvas.width = w;
     srcCanvas.height = h;
     const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
     srcCtx.putImageData(new ImageData(data, w, h), 0, 0);
 
     // 目标 canvas：避免自绘制预乘 alpha 色偏
-    const dstCanvas = document.createElement('canvas');
+    const dstCanvas = createOffscreenCanvas();
     dstCanvas.width = w;
     dstCanvas.height = h;
     const dstCtx = dstCanvas.getContext('2d', { willReadFrequently: true });
@@ -730,7 +731,7 @@ class MosaicModule extends BaseModule {
 
   _createDynamicMosaicOverlay({ rect, maskType, brushPoints = null, brushSize = null, lassoPoints = null }) {
     const canvas = this.canvasManager.canvas;
-    const tempCanvas = document.createElement('canvas');
+    const tempCanvas = createOffscreenCanvas();
     tempCanvas.width = Math.max(1, Math.round(rect.width));
     tempCanvas.height = Math.max(1, Math.round(rect.height));
 
@@ -890,7 +891,7 @@ class MosaicModule extends BaseModule {
     const needsResize = !needsCanvas && (element.width !== width || element.height !== height);
 
     if (needsCanvas) {
-      element = document.createElement('canvas');
+      element = createOffscreenCanvas();
       if (typeof obj.setElement === 'function') {
         obj.setElement(element);
       } else {
@@ -912,7 +913,7 @@ class MosaicModule extends BaseModule {
 
   _captureDynamicMosaicSource(obj, width, height) {
     const sourceCanvas = this._renderObjectsBelow(obj);
-    const sampleCanvas = document.createElement('canvas');
+    const sampleCanvas = createOffscreenCanvas();
     sampleCanvas.width = width;
     sampleCanvas.height = height;
     const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
@@ -1042,7 +1043,7 @@ class MosaicModule extends BaseModule {
     const canvas = this.canvasManager.canvas;
     const width = Math.max(1, Math.ceil(canvas.width || 1));
     const height = Math.max(1, Math.ceil(canvas.height || 1));
-    const sourceCanvas = document.createElement('canvas');
+    const sourceCanvas = createOffscreenCanvas();
     sourceCanvas.width = width;
     sourceCanvas.height = height;
     const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
@@ -1103,7 +1104,7 @@ class MosaicModule extends BaseModule {
   }
 
   _createBrushMaskCanvas(width, height, points, brushSize) {
-    const maskCanvas = document.createElement('canvas');
+    const maskCanvas = createOffscreenCanvas();
     maskCanvas.width = width;
     maskCanvas.height = height;
     const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
@@ -1121,7 +1122,7 @@ class MosaicModule extends BaseModule {
   }
 
   _createLassoMaskCanvas(width, height, points) {
-    const maskCanvas = document.createElement('canvas');
+    const maskCanvas = createOffscreenCanvas();
     maskCanvas.width = width;
     maskCanvas.height = height;
     const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });

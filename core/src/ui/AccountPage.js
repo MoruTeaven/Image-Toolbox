@@ -12,9 +12,9 @@ import IdentityClient from '../identity/IdentityClient.js';
  * HostAdapter.platform.id。
  *
  * 这里不再嗅探 window.utools / window.ztools：ZTools 环境下 window.utools
- * 可能是 uTools API 的别名，会把 ZTools 误判成 uTools；而且开启
- * contextIsolation 后宿主对象只存在于 preload 世界，页面侧读到的恒为
- * undefined，继续嗅探只会给出错误结论。
+ * 可能是 uTools API 的别名，会把 ZTools 误判成 uTools；而且宿主一旦启用
+ * contextIsolation，宿主对象只存在于 preload 世界，页面侧读到的恒为
+ * undefined，继续嗅探只会给出错误结论。平台信息一律由 HostAdapter 注入。
  * @returns {string|null}
  */
 function inferPlatformFromGlobals() {
@@ -972,8 +972,10 @@ class AccountPage {
   /**
    * 宿主能力对象，用于调用宿主专有能力（如 uTools 一键登录）。
    *
-   * 注意：contextIsolation 开启后页面拿不到宿主原始对象了，
-   * 这里返回的是 preload 通过 contextBridge 暴露的窄接口集合。
+   * 注意：这里返回的是 preload 暴露的窄接口集合，而不是宿主原始对象。
+   * uTools / ZTools 当前强制关闭 contextIsolation，window.__imageToolboxApi
+   * 实际为 null，因此命中下面的直接赋值分支；两者都要保留，
+   * 以便宿主将来开启隔离时无需改动本方法。
    * 目前只用到 fetchUserServerTemporaryToken 一项能力。
    * @returns {object|null}
    */

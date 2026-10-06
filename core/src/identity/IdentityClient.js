@@ -9,7 +9,8 @@
  * - uTools 一键登录（loginWithUTools）
  */
 
-import { TeavenIdentityClient, createWebStorage } from '../lib/identity-sdk/index.js';
+import { TeavenIdentityClient, createWebStorage, MemoryTokenStorage } from '../lib/identity-sdk/index.js';
+import { getDomPort } from '../ports/DomPort.js';
 
 const DEFAULT_IDENTITY_BASE = 'https://identity.moruteaven.com';
 const DEFAULT_API_BASE = 'https://api.image-toolbox.moruteaven.com';
@@ -26,17 +27,45 @@ const _decode = (str) => {
   try { return decodeURIComponent(escape(atob(str))); } catch { return str; }
 };
 
+/**
+ * 解析 token 存储后端。
+ *
+ * 优先顺序：显式注入 → 宿主 dbStorage（经 DomPort 取宿主全局）→
+ * 浏览器 localStorage（经 DomPort）→ SDK 内存存储。
+ * 最后一级是为了让非浏览器环境（Node 测试、未来新宿主）仍能构造实例。
+ *
+ * @param {object} [injected] 显式注入的存储（三方法 getItem/setItem/removeItem）
+ * @returns {object} 满足 getItem/setItem/removeItem 的存储对象
+ */
+function _resolveTokenStorage(injected) {
+  if (injected && typeof injected.getItem === 'function') return injected;
+
+  const win = getDomPort()?.getHostGlobal?.();
+  const hostStorage = win?.hostTools?.dbStorage || win?.ztools?.dbStorage || win?.utools?.dbStorage;
+  if (hostStorage && typeof hostStorage.getItem === 'function') return hostStorage;
+
+  const webStorage = getDomPort()?.getStorage?.();
+  if (webStorage && typeof webStorage.getItem === 'function') return webStorage;
+
+  return new MemoryTokenStorage();
+}
+
 class IdentityClient {
   constructor(options = {}) {
     const identityBaseUrl = (options.identityBaseUrl || DEFAULT_IDENTITY_BASE).replace(/\/+$/, '');
     this._apiBaseUrl = (options.apiBaseUrl || DEFAULT_API_BASE).replace(/\/+$/, '');
     this._clientId = options.clientId || DEFAULT_CLIENT_ID;
 
+    // token 存储：经 DomPort 取得，不直接读 window.localStorage。
+    // 宿主（uTools/ZTools）暴露 dbStorage 时优先用它，token 可跟随宿主账号；
+    // 都取不到时退回 SDK 自带的内存存储，保证非浏览器环境仍可构造实例。
+    this._tokenStorage = _resolveTokenStorage(options.storage);
+
     // 创建 SDK 客户端实例
     this._sdk = new TeavenIdentityClient({
       baseUrl: identityBaseUrl,
       clientId: this._clientId,
-      storage: createWebStorage(window.localStorage),
+      storage: createWebStorage(this._tokenStorage),
       storagePrefix: 'teaven_identity_',
     });
 
@@ -67,13 +96,13 @@ class IdentityClient {
    */
   async _migrateLegacyTokens() {
     try {
-      const raw = window.localStorage.getItem(LEGACY_TOKEN_KEY);
+      const raw = this._tokenStorage.getItem(LEGACY_TOKEN_KEY);
       if (!raw) return;
       const decoded = _decode(raw);
       const parsed = JSON.parse(decoded);
       if (parsed && typeof parsed.accessToken === 'string' && typeof parsed.refreshToken === 'string') {
         await this._sdk.saveTokens(parsed);
-        window.localStorage.removeItem(LEGACY_TOKEN_KEY);
+        this._tokenStorage.removeItem(LEGACY_TOKEN_KEY);
       }
     } catch {}
   }

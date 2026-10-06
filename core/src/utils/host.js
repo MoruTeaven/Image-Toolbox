@@ -6,16 +6,27 @@
  *
  * 平台判定不要用本函数：请读取 HostAdapter.platform.id。
  *
- * ⚠️ contextIsolation 开启后，宿主原始对象只存在于 preload 世界，
- * 页面侧读这里的 window.hostTools / window.utools 会拿到 null。
- * 依赖宿主能力的页面代码应改走 preload 暴露的窄接口
- * （window.__imageToolboxApi 或直接 window.<能力名>），
- * 本函数仅保留给未启用隔离的老宿主作兼容探测。
+ * ⚠️ 宿主若启用 contextIsolation，原始对象只存在于 preload 世界，
+ * 页面侧读这里的宿主全局会拿到 null。依赖宿主能力的页面代码一律改走
+ * preload 暴露的窄接口（见 getBridgedApi），不要依赖本函数。
+ *
+ * 边界说明（core 浏览器 API 收敛）：本模块是**唯一**允许读取宿主全局的
+ * 遗留探测点，且所有访问都收在 DomPort 之后。新代码不得依赖它 ——
+ * 宿主能力应经 HostAdapter 能力域取得。此处保留仅为兼容 uTools / ZTools
+ * 强制关闭 contextIsolation 的现状。
  */
-function getHostApi() {
-  if (typeof window === 'undefined') return null;
 
-  return window.hostTools || window.ztools || window.utools || null;
+import { getDomPort } from '../ports/DomPort.js';
+
+/**
+ * 取宿主全局对象（hostTools / ztools / utools）。
+ * @returns {object|null}
+ */
+export function getHostApi() {
+  const win = getDomPort()?.getHostGlobal?.();
+  if (!win) return null;
+
+  return win.hostTools || win.ztools || win.utools || null;
 }
 
 /**
@@ -23,10 +34,13 @@ function getHostApi() {
  * @returns {object|null}
  */
 export function getBridgedApi() {
-  if (typeof window === 'undefined') return null;
-  return window.__imageToolboxApi || null;
+  return getDomPort()?.getBridgedApi?.() ?? null;
 }
 
+/**
+ * 读取宿主系统是否处于深色配色。
+ * @returns {boolean|null} 未知时返回 null，由调用方决定回退策略
+ */
 export function isHostDarkColors() {
   const api = getHostApi();
 

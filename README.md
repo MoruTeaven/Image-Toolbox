@@ -2,7 +2,7 @@
 
 > 基于 Fabric.js 的轻量图片编辑工具，支持 uTools、ZTools、Web 浏览器多端运行。
 
-当前版本：**v2.5.0**
+当前版本：**v2.6.0**
 
 项目官网：[https://image-toolbox.moruteaven.com](https://image-toolbox.moruteaven.com)
 
@@ -64,7 +64,7 @@
 │       ├── HistoryManager.js # 历史记录（撤销/重做）
 │       ├── ToolManager.js  # 工具管理器
 │       ├── changelog.js    # 版本号（APP_VERSION）+ 更新记录（唯一权威来源）
-│       ├── preloadHelpers.js # preload 公共逻辑
+│       ├── preloadHelpers.cjs # preload 公共逻辑（CJS，见 AGENTS.md §7.2）
 │       ├── app/            # 跨平台应用入口
 │       ├── adapters/       # 宿主适配器基类
 │       ├── identity/       # 轻量认证客户端
@@ -88,7 +88,7 @@
 
 - Node.js（用于构建时 `node --check` 语法校验）
 - PowerShell（执行构建脚本）
-- 构建本身无需 `npm install`，依赖均以本地文件形式引入（Fabric.js、JSZip、Teaven Identity SDK）
+- 构建前需 `pnpm install`（esbuild 是构建期 devDependency）；运行时依赖（Fabric.js、JSZip、Teaven Identity SDK）仍以本地文件形式引入，不依赖 CDN
 - Teaven Identity SDK 如需升级，需访问公司私有 npm 源，见 `core/src/lib/identity-sdk/README.md`
 
 ### 构建
@@ -125,13 +125,14 @@
 | 语言 | 纯 JavaScript（ES Module），`#core/` 别名引用共享核心 |
 | 引擎 | Fabric.js 5.x（本地引入，非 CDN） |
 | UI | 原生 HTML / CSS / JS，无前端框架 |
-| 构建 | PowerShell 脚本，无打包工具 |
+| 构建 | PowerShell 脚本调用 esbuild 打包（`pnpm install` 后 `.\build.ps1`） |
 | 部署 | Cloudflare Pages（Web 端） |
 
 ## 更新日志
 
 | 版本 | 日期 | 要点 |
 |------|------|------|
+| 2.6.0 | 2026-10-06 | 图层复制、右键菜单（复制/重命名/删除）、图层对齐与分布、图层混合模式、调色自然饱和度参数；修复打开插件初始化失败的问题 |
 | 2.5.0 | 2026-09-23 | 调色预设改为效果图卡片，直接显示当前图层调色效果；新增贴纸功能；橡皮擦新增框选模式，拖拽即可一次擦除整片区域；修复保存图片或 ORA 工程文件失败时没有任何提示的问题；修复 Web 版样式丢失、ORA 无法导入导出的问题 |
 | 2.4.3 | 2026-08-31 | 新增五边形图形、画笔光标指示修复与增强 |
 | 2.4.2 | 2026-08-22 | ORA 工程文件导入/导出、马赛克/橡皮擦工具鼠标状态修复 |

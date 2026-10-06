@@ -1,6 +1,6 @@
 /**
- * preloadHelpers.js
- * 跨平台 preload 公共逻辑提取。
+ * preloadHelpers.cjs
+ * 跨平台 preload 公共逻辑提取（CommonJS；core 包是 type:module，CJS 文件必须用 .cjs 扩展名）。
  *
  * 两个平台的 preload.js 共享约 600+ 行相同代码，本模块提取了其中
  * 所有平台无关的函数，平台特定逻辑（API 查找优先级等）由各平台文件注入。
@@ -16,7 +16,7 @@
  *     setupFontTools,
  *     setupUserAPI,
  *     setupMiscAPIs,
- *   } = require('#core/preloadHelpers.js');
+ *   } = require('#core/preloadHelpers.cjs');
  *
  *   // 提供平台特定函数
  *   const platform = {
@@ -250,6 +250,41 @@ const _extractAndAllowDialogPath = (result) => {
   const cleaned = candidate.startsWith('file://') ? candidate.replace('file://', '') : candidate;
   _allowPath(cleaned);
   return cleaned;
+};
+
+/**
+ * 从宿主对话框返回对象提取干净的路径结构（审计 V4 后半段）。
+ *
+ * 宿主原始返回对象可能携带非必要字段（canceled 标志之外的宿主内部信息、
+ * 方法引用等），整体回传页面等于扩大暴露面。这里只提取路径，转成
+ * 与历史调用方兼容的三种形态之一（string / string[] / { filePaths }），
+ * 其余字段一律不带出。
+ *
+ * @param {*} result - 宿主对话框原始返回值
+ * @returns {string|string[]|{filePaths:string[]}|null} 干净的路径结构
+ */
+const _extractDialogPaths = (result) => {
+  if (!result) return null;
+
+  const cleanList = (list) => list
+    .filter((p) => typeof p === 'string')
+    .map((p) => p.startsWith('file://') ? p.replace('file://', '') : p)
+    .slice(0, 64);
+
+  if (typeof result === 'string') {
+    return result.startsWith('file://') ? result.replace('file://', '') : result;
+  }
+  if (Array.isArray(result)) {
+    const paths = cleanList(result);
+    return paths.length > 0 ? paths : null;
+  }
+  if (Array.isArray(result.filePaths) && result.filePaths.length > 0) {
+    return { filePaths: cleanList(result.filePaths) };
+  }
+  if (typeof result.filePath === 'string') {
+    return { filePath: result.filePath.startsWith('file://') ? result.filePath.replace('file://', '') : result.filePath };
+  }
+  return null;
 };
 
 // ── 工具函数 ──
@@ -698,6 +733,89 @@ const _extractFontName = (nameTableData, buffer) => {
 // ── 公共初始化函数 ──
 
 /**
+ * 取 Electron 模块（拿不到时返回 null）。
+ *
+ * 单独抽出来是为了让 contextIsolation 探测与 API 桥接共用同一份引用，
+ * 避免重复 require。
+ * @returns {object|null}
+ */
+const _requireElectron = () => {
+  try {
+    return require('electron');
+  } catch (e) {
+    // 非 Electron 环境（理论上不会走到这里）
+    return null;
+  }
+};
+
+/**
+ * 探测当前窗口是否真的启用了 contextIsolation。
+ *
+ * 为什么不能只看 contextBridge 是否存在：uTools / ZTools 把插件的
+ * contextIsolation 强制为 false，却依然在 preload 里提供 contextBridge 对象。
+ * 该对象在被调用时才抛
+ * 「contextBridge API can only be used when contextIsolation is enabled」，
+ * 所以「对象存在」不能作为「隔离已开启」的证据。
+ *
+ * 取值顺序：
+ *   1. process.contextIsolated —— Electron 20+ 在 preload 中提供的官方信号，
+ *      由运行时按窗口 webPreferences 真实取值写入，无法被 plugin.json 之类
+ *      的配置伪造。uTools 7.x 所属版本已支持。
+ *   2. 宿主/测试桩显式声明（el.__contextIsolationEnabled），便于在没有真实
+ *      Electron 的环境里覆盖。
+ *   3. 兜底返回 false：宿主不启用隔离时 preload 与页面同处一个世界，
+ *      直接赋值即可用。
+ *
+ * 返回 false 只代表「不桥接」，不代表出错 —— 调用方据此静默返回。
+ * 若探测结果与宿主实际行为不符，由调用方的 catch 分支报告（dev 报 error）。
+ *
+ * @param {object|null} electron - _requireElectron() 的结果，可复用
+ * @returns {boolean}
+ */
+const _isContextIsolationEnabled = (electron) => {
+  const el = electron || _requireElectron();
+  if (!el) return false;
+
+  // 1. 官方运行时信号
+  try {
+    if (typeof process !== 'undefined' && typeof process.contextIsolated === 'boolean') {
+      return process.contextIsolated;
+    }
+  } catch (e) {
+    // 忽略，继续走后续探测
+  }
+
+  // 2. 显式声明（测试桩 / 未来适配器）
+  if (el.__contextIsolationEnabled === true) return true;
+  if (el.__contextIsolationEnabled === false) return false;
+
+  // 3. 兜底：未启用隔离
+  return false;
+};
+
+/**
+ * 当前是否为 dev（未发布）构建。
+ *
+ * 判定依据是插件根目录 plugin.json 的 version 是否带 SemVer 预发布标识
+ * （如 2.5.1-dev）。用 plugin.json 而不是 import APP_VERSION 的原因：
+ * 本模块是 CommonJS，changelog.js 是 ESM，preload 阶段无法直接 import。
+ * plugin.json 也正是应用市场读取的发布版本，语义一致。
+ *
+ * 用途：dev 构建下把「宿主行为与探测结果不一致」这类异常打成 error，
+ * 便于开发期发现；正式版降级为 warn，避免刷屏。
+ *
+ * @returns {boolean}
+ */
+const _isDevBuild = () => {
+  try {
+    const version = readPluginVersionFromManifest();
+    return typeof version === 'string' && version.includes('-');
+  } catch (e) {
+    return false;
+  }
+};
+
+/**
  * 通过 contextBridge 暴露页面所需 API。
  *
  * contextIsolation 开启时 preload 与页面处在两个不同的 JS 世界：
@@ -708,22 +826,39 @@ const _extractFontName = (nameTableData, buffer) => {
  * 以及 setupXXX 之间通过 window.xxx 互相调用都不受影响），最后再把整批
  * API 一次性桥接到主世界。
  *
+ * 宿主未启用 contextIsolation 时（uTools / ZTools 均如此，且插件无法通过
+ * plugin.json 开启）直接返回：此时 preload 与页面同处一个世界，
+ * 直接赋值已经可用，强行调用 contextBridge 只会抛错。
+ *
+ * 注意这里静默返回是对的：隔离关闭是这两个宿主的既定事实，不是异常。
+ * 真正异常的是「探测结果与实际不符」，那条路径在下方 catch 里报错。
+ *
  * @param {string[]} apiNames - 需要暴露给页面的 API 名称
  * @param {string} name - 平台名称（仅用于日志）
  */
 const _exposeApisToPage = (apiNames, name) => {
   if (typeof window === 'undefined') return;
 
-  let contextBridge = null;
-  try {
-    ({ contextBridge } = require('electron'));
-  } catch (e) {
-    // 非 Electron 环境（理论上不会走到这里）
-  }
+  const electron = _requireElectron();
+  const contextBridge = electron && electron.contextBridge;
 
   if (!contextBridge || typeof contextBridge.exposeInMainWorld !== 'function') {
+    // 非 Electron 环境（理论上不会走到这里）
+    return;
+  }
+
+  if (!_isContextIsolationEnabled(electron)) {
     // 未启用 contextIsolation 的宿主：preload 与页面同处一个世界，
-    // 直接赋值已经可用，无需桥接。
+    // 直接给 window.xxx 赋值已经可用，无需桥接。
+    //
+    // 注意不能只判断 contextBridge 是否存在就动手桥接：uTools / ZTools
+    // 把插件的 contextIsolation 强制为 false，却仍然在 preload 里提供
+    // contextBridge 对象 —— 它在被调用时才抛
+    // 「contextBridge API can only be used when contextIsolation is enabled」。
+    // 因此必须显式探测隔离状态。
+    //
+    // 这里静默返回（不打日志）：隔离关闭是既定事实，每次启动都会走到这里，
+    // 打日志只会淹没真正的告警。
     return;
   }
 
@@ -744,7 +879,18 @@ const _exposeApisToPage = (apiNames, name) => {
   try {
     contextBridge.exposeInMainWorld('__imageToolboxApi', bridged);
   } catch (e) {
-    console.error(`[${name} preload] contextBridge 暴露 API 失败:`, e);
+    // 走到这里说明「隔离状态探测」与「宿主实际行为」不一致 —— 这是异常情况，
+    // 不是正常路径：探测说隔离开启，调用却被告知未开启。
+    //
+    // dev 构建打进 error，让开发期立刻发现宿主行为变化；正式版降级为 warn，
+    // 因为页面侧本就有直接读 window.xxx 的兼容路径、功能不受影响，
+    // 不值得用 error 在用户控制台刷屏。
+    const detail = e && e.message ? e.message : e;
+    if (_isDevBuild()) {
+      console.error(`[${name} preload] contextBridge 暴露 API 失败（将回退到直接赋值）:`, detail);
+    } else {
+      console.warn(`[${name} preload] contextBridge 暴露 API 失败（将回退到直接赋值）:`, detail);
+    }
     return;
   }
 
@@ -1320,14 +1466,52 @@ const setupMiscAPIs = (platform) => {
   // ═══ ORA / 通用文件操作 ═══
 
   // 通用打开文件对话框（返回文件路径数组）
+  /**
+   * 净化打开对话框的 options（审计 V4）。
+   *
+   * 页面对 options 逐字透传会让 defaultPath 之类的字段直接到达宿主，
+   * 对话框初始位置因此可被引导到任意目录，提高「用户在错误位置确认」
+   * 的成功率；title/buttonLabel 也可被用来伪装对话框文案。
+   * 这里按白名单透传：只保留打开对话框真正需要的 properties/filters，
+   * 其余字段一律丢弃。当前 core 调用方（StatusBar / setupImageDialog）
+   * 只用到这两个字段，不会影响功能。
+   *
+   * @param {*} options - 页面传入的对话框配置
+   * @returns {object} 仅含安全字段的新对象
+   */
+  const _sanitizeOpenDialogOptions = (options) => {
+    if (!options || typeof options !== 'object' || Array.isArray(options)) return {};
+
+    const safe = {};
+    if (Array.isArray(options.properties)) {
+      safe.properties = options.properties
+        .filter((p) => typeof p === 'string')
+        .slice(0, 8);
+    }
+    if (Array.isArray(options.filters)) {
+      safe.filters = options.filters
+        .filter((f) => f && typeof f === 'object')
+        .map((f) => ({
+          name: String(f.name || '').slice(0, 64),
+          extensions: Array.isArray(f.extensions)
+            ? f.extensions.filter((x) => typeof x === 'string').map((x) => x.slice(0, 16)).slice(0, 32)
+            : [],
+        }))
+        .slice(0, 8);
+    }
+    return safe;
+  };
+
   window.showOpenDialog = (options) => {
     const hostTools = getHostTools();
     if (!hostTools || typeof hostTools.showOpenDialog !== 'function') return null;
     try {
-      const result = hostTools.showOpenDialog(options) || null;
+      const raw = hostTools.showOpenDialog(_sanitizeOpenDialogOptions(options)) || null;
       // 用户选中的路径登记白名单，后续读取该文件才被允许
-      _extractAndAllowDialogPath(result);
-      return result;
+      _extractAndAllowDialogPath(raw);
+      // 不回传宿主原始对象：只提取路径相关的干净结构，避免把宿主挂在
+      // 返回对象上的额外字段一并交给页面（审计 V4 后半段）。
+      return _extractDialogPaths(raw);
     } catch (e) {
       console.warn(`[${platform.getName()} preload] 打开文件对话框失败:`, e);
       return null;
@@ -1515,7 +1699,7 @@ const getHostAppVersion = () => {
  * 不能用 path.dirname(__dirname)：本文件位于 <插件根>/core/src/ 下，
  * 再向上一层得到的是 <插件根>/core，不是插件根。
  * 这里从本文件所在目录逐级向上查找 plugin.json，因此对
- * <插件根>/core/src/preloadHelpers.js 的实际位置不敏感。
+ * <插件根>/core/src/preloadHelpers.cjs 的实际位置不敏感。
  *
  * @returns {string} 插件根目录，未找到时为空字符串
  */
