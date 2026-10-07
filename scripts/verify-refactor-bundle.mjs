@@ -43,7 +43,6 @@ try {
 check('fabric 已挂到 globalThis (5.3.0)',
   globalThis.fabric && globalThis.fabric.version === '5.3.0',
   'version=' + globalThis.fabric?.version);
-check('JSZip 已挂到 globalThis', typeof globalThis.JSZip === 'function');
 
 // 端口层是否可用（收敛后的关键接缝）
 const domPortMod = await import('../core/src/ports/DomPort.js');

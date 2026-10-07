@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readVendorSource, wrapFabric, wrapJSZip } from './lib/vendor-wrapper.mjs';
+import { readVendorSource, wrapFabric } from './lib/vendor-wrapper.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -56,7 +56,6 @@ fs.mkdirSync(vendorDir, { recursive: true });
 // 1. vendor 包装
 const vendor = readVendorSource(root);
 fs.writeFileSync(path.join(vendorDir, 'fabric.js'), wrapFabric(vendor.fabric), 'utf8');
-fs.writeFileSync(path.join(vendorDir, 'jszip.js'), wrapJSZip(vendor.jszip), 'utf8');
 
 // 2. bundle 入口。绝对路径用 posix 分隔符，Windows 反斜杠在字符串字面量里是转义符。
 const realEntry = path.join(clientSrc, 'index.js');
@@ -68,7 +67,6 @@ const entry = [
   '// 构建期生成：vendor 全局库先行加载（与页面原先的 <script> 顺序一致），',
   '// 再引入平台真实入口。逻辑零改动 —— 入口内容始终来自 clients/ 源码。',
   "import './vendor/fabric.js';",
-  "import './vendor/jszip.js';",
   `import '${realEntry.split(path.sep).join('/')}';`,
   ''
 ].join('\n');
@@ -98,7 +96,7 @@ const problems = [];
 if (original.includes('#core/style.css') && !html.includes('./index.css')) {
   problems.push('style.css 引用未被改写为 ./index.css');
 }
-for (const lib of ['fabric.min.js', 'jszip.min.js']) {
+for (const lib of ['fabric.min.js']) {
   if (original.includes(`#core/lib/${lib}`) && html.includes(lib)) {
     problems.push(`${lib} 的 <script> 未被移除`);
   }

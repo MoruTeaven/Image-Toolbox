@@ -126,7 +126,7 @@ while (queue.length > 0) {
 console.log(`站点根: ${siteRoot}`);
 console.log(`入口脚本: ${entryScripts.map((f) => '/' + path.relative(siteRoot, f).split(path.sep).join('/')).join(', ')}`);
 console.log(`首屏请求: ${requests.length} 个；磁盘确认存在: ${checked.length} 个；模块图: ${visited.size} 个脚本`);
-console.log(`关键资源: ${checked.filter((p) => /style\.css|fabric\.min\.js|jszip\.min\.js/.test(p)).join(', ')}`);
+console.log(`关键资源: ${checked.filter((p) => /style\.css|fabric\.min\.js/.test(p)).join(', ')}`);
 
 if (problems.length > 0) {
   console.error(`\nFAIL  发现 ${problems.length} 个会 404 的请求：`);

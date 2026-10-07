@@ -44,8 +44,6 @@ check('bundle 顶层执行完成', true);
 check('真 fabric 已挂到 globalThis（版本 5.3.0）',
   globalThis.fabric && globalThis.fabric.version === '5.3.0',
   'version=' + (globalThis.fabric && globalThis.fabric.version));
-check('JSZip 已挂到 globalThis',
-  typeof globalThis.JSZip === 'function');
 
 const smoke = globalThis.__smoke || {};
 if (smoke.App) {
@@ -63,7 +61,7 @@ if (smoke.App) {
   }
 } else {
   // 浏览器产物（app.js）：入口没有导出 __smoke，只验证顶层副作用跑通。
-  // 上面的 fabric/JSZip 断言已覆盖「bundle 在假 DOM 下完整执行」。
+  // 上面的 fabric 断言已覆盖「bundle 在假 DOM 下完整执行」。
   check('浏览器 bundle 无模块级异常（顶层副作用执行完成）', true);
 }
 
