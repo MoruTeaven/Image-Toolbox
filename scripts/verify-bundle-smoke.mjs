@@ -3,7 +3,7 @@
  *
  * 深度与仓库安全门禁一致：Node + scripts/test-env.mjs 的 DOM 桩件，
  * 真实执行 bundle 本身（不是重新 import 源码）。验证：
- *   1. bundle 顶层副作用跑通：真 fabric / JSZip 被挂到 globalThis
+ *   1. bundle 顶层副作用跑通：真 fabric 被挂到 globalThis
  *   2. 顶层无未解析引用（#core/、裸 require jsdom、jsdom 分支已消除）
  *   3. App / WebHostAdapter / EventBus 从 bundle 内可用
  *

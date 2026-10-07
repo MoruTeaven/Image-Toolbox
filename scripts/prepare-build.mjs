@@ -2,7 +2,7 @@
  * prepare-build.mjs — esbuild 构建的暂存准备（由 build.ps1 调用）
  *
  * 为指定平台生成三样东西到 dist/.build/<platform>/：
- *   1. vendor/fabric.js、vendor/jszip.js —— classic-script 全局库的 ES 包装
+ *   1. vendor/fabric.js —— classic-script 全局库的 ES 包装
  *   2. entry.js —— bundle 入口：两个 vendor 副作用导入 + 真实平台入口
  *      （clients/<platform>/src/index.js 原样引用，#core/ 由 esbuild 原生解析，
  *        不复制、不改写源码逻辑，避免原型期「手工搬 boot 代码」的漂移风险）
