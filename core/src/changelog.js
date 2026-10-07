@@ -49,7 +49,7 @@
  * 修改此处即代表发版意图，其余引用点由构建期校验强制同步。
  * @type {string}
  */
-export const APP_VERSION = '2.6.0';
+export const APP_VERSION = '2.6.1-dev';
 
 /**
  * 版本记录条目结构
@@ -66,6 +66,22 @@ export const APP_VERSION = '2.6.0';
  * @type {ChangelogRecord[]}
  */
 export const CHANGELOG = [
+  {
+    version: '2.6.1-dev',
+    date: '2026-10-06',
+    changes: {
+      added: [
+        { text: '调色新增中间调参数，可单独提亮或压暗画面中间层次', platforms: null },
+        { text: '调色新增通透、浓郁、褪色、日落、青调、暗调、高反差、柔雾滤镜预设', platforms: null }
+      ],
+      fixed: [],
+      improved: [
+        { text: '暖色、鲜艳等滤镜预设改用自然饱和度，颜色更自然', platforms: null }
+      ],
+      adjusted: [],
+      removed: []
+    }
+  },
   {
     version: '2.6.0',
     date: '2026-10-06',

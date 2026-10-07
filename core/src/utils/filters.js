@@ -35,6 +35,9 @@ import { clamp } from './helpers.js';
 /** 自然饱和度的 UI 满量程：滑块推到 ±77 即滤镜的 ±1（收窄量程见表内说明） */
 const VIBRANCE_FULL_SCALE = 77;
 
+/** 中间调（Gamma）的 UI 满量程：滑块推到 ±77 时 gamma 为 1 ± 0.77（中性值为 1） */
+const GAMMA_FULL_SCALE = 77;
+
 /** 比例型参数的换算：UI 百分比 ↔ 滤镜 -1~1 / 0~1 */
 function percentToFilter(value) {
   return clamp(value, -100, 100) / 100;
@@ -73,6 +76,28 @@ export const FILTER_PARAMS = {
     inUi: true,
     toFilter: percentToFilter,
     toUi: filterToPercent,
+  },
+  gamma: {
+    // Gamma 的属性是 [r, g, b] 数组，这里用单滑块等量控制三个通道：
+    // 只抬/压中间调，黑场与白场不动，因此不会像「亮度」那样把暗部推灰或让高光溢出。
+    // UI ±77 → gamma = 1 ± 0.77（中性 1），与「亮度」「对比」互补
+    label: '中间调',
+    cls: 'Gamma',
+    attr: 'gamma',
+    min: -GAMMA_FULL_SCALE,
+    max: GAMMA_FULL_SCALE,
+    step: 1,
+    default: 0,
+    inUi: true,
+    toFilter: value => {
+      const g = 1 + clamp(value, -GAMMA_FULL_SCALE, GAMMA_FULL_SCALE) / 100;
+      return [g, g, g];
+    },
+    // 属性可能是数组：取首个通道即可还原滑块值（三通道由单滑块等量写入）
+    toUi: value => {
+      const g = Array.isArray(value) ? value[0] : value;
+      return Math.round(((g == null ? 1 : g) - 1) * 100);
+    },
   },
   contrast: {
     label: '对比',
@@ -385,37 +410,80 @@ export const FILTER_PRESETS = [
   {
     preset: 'filter-warm',
     label: '暖色',
-    filters: { brightness: 6, saturation: 18, hue: -12 },
+    filters: { brightness: 6, saturation: 18, hue: -12, vibrance: 12 },
   },
   {
     preset: 'filter-cool',
     label: '冷色',
-    filters: { brightness: 2, saturation: -8, hue: 14 },
+    filters: { brightness: 2, saturation: -8, hue: 14, vibrance: -6 },
   },
   {
     preset: 'filter-vintage',
     label: '复古',
-    filters: { brightness: 4, contrast: -8, saturation: -12, sepia: 55 },
+    // 中间调提亮是褪色的关键：只抬中间调，黑场不被推灰
+    filters: { brightness: 4, contrast: -8, saturation: -12, gamma: 14, sepia: 55 },
   },
   {
     preset: 'filter-bw',
     label: '黑白',
-    filters: { grayscale: 100, contrast: 8 },
+    filters: { grayscale: 100, contrast: 8, gamma: -6 },
   },
   {
     preset: 'filter-vivid',
     label: '鲜艳',
-    filters: { saturation: 40, contrast: 14, brightness: 4 },
+    // 由自然饱和分担一部分，避免饱和度拉高后肤色发脏
+    filters: { saturation: 40, contrast: 14, brightness: 4, vibrance: 22 },
   },
   {
     preset: 'filter-soft',
     label: '柔光',
-    filters: { brightness: 10, contrast: -16, blur: 6 },
+    filters: { brightness: 10, contrast: -16, blur: 6, gamma: 10 },
   },
   {
     preset: 'filter-sharp',
     label: '锐利',
-    filters: { contrast: 26, saturation: 10, brightness: -2 },
+    filters: { contrast: 26, saturation: 10, brightness: -2, vibrance: 8 },
+  },
+  {
+    preset: 'filter-airy',
+    label: '通透',
+    filters: { brightness: 8, contrast: 6, gamma: 16, saturation: 6, vibrance: 18 },
+  },
+  {
+    preset: 'filter-rich',
+    label: '浓郁',
+    filters: { contrast: 12, gamma: -14, saturation: 8, vibrance: 26 },
+  },
+  {
+    preset: 'filter-faded',
+    label: '褪色',
+    filters: { brightness: 6, contrast: -14, gamma: 22, saturation: -14 },
+  },
+  {
+    preset: 'filter-sunset',
+    label: '日落',
+    // 暖调走色相 + 饱和，不用棕褐（棕褐是固定强度的开关，弱不了）
+    filters: { brightness: 4, saturation: 22, hue: -14, vibrance: 14 },
+  },
+  {
+    preset: 'filter-teal',
+    label: '青调',
+    filters: { contrast: 10, saturation: -12, hue: 16, vibrance: 8 },
+  },
+  {
+    preset: 'filter-moody',
+    label: '暗调',
+    filters: { brightness: -10, contrast: 16, gamma: -12, saturation: -10 },
+  },
+  {
+    preset: 'filter-ink',
+    label: '高反差',
+    filters: { grayscale: 100, contrast: 26, gamma: -10 },
+  },
+  {
+    preset: 'filter-haze',
+    label: '柔雾',
+    filters: { brightness: 8, contrast: -10, blur: 10, gamma: 14, saturation: -6 },
   },
 ];
 

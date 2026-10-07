@@ -54,7 +54,9 @@ function resolveMetaPath(p) {
 const allowedRoots = [
   path.join(root, 'core', 'src'),
   path.join(root, 'clients'),
-  path.join(root, 'scripts')
+  path.join(root, 'scripts'),
+  path.join(root, 'packages'),
+  path.join(root, 'node_modules')
 ];
 if (staging) { allowedRoots.push(path.resolve(staging)); }
 
