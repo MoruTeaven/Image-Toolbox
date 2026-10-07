@@ -63,7 +63,6 @@
 │       ├── LayerManager.js # 图层管理器
 │       ├── HistoryManager.js # 历史记录（撤销/重做）
 │       ├── ToolManager.js  # 工具管理器
-│       ├── changelog.js    # 版本号（APP_VERSION）+ 更新记录（唯一权威来源）
 │       ├── preloadHelpers.cjs # preload 公共逻辑（CJS，见 AGENTS.md §7.2）
 │       ├── app/            # 跨平台应用入口
 │       ├── adapters/       # 宿主适配器基类
@@ -73,6 +72,8 @@
 │       ├── utils/          # 工具函数
 │       ├── runtime/        # Fabric.js 运行时入口
 │       └── lib/            # Fabric.js 5.x 本地库文件
+├── packages/              # 可独立子包（pnpm workspace: ora, changelog）
+│
 ├── clients/                # 各平台入口
 │   ├── utools/            # uTools 插件
 │   ├── ztools/            # ZTools 插件
@@ -88,7 +89,7 @@
 
 - Node.js（用于构建时 `node --check` 语法校验）
 - PowerShell（执行构建脚本）
-- 构建前需 `pnpm install`（esbuild 是构建期 devDependency）；运行时依赖（Fabric.js、JSZip、Teaven Identity SDK）仍以本地文件形式引入，不依赖 CDN
+- 构建前需 `pnpm install`（esbuild 是构建期 devDependency）；运行时依赖（Fabric.js 本地文件；fflate/fast-xml-parser 经 npm 安装打包；Teaven Identity SDK vendored）不依赖 CDN
 - Teaven Identity SDK 如需升级，需访问公司私有 npm 源，见 `core/src/lib/identity-sdk/README.md`
 
 ### 构建
@@ -102,7 +103,7 @@
 2. 对每个平台（uTools、zTools、web）：复制 `clients/<platform>/` 和 `core/src/` 到 `dist/<platform>/`
 3. 把 `#core/` 别名重写为按输出位置计算的相对路径
 4. 对所有 JS 文件执行 `node --check` 语法校验
-5. 执行版本号一致性校验（`scripts/version-check.ps1`）：`core/src/changelog.js` 的 `APP_VERSION` 必须与两个 `plugin.json`、`package.json`、`README.md` 声明一致，不一致直接构建失败
+5. 执行版本号一致性校验（`scripts/version-check.ps1`）：`packages/changelog/src/changelog.js` 的 `APP_VERSION` 必须与两个 `plugin.json`、`package.json`、`README.md` 声明一致，不一致直接构建失败
 
 ### 部署 Web 端
 
@@ -149,4 +150,4 @@
 | 2.0 | 2026-06-12 | 面板布局切换、裁剪多项修复 |
 | 1.0 | 2026-06-10 | 首个可用版本 |
 
-完整更新记录与版本号定义见 `core/src/changelog.js`。
+完整更新记录与版本号定义见 `packages/changelog/src/changelog.js`。
