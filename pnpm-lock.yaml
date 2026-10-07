@@ -27,9 +27,14 @@ importers:
 
   core:
     dependencies:
+      '@img-toolbox/changelog':
+        specifier: workspace:*
+        version: link:../packages/changelog
       '@img-toolbox/ora':
         specifier: workspace:*
         version: link:../packages/ora
+
+  packages/changelog: {}
 
   packages/ora: {}
 

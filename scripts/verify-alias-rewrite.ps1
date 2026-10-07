@@ -145,8 +145,8 @@ function Test-AliasRewriteSafety {
         "export const note = 'literal string mentioning #core/preloadHelpers.js';",
         "export const url = 'https://example.com/#core/thing';",
         'export const doc = `} = require(''#core/preloadHelpers.js'');`;',
-        "import { APP_VERSION } from '#core/changelog.js';",
-        'export const version = APP_VERSION;',
+        "import eventBus from '#core/EventBus.js';",
+        'export const bus = eventBus;',
         ''
     )
 
@@ -163,9 +163,9 @@ function Test-AliasRewriteSafety {
             }
             # The same fixture must prove the alias itself still resolves -
             # "do not rewrite" must not quietly become "do not resolve".
-            $changelogSrc = [System.IO.File]::ReadAllText((Join-Path $Root 'core\src\changelog.js'), (New-Object System.Text.UTF8Encoding($false)))
-            $appVersion = ([regex]::Match($changelogSrc, "export\s+const\s+APP_VERSION\s*=\s*'([^']+)'")).Groups[1].Value
-            & $check 'real #core/ import still resolves (alias works)' ($bundleText.Contains($appVersion)) ''
+            $eventBusSrc = [System.IO.File]::ReadAllText((Join-Path $Root 'core\src\EventBus.js'), (New-Object System.Text.UTF8Encoding($false)))
+            $eventBusMarker = ([regex]::Match($eventBusSrc, "_idCounter\s*=\s*\d")).Value
+            & $check 'real #core/ import still resolves (alias works)' ($bundleText.Contains($eventBusMarker)) ''
             & $check 'fixture bundle has no rewrite trace' (-not (Test-RewriteFingerprint $bundleText)) ''
         }
     } catch {

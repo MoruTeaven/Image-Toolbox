@@ -26,11 +26,11 @@ function Test-AppVersion {
 
     $ok = $true
 
-    $changelogPath = Join-Path $Root 'core\src\changelog.js'
+    $changelogPath = Join-Path $Root 'packages\changelog\src\changelog.js'
     if (Test-Path $changelogPath) {
         $changelogSrc = [System.IO.File]::ReadAllText($changelogPath, [System.Text.Encoding]::UTF8)
     } else {
-        Write-Host '  FAIL: missing core/src/changelog.js' -ForegroundColor Red
+        Write-Host '  FAIL: missing packages/changelog/src/changelog.js' -ForegroundColor Red
         return $false
     }
 
@@ -38,7 +38,7 @@ function Test-AppVersion {
     if ($match.Success) {
         $version = $match.Groups[1].Value
     } else {
-        Write-Host '  FAIL: APP_VERSION not found in core/src/changelog.js' -ForegroundColor Red
+        Write-Host '  FAIL: APP_VERSION not found in packages/changelog/src/changelog.js' -ForegroundColor Red
         return $false
     }
 

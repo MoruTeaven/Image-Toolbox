@@ -10,6 +10,7 @@
     "./runtime/fabric": "./src/runtime/fabric.js"
   },
   "dependencies": {
-    "@img-toolbox/ora": "workspace:*"
+    "@img-toolbox/ora": "workspace:*",
+    "@img-toolbox/changelog": "workspace:*"
   }
 }
