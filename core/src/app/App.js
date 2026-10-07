@@ -19,7 +19,7 @@ import {
   ToolManager,
 } from '../runtime/fabric.js';
 
-import { exportORA, importORA } from '../utils/ora.js';
+import { exportORA, importORA } from '@img-toolbox/ora';
 
 import Toolbar from '../ui/Toolbar.js';
 import OptionsBar from '../ui/OptionsBar.js';

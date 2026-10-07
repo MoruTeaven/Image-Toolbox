@@ -8,5 +8,8 @@
     ".": "./src/index.js",
     "./fabric": "./src/runtime/fabric.js",
     "./runtime/fabric": "./src/runtime/fabric.js"
+  },
+  "dependencies": {
+    "@img-toolbox/ora": "workspace:*"
   }
 }

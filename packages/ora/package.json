@@ -1,0 +1,9 @@
+{
+  "name": "@img-toolbox/ora",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "OpenRaster (.ora) 导入/导出 — 基于 fflate + fast-xml-parser",
+  "exports": {
+    ".": "./src/ora.js"
+  }
+}

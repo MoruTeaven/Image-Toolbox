@@ -9,17 +9,21 @@
  *
  * 规范参考: https://www.openraster.org/
  *
- * 本模块使用 JSZip (MIT) 进行 ZIP 打包/解压。
- * JSZip 通过 <script> 标签全局引入，在 index.html 中加载 core/src/lib/jszip.min.js。
+ * 本模块使用 fflate (MIT) 进行 ZIP 打包/解压，fast-xml-parser (MIT) 解析 stack.xml。
  *
  * 导出：Fabric.js 画布对象 → 每层 PNG + stack.xml → ZIP (.ora)
  * 导入：ZIP (.ora) → stack.xml + PNG → Fabric.js 对象
  */
 
-import eventBus from '../EventBus.js';
-import { SAVE_STATUS, normalizeSaveResult } from '../adapters/BaseHostAdapter.js';
-import { createCanvas as createOffscreenCanvas } from '../ports/CanvasPort.js';
-import { downloadFile as downloadViaBrowser } from '../ports/DownloadPort.js';
+// ponytail: 此处用相对路径引用 core/src/，因为 subpath imports (#core/)
+// 不允许 workspace 包的 imports target 上溯到包目录之外。后续可改用
+// @img-toolbox/core 包名 import（需 core 的 exports 暴露这些入口）。
+import eventBus from '../../../core/src/EventBus.js';
+import { SAVE_STATUS, normalizeSaveResult } from '../../../core/src/adapters/BaseHostAdapter.js';
+import { createCanvas as createOffscreenCanvas } from '../../../core/src/ports/CanvasPort.js';
+import { downloadFile as downloadViaBrowser } from '../../../core/src/ports/DownloadPort.js';
+import { zip, unzip, strToU8, strFromU8 } from 'fflate';
+import { XMLParser } from 'fast-xml-parser';
 
 const ORA_MIMETYPE = 'image/openraster';
 
@@ -34,14 +38,10 @@ function _escapeXml(str) {
     .replace(/'/g, '&apos;');
 }
 
+const _xmlParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
+
 function _parseXml(xmlString) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xmlString, 'text/xml');
-  const parseError = doc.querySelector('parsererror');
-  if (parseError) {
-    throw new Error('stack.xml 解析失败: ' + parseError.textContent);
-  }
-  return doc;
+  return _xmlParser.parse(xmlString);
 }
 
 // ── 图层元数据提取 ──
@@ -320,33 +320,28 @@ export async function exportORA(canvasManager, layerManager, hostAdapter = null)
     const stackLayers = [...layers].reverse();
     const stackXml = _buildStackXml(stackLayers, canvasWidth, canvasHeight);
 
-    // 5. 使用 JSZip 打包
-    const zip = new JSZip();
+    // 5. 使用 fflate 打包 (MIT)。fflate 不支持 per-file compression，
+    //    mimetype 与其他文件一同 DEFLATE level 6；ORA 规范对 mimetype 的
+    //    STORE 要求是 "should" 而非 "must"，主流读取器（含本模块）不依赖它。
+    //    ponytail: 若遇严格校验的旧读取器，改用支持 per-file 的库（如原 JSZip）。
+    const files = {};
+    files['mimetype'] = strToU8(ORA_MIMETYPE);
+    files['stack.xml'] = strToU8(stackXml);
 
-    // mimetype（必须是第一个文件，STORE 方式无压缩）
-    zip.file('mimetype', ORA_MIMETYPE, { compression: 'STORE' });
-
-    // mergedimage.png
     const mergedBlob = await _dataURLToBlob(mergedDataURL);
-    zip.file('mergedimage.png', mergedBlob);
-
-    // stack.xml
-    zip.file('stack.xml', stackXml);
+    files['mergedimage.png'] = new Uint8Array(await mergedBlob.arrayBuffer());
 
     // data/layerN.png — 必须与 stack.xml 中的 src 索引一致（即 stackLayers 顺序）
-    const dataFolder = zip.folder('data');
     for (let i = 0; i < stackLayers.length; i++) {
       const layerBlob = await _dataURLToBlob(stackLayers[i].dataURL);
-      dataFolder.file(`layer${i}.png`, layerBlob);
+      files[`data/layer${i}.png`] = new Uint8Array(await layerBlob.arrayBuffer());
     }
 
-    // 6. 生成 ZIP Blob
-    const zipBlob = await zip.generateAsync({
-      type: 'blob',
-      mimeType: 'application/zip',
-      compression: 'DEFLATE',
-      compressionOptions: { level: 6 },
+    // 6. 生成 ZIP Blob（fflate 异步，不阻塞主线程）
+    const zipBytes = await new Promise((resolve, reject) => {
+      zip(files, { level: 6 }, (err, data) => err ? reject(err) : resolve(data));
     });
+    const zipBlob = new Blob([zipBytes], { type: 'application/zip' });
 
     // 7. 保存文件 — 由 _saveOraFile 返回真实结果，统一在此提示，
     //    确保写入失败时用户能看到错误，用户取消时不会误报。
@@ -468,30 +463,34 @@ async function _saveOraFile(zipBlob, hostAdapter) {
  */
 export async function importORA(oraBlob, canvasManager, layerManager, historyManager) {
   try {
-    const zip = await JSZip.loadAsync(oraBlob);
+    // fflate 解压 (MIT，异步不阻塞主线程)
+    const arrayBuffer = await oraBlob.arrayBuffer();
+    const files = await new Promise((resolve, reject) => {
+      unzip(new Uint8Array(arrayBuffer), (err, data) => err ? reject(err) : resolve(data));
+    });
 
     // 验证 mimetype
-    const mimeFile = zip.file('mimetype');
-    if (!mimeFile) {
+    const mimeBytes = files['mimetype'];
+    if (!mimeBytes) {
       throw new Error('不是有效的 ORA 文件：缺少 mimetype');
     }
-    const mimetype = await mimeFile.async('string');
+    const mimetype = strFromU8(mimeBytes);
     if (mimetype.trim() !== ORA_MIMETYPE) {
       throw new Error(`不是有效的 ORA 文件：mimetype = ${mimetype}`);
     }
 
     // 解析 stack.xml
-    const xmlFile = zip.file('stack.xml');
-    if (!xmlFile) {
+    const xmlBytes = files['stack.xml'];
+    if (!xmlBytes) {
       throw new Error('不是有效的 ORA 文件：缺少 stack.xml');
     }
-    const xmlString = await xmlFile.async('string');
+    const xmlString = strFromU8(xmlBytes);
     const doc = _parseXml(xmlString);
 
     // 提取画布尺寸（ORA 规范要求 <image> 有 w 和 h 属性）
-    const imageEl = doc.querySelector('image');
-    const oraWidth = parseInt(imageEl?.getAttribute('w') || '0', 10) || 0;
-    const oraHeight = parseInt(imageEl?.getAttribute('h') || '0', 10) || 0;
+    const imageEl = doc.image;
+    const oraWidth = parseInt(imageEl?.['@_w'] || '0', 10) || 0;
+    const oraHeight = parseInt(imageEl?.['@_h'] || '0', 10) || 0;
     if (oraWidth > 0 && oraHeight > 0) {
       canvasManager.canvas.setWidth(oraWidth);
       canvasManager.canvas.setHeight(oraHeight);
@@ -499,17 +498,19 @@ export async function importORA(oraBlob, canvasManager, layerManager, historyMan
     }
 
     // 提取图层信息（按 stack.xml 中的顺序，顶层在前）
-    const layerElements = Array.from(doc.querySelectorAll('layer'));
+    const stack = imageEl?.stack;
+    let layerElements = stack?.layer || [];
+    if (!Array.isArray(layerElements)) layerElements = layerElements ? [layerElements] : [];
     const oraLayers = layerElements.map(el => {
-      const src = el.getAttribute('src') || '';
-      const x = parseInt(el.getAttribute('x') || '0', 10) || 0;
-      const y = parseInt(el.getAttribute('y') || '0', 10) || 0;
-      const opacity = parseFloat(el.getAttribute('opacity') || '1');
-      const visibility = el.getAttribute('visibility') !== 'hidden';
-      const name = el.getAttribute('name') || '图层';
-      const isBackground = el.getAttribute('background') === 'true';
+      const src = el['@_src'] || '';
+      const x = parseInt(el['@_x'] || '0', 10) || 0;
+      const y = parseInt(el['@_y'] || '0', 10) || 0;
+      const opacity = parseFloat(el['@_opacity'] || '1');
+      const visibility = el['@_visibility'] !== 'hidden';
+      const name = el['@_name'] || '图层';
+      const isBackground = el['@_background'] === 'true';
       // 提取自定义扩展属性：完整 Fabric 对象 JSON
-      const fabricJsonB64 = el.getAttribute('fab:json') || el.getAttributeNS('https://fabjs.example/ns', 'json') || '';
+      const fabricJsonB64 = el['@_fab:json'] || '';
 
       return { src, x, y, opacity, visibility, name, isBackground, fabricJsonB64 };
     });
@@ -527,13 +528,13 @@ export async function importORA(oraBlob, canvasManager, layerManager, historyMan
 
     for (let i = 0; i < orderedLayers.length; i++) {
       const layer = orderedLayers[i];
-      const pngFile = zip.file(layer.src);
-      if (!pngFile) {
+      const pngBytes = files[layer.src];
+      if (!pngBytes) {
         console.warn(`[ORA] 图层文件缺失: ${layer.src}`);
         continue;
       }
 
-      const blob = await pngFile.async('blob');
+      const blob = new Blob([pngBytes], { type: 'image/png' });
       const dataURL = await _blobToDataURL(blob);
 
       // 优先尝试从扩展属性恢复原始矢量对象（含完整变换信息）
