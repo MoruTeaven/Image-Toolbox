@@ -20,6 +20,7 @@ import {
 } from '../runtime/fabric.js';
 
 import { exportORA, importORA } from '@img-toolbox/ora';
+import { exportPSD, importPSD } from '@img-toolbox/psd';
 
 import Toolbar from '../ui/Toolbar.js';
 import OptionsBar from '../ui/OptionsBar.js';
@@ -45,7 +46,7 @@ import { setClipboardHost } from '../ports/ClipboardPort.js';
 import { setFontHost } from '../ports/FontPort.js';
 import { setColorHost } from '../ports/ColorPort.js';
 
-const IMAGE_ACCEPT = '.ora,.png,.jpg,.jpeg,.webp,.bmp,.gif,.svg,image/*,application/zip';
+const IMAGE_ACCEPT = '.ora,.psd,.png,.jpg,.jpeg,.webp,.bmp,.gif,.svg,image/*,application/zip';
 const EDITOR_WINDOW_HEIGHT = 560;
 
 class App {
@@ -179,6 +180,7 @@ class App {
     this.shell.bindGlobalEvents({
       onImageFile: (file) => this._loadImage(file),
       onOraFile: (file) => eventBus.emit('ora:import', file),
+      onPsdFile: (file) => eventBus.emit('psd:import', file),
 
       onPickImage: () => this._handlePickImage(),
 
@@ -262,6 +264,25 @@ class App {
         if (file instanceof Blob) {
           this.shell.setEditorVisible(true);
           await importORA(file, this.canvasManager, this.layerManager, this.historyManager);
+          this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
+        }
+      })
+    );
+
+    // ═══ PSD 导出/导入 ═══
+    this._eventBusUnsubscribers.push(
+      eventBus.on('psd:export', async () => {
+        if (!this.canvasManager?.originalImage) {
+          eventBus.emit('toast:show', { message: '请先加载图片', type: 'error' });
+          return;
+        }
+        await exportPSD(this.canvasManager, this.layerManager, this.hostAdapter);
+      }),
+
+      eventBus.on('psd:import', async (file) => {
+        if (file instanceof Blob) {
+          this.shell.setEditorVisible(true);
+          await importPSD(file, this.canvasManager, this.layerManager, this.historyManager);
           this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
         }
       })
@@ -358,6 +379,10 @@ class App {
     this.shell.openFilePicker(IMAGE_ACCEPT, (file) => {
       if (String(file.name).toLowerCase().endsWith('.ora')) {
         eventBus.emit('ora:import', file);
+        return;
+      }
+      if (String(file.name).toLowerCase().endsWith('.psd')) {
+        eventBus.emit('psd:import', file);
         return;
       }
       this._loadImage(file);

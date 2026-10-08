@@ -71,6 +71,7 @@ export const CHANGELOG = [
     date: '2026-10-08',
     changes: {
       added: [
+        { text: '新增 PSD (Photoshop) 工程文件导入/导出，支持保留图层', platforms: null },
         { text: '调色新增中间调参数，可单独提亮或压暗画面中间层次', platforms: null },
         { text: '调色新增通透、浓郁、褪色、日落、青调、暗调、高反差、柔雾滤镜预设', platforms: null }
       ],

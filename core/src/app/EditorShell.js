@@ -187,6 +187,7 @@ class EditorShell {
     const port = getDomPort();
 
     const isOra = (name) => String(name || '').toLowerCase().endsWith('.ora');
+    const isPsd = (name) => String(name || '').toLowerCase().endsWith('.psd');
 
     const onDragOver = (e) => {
       e.preventDefault();
@@ -202,6 +203,10 @@ class EditorShell {
 
       if (isOra(file.name)) {
         handlers.onOraFile?.(file);
+        return;
+      }
+      if (isPsd(file.name)) {
+        handlers.onPsdFile?.(file);
         return;
       }
       if (file.type?.startsWith('image/')) {

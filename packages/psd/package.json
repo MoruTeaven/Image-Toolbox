@@ -1,0 +1,8 @@
+{
+  "name": "@img-toolbox/psd",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/psd.js"
+  }
+}

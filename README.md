@@ -89,7 +89,7 @@
 
 - Node.js（用于构建时 `node --check` 语法校验）
 - PowerShell（执行构建脚本）
-- 构建前需 `pnpm install`（esbuild 是构建期 devDependency）；运行时依赖（Fabric.js 本地文件；fflate/fast-xml-parser 经 npm 安装打包；Teaven Identity SDK npm 安装）不依赖 CDN
+- 构建前需 `pnpm install`（esbuild 是构建期 devDependency）；运行时依赖（Fabric.js 本地文件；fflate/fast-xml-parser、ag-psd 经 npm 安装打包；Teaven Identity SDK npm 安装）不依赖 CDN
 - Teaven Identity SDK 经 npm 安装，升级用 `pnpm update @moruteaven/identity-sdk`
 
 ### 构建
