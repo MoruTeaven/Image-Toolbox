@@ -350,6 +350,20 @@ class App {
       console.log('[App] onPluginEnter:', { code, type, from, payload });
       if (code !== 'image-edit') return;
 
+      // PSD/ORA 工程文件从文件路径直接导入，不走图片加载
+      if (type === 'file' || type === 'files') {
+        const files = Array.isArray(payload) ? payload : [payload];
+        const fileInfo = files.find(item => item && item.path);
+        if (fileInfo?.path) {
+          const lower = String(fileInfo.path).toLowerCase();
+          if (lower.endsWith('.psd') || lower.endsWith('.ora')) {
+            this._importProjectFile(fileInfo.path, lower.endsWith('.psd') ? 'psd' : 'ora');
+            this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
+            return;
+          }
+        }
+      }
+
       const source = this._getExternalImageSource(type, payload);
       console.log('[App] 外部图片源:', source ? 'ok' : 'empty', { type, from });
 
@@ -514,6 +528,34 @@ class App {
       this.shell.setEditorVisible(false);
       eventBus.emit('toast:show', { message: '图片加载失败，请重试', type: 'error' });
     }
+  }
+
+  /**
+   * 导入 PSD/ORA 工程文件（从 onPluginEnter 的文件路径）
+   * @param {string} filePath
+   * @param {'psd'|'ora'} kind
+   */
+  _importProjectFile(filePath, kind) {
+    const dataURL = this.hostAdapter?.file?.readImageFile?.(filePath);
+    if (!dataURL) {
+      eventBus.emit('toast:show', { message: '文件读取失败', type: 'error' });
+      return;
+    }
+    const match = dataURL.match(/^data:([^;]+);base64,(.+)$/i);
+    if (!match) {
+      eventBus.emit('toast:show', { message: '文件解析失败', type: 'error' });
+      return;
+    }
+    const binary = atob(match[2]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: match[1] });
+    if (blob.size === 0) {
+      eventBus.emit('toast:show', { message: '文件为空', type: 'error' });
+      return;
+    }
+    this.shell.setEditorVisible(true);
+    eventBus.emit(`${kind}:import`, blob);
   }
 
   /**
