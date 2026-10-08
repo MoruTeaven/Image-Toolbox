@@ -2,7 +2,7 @@
 
 > 基于 Fabric.js 的轻量图片编辑工具，支持 uTools、ZTools、Web 浏览器多端运行。
 
-当前版本：**v2.6.1-dev**
+当前版本：**v3.0.0-dev**
 
 项目官网：[https://image-toolbox.moruteaven.com](https://image-toolbox.moruteaven.com)
 

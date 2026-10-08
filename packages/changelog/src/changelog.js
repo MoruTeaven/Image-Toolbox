@@ -49,7 +49,7 @@
  * 修改此处即代表发版意图，其余引用点由构建期校验强制同步。
  * @type {string}
  */
-export const APP_VERSION = '2.6.1-dev';
+export const APP_VERSION = '3.0.0-dev';
 
 /**
  * 版本记录条目结构
@@ -67,8 +67,8 @@ export const APP_VERSION = '2.6.1-dev';
  */
 export const CHANGELOG = [
   {
-    version: '2.6.1-dev',
-    date: '2026-10-06',
+    version: '3.0.0-dev',
+    date: '2026-10-08',
     changes: {
       added: [
         { text: '调色新增中间调参数，可单独提亮或压暗画面中间层次', platforms: null },
