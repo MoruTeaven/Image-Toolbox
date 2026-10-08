@@ -13,6 +13,8 @@
  *   Vibrance     自然饱和  vibrance   属性 -1 ~ 1
  *   HueRotation  色相旋转  rotation   属性 弧度（-π ~ π）
  *   Blur         高斯模糊  blur       属性 0 ~ 1
+ *   Noise        噪点      noise      属性 0 ~ 100（预设专用，inUi:false）
+ *   Pixelate     像素化    blocksize  属性 1 ~ 30（预设专用，inUi:false）
  *
  * ⚠ Sepia 与 Grayscale 没有强度属性，别把它们做成滑块：
  *   Sepia 是 ColorMatrix 派生的固定矩阵（mainParameter 为 false），
@@ -184,6 +186,32 @@ export const FILTER_PARAMS = {
     inUi: true,
     toFilter: value => clamp(value, 0, 100) / 100,
     toUi: value => Math.round((value || 0) * 100),
+  },
+  noise: {
+    // 胶片颗粒质感：随机像素扰动，0 无噪点，100 满强度。预设专用。
+    label: '噪点',
+    cls: 'Noise',
+    attr: 'noise',
+    min: 0,
+    max: 100,
+    step: 1,
+    default: 0,
+    inUi: false,
+    toFilter: value => Math.round(clamp(value, 0, 100)),
+    toUi: value => Math.round(value || 0),
+  },
+  pixelate: {
+    // 像素化/马赛克：blocksize=1 原尺寸，越大越粗。预设专用。
+    label: '像素化',
+    cls: 'Pixelate',
+    attr: 'blocksize',
+    min: 0,
+    max: 30,
+    step: 1,
+    default: 0,
+    inUi: false,
+    toFilter: value => Math.max(1, Math.round(clamp(value, 0, 30))),
+    toUi: value => Math.round(value || 0),
   },
 };
 
@@ -397,94 +425,39 @@ export function hasNoFilters(image) {
 
 // ── 预设 ──
 
+/** 滤镜预设分类（顺序即 UI 显示顺序） */
+export const FILTER_CATEGORIES = ['基础', '复古', '黑白'];
+
 /**
  * 滤镜预设定义
  * 每个预设的 filters 字段为 { type: uiValue } 映射，未列出的类型重置为默认值
+ * category 字段用于面板分组渲染
  */
 export const FILTER_PRESETS = [
-  {
-    preset: 'filter-original',
-    label: '原图',
-    filters: {},
-  },
-  {
-    preset: 'filter-warm',
-    label: '暖色',
-    filters: { brightness: 6, saturation: 18, hue: -12, vibrance: 12 },
-  },
-  {
-    preset: 'filter-cool',
-    label: '冷色',
-    filters: { brightness: 2, saturation: -8, hue: 14, vibrance: -6 },
-  },
-  {
-    preset: 'filter-vintage',
-    label: '复古',
-    // 中间调提亮是褪色的关键：只抬中间调，黑场不被推灰
-    filters: { brightness: 4, contrast: -8, saturation: -12, gamma: 14, sepia: 55 },
-  },
-  {
-    preset: 'filter-bw',
-    label: '黑白',
-    filters: { grayscale: 100, contrast: 8, gamma: -6 },
-  },
-  {
-    preset: 'filter-vivid',
-    label: '鲜艳',
-    // 由自然饱和分担一部分，避免饱和度拉高后肤色发脏
-    filters: { saturation: 40, contrast: 14, brightness: 4, vibrance: 22 },
-  },
-  {
-    preset: 'filter-soft',
-    label: '柔光',
-    filters: { brightness: 10, contrast: -16, blur: 6, gamma: 10 },
-  },
-  {
-    preset: 'filter-sharp',
-    label: '锐利',
-    filters: { contrast: 26, saturation: 10, brightness: -2, vibrance: 8 },
-  },
-  {
-    preset: 'filter-airy',
-    label: '通透',
-    filters: { brightness: 8, contrast: 6, gamma: 16, saturation: 6, vibrance: 18 },
-  },
-  {
-    preset: 'filter-rich',
-    label: '浓郁',
-    filters: { contrast: 12, gamma: -14, saturation: 8, vibrance: 26 },
-  },
-  {
-    preset: 'filter-faded',
-    label: '褪色',
-    filters: { brightness: 6, contrast: -14, gamma: 22, saturation: -14 },
-  },
-  {
-    preset: 'filter-sunset',
-    label: '日落',
-    // 暖调走色相 + 饱和，不用棕褐（棕褐是固定强度的开关，弱不了）
-    filters: { brightness: 4, saturation: 22, hue: -14, vibrance: 14 },
-  },
-  {
-    preset: 'filter-teal',
-    label: '青调',
-    filters: { contrast: 10, saturation: -12, hue: 16, vibrance: 8 },
-  },
-  {
-    preset: 'filter-moody',
-    label: '暗调',
-    filters: { brightness: -10, contrast: 16, gamma: -12, saturation: -10 },
-  },
-  {
-    preset: 'filter-ink',
-    label: '高反差',
-    filters: { grayscale: 100, contrast: 26, gamma: -10 },
-  },
-  {
-    preset: 'filter-haze',
-    label: '柔雾',
-    filters: { brightness: 8, contrast: -10, blur: 10, gamma: 14, saturation: -6 },
-  },
+  // ── 基础 ──
+  { preset: 'filter-original', label: '原图', category: '基础', filters: {} },
+  { preset: 'filter-warm', label: '暖色', category: '基础', filters: { brightness: 6, saturation: 18, hue: -12, vibrance: 12 } },
+  { preset: 'filter-cool', label: '冷色', category: '基础', filters: { brightness: 2, saturation: -8, hue: 14, vibrance: -6 } },
+  { preset: 'filter-vivid', label: '鲜艳', category: '基础', filters: { saturation: 40, contrast: 14, brightness: 4, vibrance: 22 } },
+  { preset: 'filter-soft', label: '柔光', category: '基础', filters: { brightness: 10, contrast: -16, blur: 6, gamma: 10 } },
+  { preset: 'filter-sharp', label: '锐利', category: '基础', filters: { contrast: 26, saturation: 10, brightness: -2, vibrance: 8 } },
+  { preset: 'filter-airy', label: '通透', category: '基础', filters: { brightness: 8, contrast: 6, gamma: 16, saturation: 6, vibrance: 18 } },
+  { preset: 'filter-rich', label: '浓郁', category: '基础', filters: { contrast: 12, gamma: -14, saturation: 8, vibrance: 26 } },
+  { preset: 'filter-faded', label: '褪色', category: '基础', filters: { brightness: 6, contrast: -14, gamma: 22, saturation: -14 } },
+  // ── 复古 ──
+  { preset: 'filter-vintage', label: '复古', category: '复古', filters: { brightness: 4, contrast: -8, saturation: -12, gamma: 14, sepia: 55 } },
+  { preset: 'filter-sunset', label: '日落', category: '复古', filters: { brightness: 4, saturation: 22, hue: -14, vibrance: 14 } },
+  { preset: 'filter-teal', label: '青调', category: '复古', filters: { contrast: 10, saturation: -12, hue: 16, vibrance: 8 } },
+  { preset: 'filter-moody', label: '暗调', category: '复古', filters: { brightness: -10, contrast: 16, gamma: -12, saturation: -10 } },
+  { preset: 'filter-haze', label: '柔雾', category: '复古', filters: { brightness: 8, contrast: -10, blur: 10, gamma: 14, saturation: -6 } },
+  { preset: 'filter-clarendon', label: 'Clarendon', category: '复古', filters: { saturation: 28, contrast: 20, brightness: 4, vibrance: 12 } },
+  { preset: 'filter-gingham', label: 'Gingham', category: '复古', filters: { brightness: 4, contrast: -10, saturation: -8, sepia: 18, gamma: 10 } },
+  { preset: 'filter-valencia', label: 'Valencia', category: '复古', filters: { sepia: 22, contrast: 10, saturation: 12, brightness: 4, gamma: -8, noise: 8 } },
+  { preset: 'filter-1977', label: '1977', category: '复古', filters: { sepia: 28, contrast: -6, brightness: 6, saturation: -10, gamma: 14, noise: 10 } },
+  // ── 黑白 ──
+  { preset: 'filter-bw', label: '黑白', category: '黑白', filters: { grayscale: 100, contrast: 8, gamma: -6 } },
+  { preset: 'filter-ink', label: '高反差', category: '黑白', filters: { grayscale: 100, contrast: 26, gamma: -10 } },
+  { preset: 'filter-inkwell', label: 'Inkwell', category: '黑白', filters: { grayscale: 100, contrast: 22, gamma: -6 } },
 ];
 
 /**

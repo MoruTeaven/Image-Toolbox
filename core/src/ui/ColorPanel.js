@@ -1,5 +1,5 @@
 import { eventBus } from '../index.js';
-import { getUiFilterItems, FILTER_PRESETS, getFilterUiValue, setFilter, clearFilters, applyFilterPreset, isPresetActive } from '../utils/filters.js';
+import { getUiFilterItems, FILTER_PRESETS, FILTER_CATEGORIES, getFilterUiValue, setFilter, clearFilters, applyFilterPreset, isPresetActive } from '../utils/filters.js';
 
 /**
  * 调色面板 — 侧栏「调色」Tab
@@ -12,6 +12,7 @@ class ColorPanel {
     this._cm = canvasManager;
     this._hm = historyManager;
     this._filterScope = 'all';
+    this._filterCategory = FILTER_CATEGORIES[0];
     this._eventBusUnsubscribers = [];
 
     this._render();
@@ -83,13 +84,20 @@ class ColorPanel {
       `;
     }).join('');
 
-    const filterPresets = FILTER_PRESETS.map(preset => {
-      const targets = this._getTargetImages();
-      const isActive = this._filterScope === 'all'
-        ? targets.length > 0 && targets.every(image => isPresetActive(image, preset.preset))
-        : isPresetActive(active, preset.preset);
-      return `<button type="button" class="options-btn options-btn-sm filter-preset-btn ${isActive ? 'active' : ''}" data-preset="${preset.preset}">${preset.label}</button>`;
+    const categoryTabs = FILTER_CATEGORIES.map(cat => {
+      const isActiveCat = cat === this._filterCategory ? 'active' : '';
+      return `<button type="button" class="filter-category-tab ${isActiveCat}" data-category="${cat}">${cat}</button>`;
     }).join('');
+
+    const filterPresets = FILTER_PRESETS
+      .filter(preset => preset.category === this._filterCategory)
+      .map(preset => {
+        const targets = this._getTargetImages();
+        const isActive = this._filterScope === 'all'
+          ? targets.length > 0 && targets.every(image => isPresetActive(image, preset.preset))
+          : isPresetActive(active, preset.preset);
+        return `<button type="button" class="options-btn options-btn-sm filter-preset-btn ${isActive ? 'active' : ''}" data-preset="${preset.preset}">${preset.label}</button>`;
+      }).join('');
 
     const scopeTitle = this._filterScope === 'all'
       ? `调色 (${this._getTargetImages().length} 个图片图层)`
@@ -98,6 +106,7 @@ class ColorPanel {
     return `
       ${this._getScopeControlHTML()}
       <div class="property-section-title">滤镜</div>
+      <div class="filter-categories">${categoryTabs}</div>
       <div class="filter-presets">${filterPresets}</div>
       <div class="property-section-title">${scopeTitle}</div>
       ${sliders}
@@ -108,6 +117,15 @@ class ColorPanel {
   }
 
   _handleEvent(e) {
+    // 滤镜分类切换
+    const categoryTarget = e.target.closest('[data-category]');
+    if (categoryTarget && this._el.contains(categoryTarget)) {
+      if (e.type !== 'click') return;
+      this._filterCategory = categoryTarget.dataset.category;
+      this._update();
+      return;
+    }
+
     // 滤镜预设按钮（一键应用）
     const presetTarget = e.target.closest('[data-preset]');
     if (presetTarget && this._el.contains(presetTarget)) {

@@ -73,7 +73,9 @@ export const CHANGELOG = [
       added: [
         { text: '新增 PSD (Photoshop) 工程文件导入/导出，支持保留图层', platforms: null },
         { text: '调色新增中间调参数，可单独提亮或压暗画面中间层次', platforms: null },
-        { text: '调色新增通透、浓郁、褪色、日落、青调、暗调、高反差、柔雾滤镜预设', platforms: null }
+        { text: '调色新增通透、浓郁、褪色、日落、青调、暗调、高反差、柔雾滤镜预设', platforms: null },
+        { text: '滤镜预设新增分类（基础/复古/黑白），可按类别切换', platforms: null },
+        { text: '新增 Clarendon、Gingham、Valencia、1977、Inkwell 等 Instagram 风格滤镜预设', platforms: null }
       ],
       fixed: [],
       improved: [
