@@ -1,7 +1,7 @@
 import { eventBus } from '../index.js';
 import { SIDE_PANEL_LAYOUT_KEY, SIDE_PANEL_LAYOUTS } from './SidePanelTabs.js';
 import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../utils/theme.js';
-import { updateCategories, CHANGELOG, PLATFORMS, getAppVersion } from '@img-toolbox/changelog';
+import { updateCategories, CHANGELOG, PLATFORMS, getAppVersion } from '@moruteaven/changelog';
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
 import IdentityClient from '../identity/IdentityClient.js';
 

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════
-// @img-toolbox/core — 公共无环境依赖入口
+// @moruteaven/core — 公共无环境依赖入口
 // ═══════════════════════════════════════════════════════
 
 export { default as eventBus, EventBus } from './EventBus.js';
