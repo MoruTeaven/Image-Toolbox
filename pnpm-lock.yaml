@@ -11,6 +11,9 @@ importers:
       '@esbuild/win32-x64':
         specifier: 0.28.2
         version: 0.28.2
+      '@moruteaven/identity-sdk':
+        specifier: 0.3.4
+        version: 0.3.4
       fast-xml-parser:
         specifier: ^5.11.2
         version: 5.11.2
@@ -260,6 +263,10 @@ packages:
 
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
+
+  '@moruteaven/identity-sdk@0.3.4':
+    resolution: {integrity: sha512-3qGoaUv72lA7H6tewsblYmdAyP4V0WlflfrFGr7H1NGXr42pHCfw8Se72kFOdcdqWr4h8MBh/LkFj/9MawBadw==, tarball: https://packages.aliyun.com/631c7575050e9c4a07a99328/npm/Teaven-Identity/@moruteaven/identity-sdk/-/@moruteaven/identity-sdk-0.3.4.tgz}
+    engines: {node: '>=18'}
 
   '@nodable/entities@3.1.0':
     resolution: {integrity: sha512-LsS/DjHr+uDM647Gru/cA8+J3a3HfhttwCKLyuoyN7yXTFCxKBtSgMQBvrW9yNPa2/zDRUNuGPaH5QUFoa4arQ==}
@@ -677,6 +684,8 @@ snapshots:
       keyv: 5.6.0
 
   '@keyv/serialize@1.1.1': {}
+
+  '@moruteaven/identity-sdk@0.3.4': {}
 
   '@nodable/entities@3.1.0': {}
 
