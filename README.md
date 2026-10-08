@@ -55,7 +55,7 @@
 ```text
 图片工具箱 - 客户端/
 ├── core/                   # 跨端共享核心
-│   ├── package.json       # @moruteaven/core 包定义
+│   ├── package.json       # @moruteaven/img-toolbox_core 包定义
 │   └── src/
 │       ├── index.js       # 公共无环境依赖入口
 │       ├── EventBus.js     # 事件总线

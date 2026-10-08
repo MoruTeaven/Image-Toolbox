@@ -19,8 +19,8 @@ import {
   ToolManager,
 } from '../runtime/fabric.js';
 
-import { exportORA, importORA } from '@moruteaven/ora';
-import { exportPSD, importPSD } from '@moruteaven/psd';
+import { exportORA, importORA } from '@moruteaven/img-toolbox_ora';
+import { exportPSD, importPSD } from '@moruteaven/img-toolbox_psd';
 
 import Toolbar from '../ui/Toolbar.js';
 import OptionsBar from '../ui/OptionsBar.js';

@@ -298,7 +298,7 @@ self.addEventListener('activate', async (event) => {
 
 | 维度 | v1.0（npm SDK 包） | v2.0（iframe + 缓存） |
 |-----|-------------------|---------------------|
-| **集成方式** | `npm i @moruteaven/core` | `<script src="...">` |
+| **集成方式** | `npm i @moruteaven/img-toolbox_core` | `<script src="...">` |
 | **宿主下载体积** | 160-250 KB gzip | **0 KB** |
 | **缓存命中时** | 依赖宿主缓存 | **0 网络请求** |
 | **版本更新** | 需宿主升级依赖 | **自动（版本接口检查）** |

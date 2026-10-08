@@ -1,5 +1,5 @@
 {
-  "name": "@moruteaven/changelog",
+  "name": "@moruteaven/img-toolbox_changelog",
   "version": "0.1.0",
   "type": "module",
   "description": "版本号 APP_VERSION + 更新记录（唯一权威来源）",

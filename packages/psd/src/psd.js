@@ -11,7 +11,7 @@
  *   globalCompositeOperation，Fabric 运行时支持但属性面板不显示。
  */
 
-// ponytail: 相对路径引用 core/src/，同 @moruteaven/ora。
+// ponytail: 相对路径引用 core/src/，同 @moruteaven/img-toolbox_ora。
 // subpath imports (#core/) 不允许 workspace 包上溯包目录之外。
 import eventBus from '../../../core/src/EventBus.js';
 import { SAVE_STATUS, normalizeSaveResult } from '../../../core/src/adapters/BaseHostAdapter.js';

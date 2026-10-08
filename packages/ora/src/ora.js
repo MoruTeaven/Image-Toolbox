@@ -17,7 +17,7 @@
 
 // ponytail: 此处用相对路径引用 core/src/，因为 subpath imports (#core/)
 // 不允许 workspace 包的 imports target 上溯到包目录之外。后续可改用
-// @moruteaven/core 包名 import（需 core 的 exports 暴露这些入口）。
+// @moruteaven/img-toolbox_core 包名 import（需 core 的 exports 暴露这些入口）。
 import eventBus from '../../../core/src/EventBus.js';
 import { SAVE_STATUS, normalizeSaveResult } from '../../../core/src/adapters/BaseHostAdapter.js';
 import { createCanvas as createOffscreenCanvas } from '../../../core/src/ports/CanvasPort.js';
