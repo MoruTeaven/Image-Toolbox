@@ -44,13 +44,13 @@ for (const [psd, fab] of Object.entries(PSD_TO_FABRIC_BLEND)) {
   FABRIC_TO_PSD_BLEND[fab] = psd;
 }
 
-// ag-psd opacity 是 0-255（PSD 规范）
+// ag-psd opacity 是 0-1（psdReader readUint8/0xff 归一化，与 Fabric opacity 同量程）
 function _psdOpacityToFabric(op) {
   if (op === undefined) return 1;
-  return Math.max(0, Math.min(1, op / 255));
+  return Math.max(0, Math.min(1, op));
 }
 function _fabricOpacityToPsd(op) {
-  return Math.round(Math.max(0, Math.min(1, op ?? 1)) * 255);
+  return Math.max(0, Math.min(1, op ?? 1));
 }
 
 // ── 图层名 ──
