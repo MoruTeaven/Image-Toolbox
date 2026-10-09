@@ -33,13 +33,13 @@ importers:
 
   core:
     dependencies:
-      '@img-toolbox/changelog':
+      '@moruteaven/img-toolbox_changelog':
         specifier: workspace:*
         version: link:../packages/changelog
-      '@img-toolbox/ora':
+      '@moruteaven/img-toolbox_ora':
         specifier: workspace:*
         version: link:../packages/ora
-      '@img-toolbox/psd':
+      '@moruteaven/img-toolbox_psd':
         specifier: workspace:*
         version: link:../packages/psd
 
