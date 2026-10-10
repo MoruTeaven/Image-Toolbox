@@ -12,7 +12,7 @@ import {
   applyFilterPreset,
   isPresetActive,
 } from '../utils/filters.js';
-import { createFilterPreviewDataURL, disposeFilterPreview, getPreviewSize } from '../utils/filterPreview.js';
+import { createFilterPreviewDataURL, disposeFilterPreview, getPreviewSize, getPreviewSourceKey } from '../utils/filterPreview.js';
 
 /**
  * 预览对象标识种子
@@ -105,13 +105,17 @@ class ColorModule extends BaseModule {
   }
 
   /**
-   * 预览缓存的判定键：图片对象 + 源图地址，二者变化时重建缩略图
+   * 预览缓存的判定键：图片对象 + 原图地址，二者变化时重建缩略图
+   *
+   * 地址取原图元素（getPreviewSourceKey）而非 getElement()：图层套上滤镜后
+   * getElement() 会变成无 src 的 canvas，键值抖动会把缓存反复清空重建。
+   * 注意：滤镜变化不在此键内——缩略图一律从原图独立计算，与当前滤镜无关。
+   *
    * @param {fabric.Image} reference
    * @returns {string}
    */
   _getPreviewCacheKey(reference) {
-    const src = reference?.getElement?.()?.src || '';
-    return `${this._objectId(reference)}|${src}`;
+    return `${this._objectId(reference)}|${getPreviewSourceKey(reference)}`;
   }
 
   _objectId(obj) {
