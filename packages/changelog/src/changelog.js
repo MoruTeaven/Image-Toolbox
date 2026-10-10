@@ -77,7 +77,9 @@ export const CHANGELOG = [
         { text: '滤镜预设新增分类（基础/复古/黑白），可按类别切换', platforms: null },
         { text: '新增 Clarendon、Gingham、Valencia、1977、Inkwell 等 Instagram 风格滤镜预设', platforms: null }
       ],
-      fixed: [],
+      fixed: [
+        { text: '修复选择滤镜后其它滤镜预览效果不准确的问题', platforms: null }
+      ],
       improved: [
         { text: '暖色、鲜艳等滤镜预设改用自然饱和度，颜色更自然', platforms: null }
       ],
