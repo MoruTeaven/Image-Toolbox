@@ -1414,9 +1414,11 @@ html, body {
   scrollbar-width: none;
 }
 
-/* 内容溢出（可横向滚动）时才显示滚动条并让出 6px，避免滚动条压住卡片底部 */
+/* 内容溢出（可横向滚动）时才显示滚动条，并只让出滚动条自身的高度：
+ * padding 区就是滚动条的落位，二者同值即不重叠也不多占，卡片高度损失最小。
+ * 此前 padding 与滚动条各占 6px（共 12px），把卡片压成扁条。 */
 .filter-preset-scroll.is-scrollable {
-  padding-bottom: 6px;
+  padding-bottom: 4px;
   scrollbar-width: thin;
 }
 
@@ -1425,12 +1427,16 @@ html, body {
 }
 
 .filter-preset-scroll.is-scrollable::-webkit-scrollbar {
-  height: 6px;
+  height: 4px;
 }
 
 .filter-preset-scroll::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
-  border-radius: 3px;
+  border-radius: 2px;
+}
+
+.filter-preset-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 .filter-preset-scroll::-webkit-scrollbar-track {
