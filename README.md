@@ -129,12 +129,20 @@ pnpm build
 node scripts/verify-eraser-rect-browser.mjs
 ```
 
-脚本自包含：起静态服务 → 拉起无头浏览器 → 通过 CDP 注入 `scripts/browser-eraser-rect.page.js`
-执行断言 → 收尾清理。可用 `IMG_TOOLBOX_BROWSER` 指定其它 Chromium 系浏览器路径。
+脚本自包含：起静态服务 → 拉起无头浏览器 → 注入 `scripts/browser-eraser-rect.page.js` 执行断言 → 收尾清理。
 
-> 退出码 `2` 表示**环境不支持**（而非断言失败）。部分 Windows 环境的进程沙箱会阻断
-> Chromium 的 mojo 命名管道，浏览器启动即 `FATAL platform_channel.cc Check failed: 0x5 拒绝访问`，
-> 此时需换到无该限制的机器或 CI 上运行。
+它**不依赖调试协议（不走 CDP）**：断言在页面内执行后由浏览器 HTTP 回传结果，因此 Firefox 也能直接跑通——
+部分 Windows 环境的进程沙箱会阻断 Chromium 的 mojo 命名管道，Edge/Chrome 启动即
+`FATAL platform_channel.cc Check failed: 0x5 拒绝访问`，此时改用 Firefox 即可：
+
+```powershell
+$env:IMG_TOOLBOX_BROWSER = "C:\Program Files\Mozilla Firefox\firefox.exe"
+node scripts/verify-eraser-rect-browser.mjs
+```
+
+> 若浏览器「能起来但从不发起请求」，通常是残留的无头浏览器进程耗尽了资源。
+> 脚本每次运行前会自动清理**无窗口**的残留进程（不影响你正在用的浏览器）。
+> 退出码 `2` 表示环境或执行出错（而非断言失败）。
 
 ## 技术栈
 
