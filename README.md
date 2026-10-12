@@ -119,6 +119,23 @@ pnpm build
 
 **Web**：将 `dist/web/` 部署到任意静态服务器，或使用 `npx wrangler pages dev dist/web` 本地预览。
 
+### 浏览器端像素级验证（橡皮擦框选模式）
+
+橡皮擦「框选」擦除的像素级行为需要在真实浏览器里验证（`destination-out` 后 alpha 是否归零、
+`canvas.getPointer` 的视口坐标换算、撤销恢复等）：
+
+```powershell
+.\build.ps1
+node scripts/verify-eraser-rect-browser.mjs
+```
+
+脚本自包含：起静态服务 → 拉起无头浏览器 → 通过 CDP 注入 `scripts/browser-eraser-rect.page.js`
+执行断言 → 收尾清理。可用 `IMG_TOOLBOX_BROWSER` 指定其它 Chromium 系浏览器路径。
+
+> 退出码 `2` 表示**环境不支持**（而非断言失败）。部分 Windows 环境的进程沙箱会阻断
+> Chromium 的 mojo 命名管道，浏览器启动即 `FATAL platform_channel.cc Check failed: 0x5 拒绝访问`，
+> 此时需换到无该限制的机器或 CI 上运行。
+
 ## 技术栈
 
 | 项目 | 选型 |
