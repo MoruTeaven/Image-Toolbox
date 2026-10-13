@@ -68,17 +68,21 @@ export const APP_VERSION = '3.0.0-dev';
 export const CHANGELOG = [
   {
     version: '3.0.0-dev',
-    date: '2026-10-08',
+    date: '2026-10-13',
     changes: {
       added: [
+        { text: '新增 AI 编辑工具，支持背景移除与智能抠图', platforms: null },
         { text: '新增 PSD (Photoshop) 工程文件导入/导出，支持保留图层', platforms: null },
         { text: '调色新增中间调参数，可单独提亮或压暗画面中间层次', platforms: null },
         { text: '调色新增通透、浓郁、褪色、日落、青调、暗调、高反差、柔雾滤镜预设', platforms: null },
         { text: '滤镜预设新增分类（基础/复古/黑白），可按类别切换', platforms: null },
-        { text: '新增 Clarendon、Gingham、Valencia、1977、Inkwell 等 Instagram 风格滤镜预设', platforms: null }
+        { text: '新增 Clarendon、Gingham、Valencia、1977、Inkwell 等 Instagram 风格滤镜预设', platforms: null },
+        { text: '调色新增暖阳、清冷、朦胧、Lomo、Sutro、Nashville、银盐、碳素滤镜预设', platforms: null }
       ],
       fixed: [
-        { text: '修复选择滤镜后其它滤镜预览效果不准确的问题', platforms: null }
+        { text: '修复选择滤镜后其它滤镜预览效果不准确的问题', platforms: null },
+        { text: '修复裁剪后撤销无法正确恢复裁剪区域的问题', platforms: null },
+        { text: '修复连续裁剪或切换工具后图层被裁掉的问题', platforms: null }
       ],
       improved: [
         { text: '暖色、鲜艳等滤镜预设改用自然饱和度，颜色更自然', platforms: null }
