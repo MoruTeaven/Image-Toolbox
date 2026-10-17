@@ -13,7 +13,7 @@
  *
  *   M1 删空 _sanitizeSuggestedName（保留兜底网）
  *       —— 即上述盲区；套件必须出现断言失败。
- *   M2 在 M1 基础上禁用 _buildDefaultSavePath 的两道兜底断言
+ *   M2 在 M1 基础上禁用 _buildDefaultSavePath 的兜底断言
  *       —— 还原原始漏洞形态（defaultPath 可逃出目标目录）；
  *          套件必须出现断言失败。
  *
@@ -90,10 +90,15 @@ function mutateSanitizerToPassThrough(src) {
   return src.slice(0, start) + replacement + src.slice(end + 3);
 }
 
-/** _buildDefaultSavePath 的两道兜底断言锚点。 */
+/**
+ * _buildDefaultSavePath 的兜底断言锚点。
+ *
+ * 这些是「源码结构」而非「业务常量」：净化逻辑重构后锚点会漂移，
+ * 本脚本刻意**不做模糊匹配**——失配即判失败并提示同步，因为一次
+ * 静默失效的变异自验比没有自验更危险（它会一直报告「已验证」）。
+ */
 const NET_ANCHORS = [
-  'if (path.resolve(path.dirname(candidate)) !== path.resolve(dir)) {',
-  'if (path.basename(safeName) !== safeName) {'
+  'if (path.dirname(candidate) !== dir) {'
 ];
 
 /** M2：在 M1 基础上把两道兜底断言改成 if (false)，还原「无任何防护」。 */
