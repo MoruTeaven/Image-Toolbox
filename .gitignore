@@ -33,6 +33,11 @@ PLATFORM_ADAPTERS.md
 /.mnemon/
 /.acl-recovery/
 
+# DSH 会话运行时目录（插件状态、看板数据、目标本体，非项目源码）
+/clear/
+/.dsh-graph/
+/.dsh-acl-reports/
+
 # ESLint 临时产物（违规报告，可由 eslint -f json 重新生成）
 /dsh-lint-*
 
