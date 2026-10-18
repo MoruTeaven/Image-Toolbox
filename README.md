@@ -78,7 +78,8 @@
 │   ├── utools/            # uTools 插件
 │   ├── ztools/            # ZTools 插件
 │   └── web/               # Web 浏览器版
-├── build.ps1               # 构建脚本
+├── scripts/
+│   ├── build.mjs               # 构建编排入口（`pnpm build`，替代原 build.ps1）
 ├── deploy-cf-pages.ps1    # Cloudflare Pages 部署脚本
 └── README.md              # 本文档
 ```
@@ -87,23 +88,22 @@
 
 ### 环境要求
 
-- Node.js（用于构建时 `node --check` 语法校验）
-- PowerShell（执行构建脚本）
+- Node.js（构建、门禁、`node --check` 语法校验）
 - 构建前需 `pnpm install`（esbuild 是构建期 devDependency）；运行时依赖（Fabric.js 本地文件；fflate/fast-xml-parser、ag-psd 经 npm 安装打包；Teaven Identity SDK npm 安装）不依赖 CDN
 - Teaven Identity SDK 经 npm 安装，升级用 `pnpm update @moruteaven/identity-sdk`
 
 ### 构建
 
 ```powershell
-.\build.ps1
+pnpm build
 ```
 
-构建流程：
-1. 清理 `dist/` 下旧的平台目录
-2. 对每个平台（uTools、zTools、web）：复制 `clients/<platform>/` 和 `core/src/` 到 `dist/<platform>/`
-3. 把 `#core/` 别名重写为按输出位置计算的相对路径
-4. 对所有 JS 文件执行 `node --check` 语法校验
-5. 执行版本号一致性校验（`scripts/version-check.ps1`）：`packages/changelog/src/changelog.js` 的 `APP_VERSION` 必须与两个 `plugin.json`、`package.json`、`README.md` 声明一致，不一致直接构建失败
+构建流程（均由 `scripts/build.mjs` 编排，任一失败即构建失败）：
+1. 校验版本号一致性（`scripts/version-check.mjs`）：`packages/changelog/src/changelog.js` 的 `APP_VERSION` 必须与两个 `plugin.json`、`package.json`、`README.md` 声明一致
+2. 对每个平台（uTools、zTools、web）用 esbuild 产出 `index.html` / `app.js` / `index.css` 三件套；Electron 端额外产出 `preload.js`，并原样拷贝 `plugin.json`、`logo.png`
+3. 依次执行门禁：metafile 输入来源白名单、产物语法与 `#core/` 残留、preload 运行时冒烟、bundle 真实执行冒烟、Web 站点根 404 复算、安全加固 + 变异自验、别名重写安全、UTF-8 BOM 不变量
+
+> 构建脚本是 Node 而非 PowerShell：整条工具链本来就是 Node，PowerShell 层只会带来第二套编码规则——正是那套规则在历史上把 BOM 凭空写进产物（详见 `scripts/bom-report.ps1` 头部说明）。
 
 ### 部署 Web 端
 
@@ -126,7 +126,7 @@
 | 语言 | 纯 JavaScript（ES Module），`#core/` 别名引用共享核心 |
 | 引擎 | Fabric.js 5.x（本地引入，非 CDN） |
 | UI | 原生 HTML / CSS / JS，无前端框架 |
-| 构建 | PowerShell 脚本调用 esbuild 打包（`pnpm install` 后 `.\build.ps1`） |
+| 构建 | `pnpm build`（Node 编排 `scripts/build.mjs` 调用 esbuild 打包并执行门禁） |
 | 部署 | Cloudflare Pages（Web 端） |
 
 ## 更新日志

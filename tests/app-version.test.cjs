@@ -151,12 +151,12 @@ const run = async () => {
 
   // ═══ 5. 构建期校验脚本存在且覆盖关键比对点 ═══
 
-  const gateSrc = read('scripts/version-check.ps1');
+  const gateSrc = read('scripts/version-check.mjs');
   check('版本校验脚本存在', gateSrc.length > 0);
   check('校验脚本读取 APP_VERSION', /APP_VERSION/.test(gateSrc));
   check('校验脚本比对 plugin.json', /plugin\.json/.test(gateSrc));
   check('校验脚本比对 package.json', /package\.json/.test(gateSrc));
-  check('构建脚本调用版本校验', /\.\s*\(Join-Path \$PSScriptRoot "scripts/.test(read('build.ps1')));
+  check('构建脚本调用版本校验', /version-check\.mjs/.test(read('scripts/build.mjs')));
 
   // ═══ 输出 ═══
 
