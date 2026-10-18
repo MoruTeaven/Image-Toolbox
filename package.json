@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "test:web-e2e": "node scripts/verify-web-e2e.mjs",
     "lint": "eslint core clients"
   },
   "devDependencies": {
