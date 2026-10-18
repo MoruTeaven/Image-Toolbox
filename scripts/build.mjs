@@ -39,7 +39,12 @@
  *   6. verify-alias-rewrite.mjs - no ../core/src/ rewrite trace or #core/
  *      leftover in the output, no copied core/src tree, #core/ literals survive
  *      bundling verbatim, plus a mutation self-check.
- *   7. bom-report.ps1 - the BOM invariant: nothing in the build may introduce a
+ *   7. verify-clip-path-session.mjs - the canvas-level clipPath session: one
+ *      shared session object per canvas. It guards the accident where each of
+ *      Mosaic/Crop kept its own backup and restored the other's temporary one,
+ *      cutting the layer off for good - a failure that only surfaces later, so
+ *      it needs a gate rather than eyeballing.
+ *   8. bom-report.ps1 - the BOM invariant: nothing in the build may introduce a
  *      UTF-8 BOM. Kept from the PowerShell era and now extended to .log files,
  *      because the security gate writes dist/security-gate.log.
  */
@@ -453,6 +458,19 @@ if (args.has('--skip-alias-gate')) {
 // it is a byte-level assertion about a whole directory tree and reimplementing
 // a working byte reader in Node would only add risk. It turns the BOM class of
 // bug into a build failure instead of a manual report.
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Gate 8 - canvas level clipPath session. Two modules share one session object
+// because the accident class it guards (each module keeping its own backup of
+// the canvas-level clipPath and restoring the other's temporary value, cutting
+// the layer off for good) never surfaces at mount time.
+log(c.cyan('Checking canvas clipPath session ...'));
+// node() already folds a non-zero exit into allOk, so the return value is only
+// needed here when a gate should change what runs next.
+node('verify-clip-path-session.mjs');
+
+// ---------------------------------------------------------------------------
+// Gate 9 - UTF-8 BOM invariant.
 // ---------------------------------------------------------------------------
 log(c.cyan('Checking UTF-8 BOM invariant ...'));
 const bomReport = path.join(SCRIPTS, 'bom-report.ps1');
