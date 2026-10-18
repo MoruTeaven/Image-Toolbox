@@ -85,14 +85,56 @@ if (-not $esbuildExe) {
     exit 1
 }
 
+# Runs a node script, streams its output, and returns ONLY the exit code.
+#
+# Why not call node directly: PowerShell 5.1 wraps every native stderr line into
+# an ErrorRecord when it reaches the pipeline. Under $ErrorActionPreference =
+# "Stop" (set at the top of this script) that turns a mere warning into a
+# terminating error, so a gate that prints a warning but exits 0 would abort the
+# whole build. PowerShell 7 only fixed this with the opt-in
+# PSNativeCommandUseErrorActionPreference, which 5.1 does not have.
+# Same intent as Invoke-Esbuild below: scope the preference to Continue while
+# capturing, then let the exit code alone decide. ErrorRecords are unwrapped to
+# their bare message so a warning stays readable instead of dumping a
+# NativeCommandError decoration.
+function Invoke-Node {
+    param([string[]]$Arguments)
+
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = & node @Arguments 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+
+    foreach ($line in @($output)) {
+        if ($line -is [System.Management.Automation.ErrorRecord]) {
+            Write-Host ($line.Exception.Message.TrimEnd())
+        } else {
+            Write-Host ([string]$line)
+        }
+    }
+
+    return $code
+}
+
 # Runs scripts/prepare-build.mjs and returns the staging dir it printed.
 # Staging lives in the system temp dir on purpose: it is build scratch, and it
 # must stay outside dist/ where Test-BuildOutput would otherwise node --check
 # the ESM stubs as if they were CommonJS products.
 function Get-StagingDir {
     param([string]$ClientName)
-    $out = node (Join-Path $root "scripts\prepare-build.mjs") --platform $ClientName 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $out = & node (Join-Path $root "scripts\prepare-build.mjs") --platform $ClientName 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    if ($code -ne 0) {
         throw ("prepare-build.mjs failed for " + $ClientName + ":" + [Environment]::NewLine + ($out -join [Environment]::NewLine))
     }
     $hit = @($out | Select-String -Pattern '-> (.+)$' | Select-Object -Last 1)
@@ -143,20 +185,18 @@ function Test-BuildOutput {
     #    in place.
     $pageCheck = Join-Path $env:TEMP ("imgtb-check-" + $DistName + "-" + (Get-Random) + ".cjs")
     Copy-Item $PageBundle $pageCheck -Force
-    $result = node --check $pageCheck 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    $code = Invoke-Node -Arguments @("--check", $pageCheck)
+    if ($code -ne 0) {
         Write-Host ("  FAIL: node --check on dist/" + $DistName + " page bundle") -ForegroundColor Red
-        Write-Host $result -ForegroundColor Red
         $ok = $false
     }
     Remove-Item $pageCheck -Force -ErrorAction SilentlyContinue
 
     $preload = Join-Path $Target "preload.js"
     if (Test-Path $preload) {
-        $result = node --check $preload 2>&1
-        if ($LASTEXITCODE -ne 0) {
+        $code = Invoke-Node -Arguments @("--check", $preload)
+        if ($code -ne 0) {
             Write-Host ("  FAIL: node --check on dist/" + $DistName + "/preload.js") -ForegroundColor Red
-            Write-Host $result -ForegroundColor Red
             $ok = $false
         }
     }
@@ -333,19 +373,19 @@ foreach ($platform in $platforms) {
     }
 
     # Gate 1: metafile scope assertions.
-    node (Join-Path $root "scripts\verify-artifact.mjs") (Join-Path $stage "meta-page.json") --staging $stage --allow-external jsdom --label ("page-" + $distName)
-    if ($LASTEXITCODE -ne 0) { $allOk = $false }
+    $code = Invoke-Node -Arguments @((Join-Path $root "scripts\verify-artifact.mjs"), (Join-Path $stage "meta-page.json"), "--staging", $stage, "--allow-external", "jsdom", "--label", ("page-" + $distName))
+    if ($code -ne 0) { $allOk = $false }
 
     if ($isElectron) {
-        node (Join-Path $root "scripts\verify-artifact.mjs") (Join-Path $stage "meta-preload.json") --allow-external electron,fs,path,os,child_process,events,util --label ("preload-" + $distName)
-        if ($LASTEXITCODE -ne 0) { $allOk = $false }
+        $code = Invoke-Node -Arguments @((Join-Path $root "scripts\verify-artifact.mjs"), (Join-Path $stage "meta-preload.json"), "--allow-external", "electron,fs,path,os,child_process,events,util", "--label", ("preload-" + $distName))
+        if ($code -ne 0) { $allOk = $false }
 
         # Gate 3b: the preload bundle must really evaluate under stubbed electron +
         # window. node --check cannot catch CJS/ESM interop breakage (the bundle
         # stays syntactically valid while initPlatformPreload becomes undefined);
         # this is the only guard against that runtime class.
-        node (Join-Path $root "scripts\verify-preload-smoke.mjs") (Join-Path $target "preload.js")
-        if ($LASTEXITCODE -ne 0) { $allOk = $false }
+        $code = Invoke-Node -Arguments @((Join-Path $root "scripts\verify-preload-smoke.mjs"), (Join-Path $target "preload.js"))
+        if ($code -ne 0) { $allOk = $false }
     }
 
     # Gate 2: output guards.
@@ -356,14 +396,14 @@ foreach ($platform in $platforms) {
     # Gate 3: the page bundle must evaluate with the vendored globals mounted.
     $smokeFile = Join-Path $env:TEMP ("imgtb-smoke-" + $distName + "-" + (Get-Random) + ".mjs")
     Copy-Item $pageOut $smokeFile -Force
-    node (Join-Path $root "scripts\verify-bundle-smoke.mjs") $smokeFile
-    if ($LASTEXITCODE -ne 0) { $allOk = $false }
+    $code = Invoke-Node -Arguments @((Join-Path $root "scripts\verify-bundle-smoke.mjs"), $smokeFile)
+    if ($code -ne 0) { $allOk = $false }
     Remove-Item $smokeFile -Force -ErrorAction SilentlyContinue
 
     # Gate 4 (web only): recompute every first-screen request from the site root.
     if (-not $isElectron) {
-        node (Join-Path $root "scripts\verify-web-root-load.mjs") $target
-        if ($LASTEXITCODE -ne 0) { $allOk = $false }
+        $code = Invoke-Node -Arguments @((Join-Path $root "scripts\verify-web-root-load.mjs"), $target)
+        if ($code -ne 0) { $allOk = $false }
     }
 
     if ($allOk) {
@@ -375,6 +415,39 @@ foreach ($platform in $platforms) {
 # catches a stale or half-written platform folder from an interrupted run.
 if (-not (Test-AppVersion -Root $root -DistRoot $distRoot -Platforms $platforms)) {
     $allOk = $false
+}
+
+# Security regression gate. Two checks, both required:
+#   1. verify-security-hardening.mjs must pass on the current code.
+#   2. mutation-check-sanitizers.mjs proves those assertions can actually
+#      FAIL when the sanitizers are removed - the suite once reported
+#      all-green while the bugs it claimed to cover were still present,
+#      so a red-free gate would protect nothing.
+# Set SKIP_SECURITY_GATE=1 to skip both during local iteration.
+#
+# Both scripts write probe warnings to stderr, which PowerShell wraps into
+# ErrorRecords; Invoke-Node already relaxes $ErrorActionPreference while a
+# node process runs, so the verdict is taken from the exit code. Full output
+# goes to dist/security-gate.log and is printed only when something failed.
+Write-Host "Running security regression gate ..." -ForegroundColor Cyan
+if ($env:SKIP_SECURITY_GATE -eq '1') {
+    Write-Host "SKIP_SECURITY_GATE=1 set - security gate skipped." -ForegroundColor Yellow
+} else {
+    $gateLog = Join-Path $distRoot "security-gate.log"
+    if (Test-Path $gateLog) { Remove-Item -Force $gateLog }
+
+    $gateOk = $true
+    foreach ($gateScript in @("verify-security-hardening.mjs", "mutation-check-sanitizers.mjs")) {
+        $code = Invoke-Node -Arguments @((Join-Path $root "scripts\$gateScript"))
+        ("exit={0}  {1}" -f $code, $gateScript) | Out-File -FilePath $gateLog -Encoding utf8 -Append
+        if ($code -ne 0) { $gateOk = $false }
+    }
+
+    if (-not $gateOk) {
+        $allOk = $false
+        Write-Host "--- security gate log ---" -ForegroundColor Red
+        Get-Content $gateLog | Write-Host
+    }
 }
 
 # Alias-rewrite safety gate. Runs last because it audits the whole dist tree

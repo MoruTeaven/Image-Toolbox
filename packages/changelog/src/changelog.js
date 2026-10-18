@@ -68,7 +68,7 @@ export const APP_VERSION = '3.0.0-dev';
 export const CHANGELOG = [
   {
     version: '3.0.0-dev',
-    date: '2026-10-13',
+    date: '2026-10-18',
     changes: {
       added: [
         { text: '新增 AI 编辑工具，支持背景移除与智能抠图', platforms: null },
@@ -82,7 +82,8 @@ export const CHANGELOG = [
       fixed: [
         { text: '修复选择滤镜后其它滤镜预览效果不准确的问题', platforms: null },
         { text: '修复裁剪后撤销无法正确恢复裁剪区域的问题', platforms: null },
-        { text: '修复连续裁剪或切换工具后图层被裁掉的问题', platforms: null }
+        { text: '修复连续裁剪或切换工具后图层被裁掉的问题', platforms: null },
+        { text: '修复保存图片或 ORA 工程文件时，默认保存位置可能被带出常用目录的问题', platforms: null }
       ],
       improved: [
         { text: '暖色、鲜艳等滤镜预设改用自然饱和度，颜色更自然', platforms: null }
