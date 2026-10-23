@@ -131,9 +131,10 @@ node scripts/verify-eraser-rect-browser.mjs
 
 脚本自包含：起静态服务 → 拉起无头浏览器 → 注入 `scripts/browser-eraser-rect.page.js` 执行断言 → 收尾清理。
 
-它**不依赖调试协议（不走 CDP）**：断言在页面内执行后由浏览器 HTTP 回传结果，因此 Firefox 也能直接跑通——
-部分 Windows 环境的进程沙箱会阻断 Chromium 的 mojo 命名管道，Edge/Chrome 启动即
-`FATAL platform_channel.cc Check failed: 0x5 拒绝访问`，此时改用 Firefox 即可：
+它**不依赖调试协议（不走 CDP）**：断言在页面内执行后由浏览器 HTTP 回传结果。
+默认优先使用 Edge/Chrome；若所在环境的进程沙箱阻断了 Chromium 的 mojo 命名管道
+（Edge/Chrome 启动即 `FATAL platform_channel.cc Check failed: 0x5 拒绝访问`），
+改用 Firefox 即可（非 Chromium，不受该限制）：
 
 ```powershell
 $env:IMG_TOOLBOX_BROWSER = "C:\Program Files\Mozilla Firefox\firefox.exe"
@@ -143,6 +144,10 @@ node scripts/verify-eraser-rect-browser.mjs
 > 若浏览器「能起来但从不发起请求」，通常是残留的无头浏览器进程耗尽了资源。
 > 脚本每次运行前会自动清理**无窗口**的残留进程（不影响你正在用的浏览器）。
 > 退出码 `2` 表示环境或执行出错（而非断言失败）。
+
+当前断言覆盖 26 项：选区辅助框渲染与几何、边界像素精确对齐、`destination-out` 后
+alpha 归零、选区外/不相交/过小框选保护、涂抹模式回归、面板与预设栏内容，
+以及**显式的撤销/重做像素回滚**（undo 后涂抹像素恢复不透明而框选孔仍在，redo 后重新归零）。
 
 ## 技术栈
 

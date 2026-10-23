@@ -102,6 +102,36 @@ const d3 = e3.getContext('2d').getImageData(0, 0, e3.width, e3.height).data;
 const a3 = (x, y) => d3[(y * e3.width + x) * 4 + 3];
 check('涂抹模式仍可用', t3.type === 'image' && a3(15, 15) === 0, t3.type + '/' + a3(15, 15));
 
+// 撤销恢复：显式 undo/redo 后像素回滚（桩件级验证覆盖不到的真实浏览器行为）
+// undo 一次应回到「框选擦除后、涂抹前」的位图：涂抹走的像素恢复不透明，框选孔仍在
+// 注意：loadFromJSON 经 fabric.Image.fromObject 用 dataURL 重建位图，元素是
+// HTMLImageElement（无 getContext），需先绘制到临时画布再读像素
+const pixelsOf = (obj) => {
+  const el = obj.getElement();
+  if (el && typeof el.getContext === 'function') {
+    return { w: el.width, h: el.height, data: el.getContext('2d').getImageData(0, 0, el.width, el.height).data };
+  }
+  const c = document.createElement('canvas');
+  c.width = el.width;
+  c.height = el.height;
+  const c2 = c.getContext('2d');
+  c2.drawImage(el, 0, 0);
+  return { w: c.width, h: c.height, data: c2.getImageData(0, 0, c.width, c.height).data };
+};
+await app.historyManager.undo();
+await sleep(400);
+const uObj = canvas.getObjects()[1];
+const uPix = pixelsOf(uObj);
+const uAlpha = (x, y) => uPix.data[(y * uPix.w + x) * 4 + 3];
+check('撤销回滚涂抹像素', uObj.type === 'image' && uAlpha(15, 15) === 255, uObj.type + '/' + uAlpha(15, 15));
+check('撤销保留框选擦除结果', uAlpha(30, 30) === 0 && uAlpha(5, 5) === 255, uAlpha(30, 30) + '/' + uAlpha(5, 5));
+await app.historyManager.redo();
+await sleep(400);
+const rObj = canvas.getObjects()[1];
+const rPix = pixelsOf(rObj);
+const rAlpha = (x, y) => rPix.data[(y * rPix.w + x) * 4 + 3];
+check('重做重新应用涂抹像素', rAlpha(15, 15) === 0 && rAlpha(30, 30) === 0, rAlpha(15, 15) + '/' + rAlpha(30, 30));
+
 const optionsHtml = mod.getOptionsBarHTML();
 check('预设栏含框选/涂抹', optionsHtml.indexOf('eraser-draw-rect') >= 0 && optionsHtml.indexOf('eraser-draw-brush') >= 0);
 mod.applyPreset('eraser-thick');
@@ -113,6 +143,10 @@ mod.setDrawMode('brush');
 check('涂抹模式属性面板有大小滑块', mod.getPropertyPanelHTML().indexOf('data-module-prop="width"') >= 0);
 check('属性面板含选区下拉', mod.getPropertyPanelHTML().indexOf('data-module-prop="drawMode"') >= 0);
 
+// undo/redo 的 loadFromJSON 会重建对象并丢弃选中态，最终一段框选前先补回选中
+canvas.setActiveObject(canvas.getObjects()[1]);
+canvas.renderAll();
+await sleep(100);
 mod.setDrawMode('rect');
 const snap = canvas.getObjects()[1];
 fire('down', 25, 25, 1);
