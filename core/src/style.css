@@ -1725,7 +1725,6 @@ html, body {
 }
 
 .side-tabs__pane #property-panel,
-.side-tabs__pane #color-panel,
 .side-tabs__pane #layer-panel,
 .side-tabs__pane #sticker-panel {
   height: 100%;
@@ -1864,9 +1863,8 @@ html, body {
   align-content: flex-start;
 }
 
-/* 灞炴€?璋冭壊闈㈡澘浣擄細12 鍒楃綉鏍硷紝閫夐」瀹藉害缁熶竴涓?100% / 50% / 33.3% / 25% */
-.panel--property .panel__body,
-.panel--color .panel__body {
+/* 属性面板体：12 列网格，选项宽度统一为 100% / 50% / 33.3% / 25% */
+.panel--property .panel__body {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 4px;
