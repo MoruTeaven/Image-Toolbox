@@ -95,6 +95,7 @@
 ### 构建
 
 ```powershell
+pnpm install   # 首次或依赖变更后必须执行（esbuild 是 devDependency）
 pnpm build
 ```
 
@@ -104,6 +105,22 @@ pnpm build
 3. 依次执行门禁：metafile 输入来源白名单、产物语法与 `#core/` 残留、preload 运行时冒烟、bundle 真实执行冒烟、Web 站点根 404 复算、安全加固 + 变异自验、别名重写安全、UTF-8 BOM 不变量
 
 > 构建脚本是 Node 而非 PowerShell：整条工具链本来就是 Node，PowerShell 层只会带来第二套编码规则——正是那套规则在历史上把 BOM 凭空写进产物（详见 `scripts/bom-report.ps1` 头部说明）。
+
+#### 全新 worktree 首次构建前必读
+
+pnpm 11 起，`pnpm build` 会先跑一次 deps-status 检查，要求所有依赖的安装脚本都已在
+`pnpm-workspace.yaml` 的 `allowBuilds` 中显式批准；未批准时安装即以
+`ERR_PNPM_IGNORED_BUILDS` 失败，`pnpm build` 在构建脚本开始前就中断。本仓库需要
+`esbuild`（postinstall 负责校验平台二进制），因此该条目必须是确定的 `true`：
+
+```yaml
+allowBuilds:
+  esbuild: true
+```
+
+占位值（pnpm 自动写入的 `set this to true or false`）不算批准，同样会让检查失败。
+若在只读或离线环境下不方便跑安装，可绕过该检查直接执行编排脚本
+`node scripts/build.mjs`（等价于 `pnpm build`，全部门禁一致）。
 
 ### 部署 Web 端
 

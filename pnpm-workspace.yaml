@@ -9,4 +9,8 @@ onlyBuiltDependencies:
 minimumReleaseAge: 0
 
 allowBuilds:
-  esbuild: set this to true or false
+  # esbuild 的 postinstall 负责校验平台二进制（node install.js）。
+  # 必须为 true：pnpm 11 起 onlyBuiltDependencies 已被移除、由 allowBuilds 接管；
+  # 占位值会让 deps-status 检查以 ERR_PNPM_IGNORED_BUILDS 失败，
+  # 导致 pnpm build 在构建脚本开始前就中断（报错指向代码，实际与代码无关）。
+  esbuild: true
