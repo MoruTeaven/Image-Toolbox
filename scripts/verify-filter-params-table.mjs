@@ -6,10 +6,14 @@
  * 漏改一处就出现「滑块能拖但滤镜不生效」或两处 UI 清单不一致。
  * 现已收敛为 utils/filters.js 的 FILTER_PARAMS 表，其余全部派生。
  *
+ * 注意：ColorPanel 已于 4331c7a 作为死代码删除（侧栏调色 tab 在 dbf076b 就有意移除），
+ * 调色 UI 现在只有 ColorModule 一处消费者。本脚本因此不再读 ColorPanel，
+ * 但「唯一消费者必须从表派生」这条断言反而更硬：任何一处手写清单都会直接命中。
+ *
  * 本脚本断言：
- *   1. 派生映射与表完全一致，没有第二处硬编码（filters.js / ColorModule / ColorPanel
+ *   1. 派生映射与表完全一致，没有第二处硬编码（filters.js / ColorModule
  *      源码里不得再出现手写的滤镜类名清单或映射表字面量）；
- *   2. 两处调色 UI 渲染出的滑块清单逐项一致（type/label/min/max/step/default）；
+ *   2. 调色 UI 渲染出的滑块清单逐项等于表（type/label/min/max/step/default）；
  *   3. 类型唯一：vibrance 不能既在 UI 参数里又落在「仅预设」集合中，
  *      否则 ALL_FILTER_TYPES 会出现两次（看板卡 t-mumj0ikk-5ni8u7 的迁移陷阱）；
  *   4. 预设取值 / 预设高亮 / 效果缩略图三条派生链路口径一致：
@@ -202,12 +206,16 @@ check(
   ['sepia', 'grayscale'].every(t => FILTER_PARAMS[t] && FILTER_PARAMS[t].inUi === false)
 );
 
-// 源码级断言：两处 UI 不得再维护自己的滤镜清单
+// 源码级断言：调色 UI 不得再维护自己的滤镜清单
+//
+// 这里曾经还断言过 ColorPanel（第二处调色 UI）。ColorPanel 在 4331c7a 作为死代码
+// 删除后，本脚本仍去读它的源码，于是构建从那次合并起一直以 ENOENT 失败——
+// 门禁自己变成了「引用不存在文件」的那类缺陷。现在只断言真实存在的消费者，
+// 并在下面单独断言「ColorPanel 不会被悄悄复活」：它若回来，必须同时回到这张断言表里。
 const readSrc = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const FILTERS_SRC = readSrc('core/src/utils/filters.js');
 const COLORMODULE_SRC = readSrc('core/src/modules/ColorModule.js');
-const COLORPANEL_SRC = readSrc('core/src/ui/ColorPanel.js');
 
 check(
   'ColorModule 不手写滤镜类名清单',
@@ -215,20 +223,21 @@ check(
     || COLORMODULE_SRC.includes(`"${cls}"`))
 );
 check(
-  'ColorPanel 不手写滤镜类名清单',
-  !Object.keys(FILTER_CLASSES).some(cls => COLORPANEL_SRC.includes(`'${cls}'`)
-    || COLORPANEL_SRC.includes(`"${cls}"`))
-);
-check(
-  '两处 UI 都从 getUiFilterItems 派生滑块清单',
-  COLORMODULE_SRC.includes('getUiFilterItems()') && COLORPANEL_SRC.includes('getUiFilterItems()')
+  '调色 UI 从 getUiFilterItems 派生滑块清单',
+  COLORMODULE_SRC.includes('getUiFilterItems()')
 );
 // 只查「清单式」硬编码：数组/对象字面量里并排出现多个滤镜 label。
-// 注释与文案里提到若干 label 名不算（表驱动改造后两处 UI 的说明性注释仍会列举参数名）。
+// 注释与文案里提到若干 label 名不算（表驱动改造后 UI 的说明性注释仍会列举参数名）。
 const LABEL_LIST_RE = /\[\s*\{\s*(?:label|type)\s*:|(?:label|type)\s*:\s*'[^']*'\s*,\s*(?:label|type)\s*:/;
 check(
-  '两处 UI 都不再自行声明 label 清单',
-  !LABEL_LIST_RE.test(COLORMODULE_SRC) && !LABEL_LIST_RE.test(COLORPANEL_SRC)
+  '调色 UI 不再自行声明 label 清单',
+  !LABEL_LIST_RE.test(COLORMODULE_SRC)
+);
+// 已删除的死代码不得无声复活：文件若重新出现，上面的断言必须同步覆盖它，
+// 否则新 UI 就会绕过「只改一处」这条约定而不被任何东西发现。
+check(
+  'ColorPanel.js 仍处于删除状态（复活须同步本门禁）',
+  !fs.existsSync(path.join(ROOT, 'core/src/ui/ColorPanel.js'))
 );
 check(
   'filters.js 不保留旧的手写映射表（FILTER_CLASS_NAME / FILTER_ATTR_NAME 应为派生）',
@@ -244,26 +253,32 @@ check(
   readSrc('core/src/CanvasManager.js').includes("'filters'")
 );
 
-console.log('\n3. 两处 UI 输出的参数清单一致');
+console.log('\n3. 调色 UI 输出的参数清单与表一致');
 
+// 从 HTML 里抽滑块。注意必须连着外层的 property-item 块一起匹配：
+// 只匹配 <input ...> 标签本身是取不到 <label> 的，而旧版本是「两处 UI 互相比对」，
+// 两边都取到 label=null 于是永远相等——这类断言看着绿，实际什么也没守。
 function extractSliders(html) {
-  return [...html.matchAll(/<input type="range"[^>]*>/g)].map(m => {
-    const el = m[0];
+  const blocks = [...html.matchAll(
+    /<div class="property-item[^"]*">\s*<label>([^<]*)<\/label>\s*<input([^>]*)>/g
+  )];
+  return blocks.map(m => {
+    const [, label, attrs] = m;
     const get = name => {
-      const found = el.match(new RegExp(`${name}="([^"]*)"`));
+      const found = attrs.match(new RegExp(`${name}="([^"]*)"`));
       return found ? found[1] : null;
     };
     return {
       prop: get('data-module-prop') || get('data-prop'),
-      label: (el.match(/<label>([^<]*)<\/label>/) || [])[1] || null,
+      label: label.trim(),
       min: get('min'),
       max: get('max'),
       step: get('step')
     };
-  });
+  }).filter(s => s.prop && s.prop.startsWith('filter:'));
 }
 
-// 直接调两个 UI 类的渲染入口（桩件化其依赖）
+// 直接调调色 UI 的渲染入口（桩件化其依赖）
 class StubElement {
   constructor(tag = 'div') {
     this.tagName = tag.toUpperCase();
@@ -296,7 +311,6 @@ globalThis.window = globalThis;
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 
 const ColorModule = (await import('../core/src/modules/ColorModule.js')).default;
-const ColorPanel = (await import('../core/src/ui/ColorPanel.js')).default;
 
 const image = new StubImage();
 const canvasManagerStub = {
@@ -315,34 +329,26 @@ const moduleInstance = new ColorModule(canvasManagerStub, historyStub, {});
 moduleInstance.active = true;
 const moduleHTML = moduleInstance.getPropertyPanelHTML();
 
-const panelEl = new StubElement('div');
-const panelInstance = new ColorPanel(panelEl, canvasManagerStub, historyStub);
-const panelHTML = panelInstance._getColorAdjustHTML(image);
-
 const moduleSliders = extractSliders(moduleHTML);
-const panelSliders = extractSliders(panelHTML);
 
-check('两处 UI 都渲染出了滑块', moduleSliders.length > 0 && panelSliders.length > 0,
-  `module=${moduleSliders.length} panel=${panelSliders.length}`);
-check('两处 UI 滑块数量一致', moduleSliders.length === panelSliders.length,
-  `module=${moduleSliders.length} panel=${panelSliders.length}`);
+check('调色 UI 渲染出了滑块', moduleSliders.length > 0,
+  `module=${moduleSliders.length}`);
+check('滑块数量与表里 inUi 参数数量一致', moduleSliders.length === uiItems.length,
+  `module=${moduleSliders.length} table=${uiItems.length}`);
 check(
-  '两处 UI 滑块逐项一致（prop/label/min/max/step）',
-  moduleSliders.length === panelSliders.length
+  '滑块逐项等于表定义（prop/label/min/max/step）',
+  moduleSliders.length === uiItems.length
     && moduleSliders.every((s, i) => {
-      const p = panelSliders[i];
-      return p && s.prop === p.prop && s.label === p.label
-        && s.min === p.min && s.max === p.max && s.step === p.step;
+      const item = uiItems[i];
+      return s.prop === `filter:${item.type}` && s.label === item.label
+        && s.min === String(item.min) && s.max === String(item.max)
+        && s.step === String(item.step);
     })
 );
 check(
-  '两处 UI 滑块顺序与表键序一致',
+  '滑块顺序与表键序一致',
   moduleSliders.map(s => s.prop.replace('filter:', '')).join(',')
     === uiItems.map(i => i.type).join(',')
-);
-check(
-  '两处 UI 的 prop 命名空间不同但指向同一 type（各自消费者约定）',
-  moduleSliders.every(s => s.prop.startsWith('filter:')) && panelSliders.every(s => s.prop.startsWith('filter:'))
 );
 
 console.log('\n4. 预设 / 缩略图 / 高亮三条派生链路口径一致');

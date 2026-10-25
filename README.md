@@ -102,7 +102,12 @@ pnpm build
 构建流程（均由 `scripts/build.mjs` 编排，任一失败即构建失败）：
 1. 校验版本号一致性（`scripts/version-check.mjs`）：`packages/changelog/src/changelog.js` 的 `APP_VERSION` 必须与两个 `plugin.json`、`package.json`、`README.md` 声明一致
 2. 对每个平台（uTools、zTools、web）用 esbuild 产出 `index.html` / `app.js` / `index.css` 三件套；Electron 端额外产出 `preload.js`，并原样拷贝 `plugin.json`、`logo.png`
-3. 依次执行门禁：metafile 输入来源白名单、产物语法与 `#core/` 残留、preload 运行时冒烟、bundle 真实执行冒烟、Web 站点根 404 复算、安全加固 + 变异自验、别名重写安全、UTF-8 BOM 不变量
+3. 依次执行门禁（任一失败即构建失败）：版本号一致性、metafile 输入来源白名单、产物语法与 `#core/` 残留、preload 运行时冒烟、bundle 真实执行冒烟、Web 站点根 404 复算、安全加固 + 变异自验、别名重写安全、canvas 级 clipPath 会话、调色参数表、UTF-8 BOM 不变量
+
+> 门禁清单以 `scripts/build.mjs` 实际调用为准，本文与 `AGENTS.md` 只是它的说明。
+> 新增/删除门禁脚本时**必须同时改这三处**：`build.mjs` 的调用与头部编号注释、本节、`AGENTS.md` §6.1。
+> 历史上 `verify-clip-path-session.mjs` 曾在文档里被列为门禁而文件从未入库，`verify-filter-params-table.mjs`
+> 则相反——它在构建里跑，但文档没提；两种偏差都会让人按文档判断质量，结论是错的。
 
 > 构建脚本是 Node 而非 PowerShell：整条工具链本来就是 Node，PowerShell 层只会带来第二套编码规则——正是那套规则在历史上把 BOM 凭空写进产物（详见 `scripts/bom-report.ps1` 头部说明）。
 
