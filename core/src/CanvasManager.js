@@ -2,8 +2,6 @@ import eventBus from './EventBus.js';
 import { CANVAS_DEFAULTS } from './utils/constants.js';
 import { getDomPort } from './ports/DomPort.js';
 
-const CLIP_PATH_SERIALIZED_PROPS = ['clipPath', 'absolutePositioned', 'inverted'];
-
 /**
  * 画布管理器 — 封装 Fabric.js 画布的创建、配置和基础操作
  */
@@ -343,8 +341,11 @@ class CanvasManager {
 
     let json = null;
     try {
+      // toJSON(props) 的 props 是**浅赋值**（fabric 的 populateWithProperties 里
+      // `e[prop] = this[prop]`），把活对象属性的名字列进去只会让快照持有引用：
+      // 历史栈会与画布共享同一个 clipPath 实例，后续任何修改都会污染已入栈的快照。
+      // 因此这里**不要**列 'clipPath'（画布级同理）——Fabric 自己会序列化它们。
       json = canvas.toJSON([
-        'clipPath',
         'filters',
         'id',
         'selectable',
@@ -381,12 +382,15 @@ class CanvasManager {
         '_mosaicBrushPoints',
         '_mosaicBrushSize',
         '_mosaicLassoPoints',
-        '_originalImage',
+        '_originalImage'
       ]);
-      // 手动序列化 canvas.clipPath（Fabric.js canvas.toJSON 不包含此属性）
-      if (canvas.clipPath) {
-        json._canvasClipPath = canvas.clipPath.toJSON(CLIP_PATH_SERIALIZED_PROPS);
-      }
+      // 注意：**不要**在这里手写 json._canvasClipPath。Fabric 5.3.0 的
+      // _toObjectMethod 原生就会把画布级 clipPath 写进 json.clipPath：
+      //   var i = this.clipPath, r = { version: fabric.version, objects: ... };
+      //   return i && !i.excludeFromExport && (r.clipPath = this._toObject(this.clipPath, t, e)), ...
+      // loadFromJSON 也会自行读取该字段并 delete 后恢复它（`n.clipPath = t[0]`）。
+      // 再手写一份只是多一个互相打架的来源：撤销裁切时 Fabric 刚恢复的 clipPath
+      // 会被这份冗余数据覆盖成旧值或 null。
     } finally {
       // 按原下标升序插回，保证对象顺序与序列化前完全一致
       removed.sort((a, b) => a.index - b.index);
@@ -404,8 +408,12 @@ class CanvasManager {
         return;
       }
 
-      // 提取 canvas 级别的 clipPath，避免修改历史栈里的原始快照对象。
-      const canvasClipPathData = json._canvasClipPath;
+      // Fabric 原生已把 json.clipPath 序列化进快照，loadFromJSON 会自行恢复并
+      // delete 掉它。这里只处理一种情况：两个来源都没有裁剪信息（原生 json.clipPath
+      // 与旧快照遗留的 _canvasClipPath）时，才需要把画布上已有的裁剪清掉——
+      // 否则那一步会把 Fabric 刚恢复的 clipPath 抹成 null，撤销裁切后状态错乱。
+      const legacyCanvasClipPathData = json._canvasClipPath;
+      const hasNativeClipPath = Object.prototype.hasOwnProperty.call(json, 'clipPath');
       const snapshot = { ...json };
       delete snapshot._canvasClipPath;
 
@@ -422,17 +430,24 @@ class CanvasManager {
           resolve();
         };
 
-        if (canvasClipPathData) {
-          fabric.util.enlivenObjects([canvasClipPathData], (objects) => {
+        if (legacyCanvasClipPathData) {
+          // 兼容路径：只对旧快照（曾用手写 _canvasClipPath 的版本）生效。
+          fabric.util.enlivenObjects([legacyCanvasClipPathData], (objects) => {
             this.canvas.clipPath = objects[0] || null;
             if (this.canvas.clipPath) {
               this.canvas.clipPath.absolutePositioned = true;
             }
             finishRestore();
           });
-        } else {
-          // 快照中没有 clipPath → 清除画布上已有的（撤消裁切的关键）
+        } else if (!hasNativeClipPath && !this.canvas.clipPath) {
+          finishRestore();
+        } else if (!hasNativeClipPath) {
+          // 快照无裁剪信息而画布上有 → 这才是「撤销裁切」该清空的场景。
           this.canvas.clipPath = null;
+          finishRestore();
+        } else {
+          // 原生 json.clipPath 存在：Fabric 已在 loadFromJSON 回调中恢复它，
+          // 这里什么都不要做（写 null 会把它抹掉）。
           finishRestore();
         }
       });
