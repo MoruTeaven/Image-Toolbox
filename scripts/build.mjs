@@ -16,6 +16,14 @@
  *   pnpm build
  *   node scripts/build.mjs [--skip-version-check] [--skip-alias-gate]
  *
+ * Note on `pnpm build` vs `node scripts/build.mjs`: pnpm 11 runs a deps-status
+ * check before the script, which fails the whole command with
+ * ERR_PNPM_IGNORED_BUILDS when a dependency's install script is not approved in
+ * pnpm-workspace.yaml's `allowBuilds` (esbuild must be `true` here). The failure
+ * happens before any gate runs and says nothing about the code. If you cannot
+ * install (read-only or offline worktree), invoking this script directly through
+ * node bypasses that check and runs the identical gates.
+ *
  * Gates (any failure fails the build, exit 1):
  *   0. version-check.mjs up front (source truth) and --dist-only after all
  *      platforms are built (catches a stale dist from an interrupted run).
