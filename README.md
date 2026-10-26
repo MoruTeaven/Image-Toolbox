@@ -101,13 +101,31 @@ pnpm build
 
 构建流程（均由 `scripts/build.mjs` 编排，任一失败即构建失败）：
 1. 校验版本号一致性（`scripts/version-check.mjs`）：`packages/changelog/src/changelog.js` 的 `APP_VERSION` 必须与两个 `plugin.json`、`package.json`、`README.md` 声明一致
-2. 对每个平台（uTools、zTools、web）用 esbuild 产出 `index.html` / `app.js` / `index.css` 三件套；Electron 端额外产出 `preload.js`，并原样拷贝 `plugin.json`、`logo.png`
-3. 依次执行门禁（任一失败即构建失败）：版本号一致性、metafile 输入来源白名单、产物语法与 `#core/` 残留、preload 运行时冒烟、bundle 真实执行冒烟、Web 站点根 404 复算、安全加固 + 变异自验、别名重写安全、canvas 级 clipPath 会话、调色参数表、UTF-8 BOM 不变量
+2. 对每个平台（uTools、zTools、web）用 `scripts/prepare-build.mjs` 准备暂存（vendor 包装 + bundle 入口 + 页面改写，脚本自带断言），再由 esbuild 产出 `index.html` / `app.js` / `index.css` 三件套；Electron 端额外产出 `preload.js`，并原样拷贝 `plugin.json`、`logo.png`
+3. 依次执行门禁（任一失败即构建失败），清单如下：
 
-> 门禁清单以 `scripts/build.mjs` 实际调用为准，本文与 `AGENTS.md` 只是它的说明。
-> 新增/删除门禁脚本时**必须同时改这三处**：`build.mjs` 的调用与头部编号注释、本节、`AGENTS.md` §6.1。
-> 历史上 `verify-clip-path-session.mjs` 曾在文档里被列为门禁而文件从未入库，`verify-filter-params-table.mjs`
-> 则相反——它在构建里跑，但文档没提；两种偏差都会让人按文档判断质量，结论是错的。
+| # | 脚本 | 检查什么 |
+|---|------|----------|
+| 0 | `scripts/version-check.mjs` | 版本号一致性（源码与 dist 各跑一次） |
+| 1 | `scripts/verify-artifact.mjs` | esbuild metafile 的输入来源与 external 白名单 |
+| 2 | `scripts/verify-bundle-smoke.mjs` | 页面 bundle 在 DOM 桩件下真实执行 |
+| 3 | `scripts/verify-preload-smoke.mjs` | preload bundle 真 `require()` 并完成桥接 |
+| 4 | `scripts/verify-web-root-load.mjs` | Web 产物按站点根复算首屏请求，有 404 即失败 |
+| 5 | `scripts/verify-security-hardening.mjs` + `scripts/mutation-check-sanitizers.mjs` | 安全加固断言 + 变异自验 |
+| 6 | `scripts/verify-alias-rewrite.mjs` | `#core/` 别名重写安全 |
+| 7 | `scripts/verify-clip-path-session.mjs` | canvas 级 clipPath 会话 |
+| 8 | `scripts/verify-filter-params-table.mjs` | 调色参数表唯一来源 |
+| 9 | `scripts/bom-report.ps1` | UTF-8 BOM 不变量 |
+| 10 | `scripts/verify-doc-refs.mjs` | 本文与 `AGENTS.md` 引用的脚本必须真实存在，且构建实际调用的门禁必须在本文列出 |
+
+> 上表与 `scripts/build.mjs` 的实际调用**互为镜像**，第 10 项门禁就是查这件事：
+> 它同时检查两个方向——文档提到的脚本必须存在、构建调用的门禁必须在本文出现。
+> 历史上 `verify-clip-path-session.mjs` 曾在文档里被列为门禁而文件从未入库（手动跑必 `ERR_MODULE_NOT_FOUND`），
+> `verify-filter-params-table.mjs` 则相反——它在构建里跑，文档却一字未提。
+> 两种偏差都会让人按文档判断质量，而结论是错的。
+>
+> 因此新增或删除门禁脚本时，**必须同时改三处**：`build.mjs` 的调用与头部编号注释、本节上表、`AGENTS.md` §6.1。
+> 漏改任何一处，第 10 项门禁会直接让构建失败并指名道姓。
 
 > 构建脚本是 Node 而非 PowerShell：整条工具链本来就是 Node，PowerShell 层只会带来第二套编码规则——正是那套规则在历史上把 BOM 凭空写进产物（详见 `scripts/bom-report.ps1` 头部说明）。
 

@@ -62,6 +62,10 @@
  *   9. bom-report.ps1 - the BOM invariant: nothing in the build may introduce a
  *      UTF-8 BOM. Kept from the PowerShell era and now extended to .log files,
  *      because the security gate writes dist/security-gate.log.
+ *  10. verify-doc-refs.mjs - the gate list must match reality in both
+ *      directions: every scripts/ path the docs name must exist, and every
+ *      script this file spawns must be named in README (and in AGENTS.md when
+ *      that local-only file is present). Carries its own falsifiability check.
  */
 
 import fs from 'node:fs';
@@ -504,6 +508,18 @@ if (fs.existsSync(bomReport)) {
   log(c.red('  FAIL: scripts/bom-report.ps1 missing - the BOM invariant is now unchecked.'));
   allOk = false;
 }
+
+// ---------------------------------------------------------------------------
+// Gate 10 - documentation references. This one is about the gate list itself:
+// the docs are the only thing anyone reads to judge what is verified, so a doc
+// that names a script which does not exist (verify-clip-path-session.mjs was
+// listed for months before the file was ever committed) and a gate that runs
+// without being documented (verify-filter-params-table.mjs) both make a reader
+// reach a wrong conclusion. Checks both directions, plus a self-check proving
+// the checks can fail.
+// ---------------------------------------------------------------------------
+log(c.cyan('Checking documentation references ...'));
+node('verify-doc-refs.mjs');
 
 if (!allOk) {
   log(c.red('Build failed!'));
