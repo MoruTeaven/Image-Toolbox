@@ -24,7 +24,9 @@
  * install (read-only or offline worktree), invoking this script directly through
  * node bypasses that check and runs the identical gates.
  *
- * Gates (any failure fails the build, exit 1):
+ * Gates (any failure fails the build, exit 1). The numbers here are the ones the
+ * `Gate N` banners below use, and the same order is listed in README.md and
+ * AGENTS.md 6.1 - keep all three in step when a gate is added or removed:
  *   0. version-check.mjs up front (source truth) and --dist-only after all
  *      platforms are built (catches a stale dist from an interrupted run).
  *   1. verify-artifact.mjs - esbuild metafile assertions: every bundled input
@@ -52,14 +54,14 @@
  *      Mosaic/Crop kept its own backup and restored the other's temporary one,
  *      cutting the layer off for good - a failure that only surfaces later, so
  *      it needs a gate rather than eyeballing.
- *   8. bom-report.ps1 - the BOM invariant: nothing in the build may introduce a
+ *   8. verify-filter-params-table.mjs - the color params table: one definition
+ *      per param in utils/filters.js, everything else derived. It asserts the
+ *      color UI's slider list equals the table item by item, that no second
+ *      hardcoded filter list exists, that presets / thumbnails / highlight all
+ *      read the same values, and that filter order does not depend on drag order.
+ *   9. bom-report.ps1 - the BOM invariant: nothing in the build may introduce a
  *      UTF-8 BOM. Kept from the PowerShell era and now extended to .log files,
  *      because the security gate writes dist/security-gate.log.
- *   9. verify-filter-params-table.mjs - the color params table: one definition
- *      per param in utils/filters.js, everything else derived. It asserts the two
- *      color UIs emit an identical slider list, that no second hardcoded filter
- *      list exists, that presets / thumbnails / highlight all read the same
- *      values, and that filter order does not depend on drag order.
  */
 
 import fs from 'node:fs';
@@ -467,30 +469,29 @@ if (args.has('--skip-alias-gate')) {
 }
 
 // ---------------------------------------------------------------------------
-// Gate 7 - BOM invariant. The one gate that still lives in PowerShell, because
-// it is a byte-level assertion about a whole directory tree and reimplementing
-// a working byte reader in Node would only add risk. It turns the BOM class of
-// bug into a build failure instead of a manual report.
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// Gate 8 - canvas level clipPath session. Two modules share one session object
+// Gate 7 - canvas level clipPath session. Two modules share one session object
 // because the accident class it guards (each module keeping its own backup of
 // the canvas-level clipPath and restoring the other's temporary value, cutting
 // the layer off for good) never surfaces at mount time.
+// ---------------------------------------------------------------------------
 log(c.cyan('Checking canvas clipPath session ...'));
 // node() already folds a non-zero exit into allOk, so the return value is only
 // needed here when a gate should change what runs next.
 node('verify-clip-path-session.mjs');
 
 // ---------------------------------------------------------------------------
-// Gate 8b - color params table. The params live in one table and everything
+// Gate 8 - color params table. The params live in one table and everything
 // else is derived; this gate keeps that true. Adding a slider must not require
-// touching ColorModule, ColorPanel or the preset chain again.
+// touching ColorModule or the preset chain again.
+// ---------------------------------------------------------------------------
 log(c.cyan('Checking color params table ...'));
 node('verify-filter-params-table.mjs');
 
 // ---------------------------------------------------------------------------
-// Gate 9 - UTF-8 BOM invariant.
+// Gate 9 - UTF-8 BOM invariant. The one gate that still lives in PowerShell,
+// because it is a byte-level assertion about a whole directory tree and
+// reimplementing a working byte reader in Node would only add risk. It turns
+// the BOM class of bug into a build failure instead of a manual report.
 // ---------------------------------------------------------------------------
 log(c.cyan('Checking UTF-8 BOM invariant ...'));
 const bomReport = path.join(SCRIPTS, 'bom-report.ps1');
