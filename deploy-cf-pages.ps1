@@ -11,11 +11,12 @@ $root = $PSScriptRoot
 $distWeb = Join-Path $root "dist\web"
 
 Write-Host "1/3  Building dist/web/ ..." -ForegroundColor Cyan
-# build.ps1 emits the site-root dist/web/index.html itself and asserts that every
-# asset it references exists under dist/web/. No per-path patching happens here:
-# rewriting generated paths with fixed regular expressions silently no-ops as soon
-# as the generated paths change, which is exactly how a broken deploy shipped.
-powershell -ExecutionPolicy Bypass -File (Join-Path $root "build.ps1")
+# scripts/build.mjs (invoked as `pnpm build`) emits the site-root
+# dist/web/index.html itself and asserts that every asset it references exists
+# under dist/web/. No per-path patching happens here: rewriting generated paths
+# with fixed regular expressions silently no-ops as soon as the generated paths
+# change, which is exactly how a broken deploy shipped.
+& pnpm build
 if ($LASTEXITCODE -ne 0) { Write-Host "Build failed!" -ForegroundColor Red; exit 1 }
 
 if (-not (Test-Path (Join-Path $distWeb "index.html"))) {

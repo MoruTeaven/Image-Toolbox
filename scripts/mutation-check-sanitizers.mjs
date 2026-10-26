@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC = path.join(ROOT, 'core', 'src', 'preloadHelpers.js');
+const SRC = path.join(ROOT, 'core', 'src', 'preloadHelpers.cjs');
 const VERIFY = path.join(ROOT, 'scripts', 'verify-security-hardening.mjs');
 
 const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'img-toolbox-mutation-'));

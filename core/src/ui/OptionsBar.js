@@ -144,6 +144,18 @@ class OptionsBar {
       return;
     }
 
+    // 滤镜分类切换
+    const categoryTarget = e.target.closest('[data-category]');
+    if (categoryTarget) {
+      const module = this._tm.getCurrentModule();
+      if (module && typeof module.setFilterCategory === 'function') {
+        module.setFilterCategory(categoryTarget.dataset.category);
+        this._updateControls();
+        eventBus.emit('tool:propertiesChanged');
+      }
+      return;
+    }
+
     const target = e.target.closest('[data-preset]');
     if (!target) return;
 

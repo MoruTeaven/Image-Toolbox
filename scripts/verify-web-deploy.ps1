@@ -1,4 +1,4 @@
-﻿# verify-web-deploy.ps1 — 端到端验证 Web 部署产物（dist/web/）
+# verify-web-deploy.ps1 — 端到端验证 Web 部署产物（dist/web/）
 #
 # 用途：在没有外网出口的机器上用本地静态服务器 + 无头浏览器复现「从站点根加载」
 # 的真实场景。与 build.ps1 的静态断言互补：静态断言看的是文件是否存在，
@@ -93,8 +93,8 @@ if ($misses.Count -gt 0) {
     $ok = $false
 }
 
-# ── 2. 本次事故中失效的三个资源必须命中 200 ──
-foreach ($required in @('/core/src/style.css', '/core/src/lib/fabric.min.js', '/core/src/lib/jszip.min.js', '/index.js')) {
+# ── 2. 首屏两件套必须命中 200（esbuild 产物形态：app.js + index.css） ──
+foreach ($required in @('/index.css', '/app.js')) {
     $hit = @($requests | Where-Object { $_.Path -eq $required -and $_.Status -eq '200' })
     if ($hit.Count -eq 0) {
         Write-Host ("FAIL: {0} 未被以 200 命中" -f $required) -ForegroundColor Red

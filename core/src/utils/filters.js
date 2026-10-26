@@ -1,67 +1,289 @@
 /**
  * 滤镜工具 — 统一管理 fabric.Image 的滤镜读写与预设
  *
- * Fabric.js 5.3.0 提供以下常用滤镜（均挂在 fabric.Image.filters 命名空间下）：
- *   Brightness   亮度      -1 ~ 1（0 为原样）
- *   Contrast     对比度    -1 ~ 1
- *   Saturation   饱和度    -1 ~ 1
- *   HueRotation  色相旋转  弧度（0 ~ 2π，可取负值）
- *   Blur         高斯模糊  0 ~ 1
- *   Sepia        棕褐      0 ~ 1（值越大越深）
- *   Grayscale    灰度      0 ~ 1（1 为完全黑白）
- *   Vibrance     自然饱和  -1 ~ 1
+ * 所有调色参数集中在 FILTER_PARAMS 一处定义：fabric 类名、属性名、UI 取值范围、
+ * UI 值与滤镜实际值的换算、是否作为滑块露出，以及滤镜的应用顺序。
+ * 新增一个参数只需在表里加一条，其余（应用预设 / 预设高亮判定 / 效果缩略图 /
+ * 两处调色面板的滑块清单）都由它派生，不需要再改第二处。
  *
- * 每个 fabric.Image 实例都有一个 `filters` 数组，滤镜对象按顺序应用。
- * 本模块约定：同一类型的滤镜在数组中只保留一个实例，覆盖式更新。
+ * Fabric.js 5.3.0 本模块用到的滤镜（均挂在 fabric.Image.filters 命名空间下）：
+ *   Brightness   亮度      brightness 属性 -1 ~ 1
+ *   Contrast     对比度    contrast   属性 -1 ~ 1
+ *   Saturation   饱和度    saturation 属性 -1 ~ 1
+ *   Vibrance     自然饱和  vibrance   属性 -1 ~ 1
+ *   HueRotation  色相旋转  rotation   属性 弧度（-π ~ π）
+ *   Blur         高斯模糊  blur       属性 0 ~ 1
+ *   Noise        噪点      noise      属性 0 ~ 100（预设专用，inUi:false）
+ *   Pixelate     像素化    blocksize  属性 1 ~ 30（预设专用，inUi:false）
+ *
+ * ⚠ Sepia 与 Grayscale 没有强度属性，别把它们做成滑块：
+ *   Sepia 是 ColorMatrix 派生的固定矩阵（mainParameter 为 false），
+ *   Grayscale 只有 mode（average / lightness / luminosity）。
+ *   传进去的 sepia / grayscale 数值只会成为滤镜对象上的多余字段，画面强度恒定
+ *   （棕褐恒为满强度、灰度恒为全灰）。所以这两项目前只当预设的整体开关用，
+ *   inUi 一律为 false；改成真正可调强度的方案见看板卡 t-mumiz038-z392ul。
+ *
+ * 每个 fabric.Image 实例都有一个 filters 数组，滤镜按数组顺序依次应用。
+ * 本模块约定：
+ *   - 同一类型的滤镜在数组中只保留一个实例，覆盖式更新；
+ *   - 数组顺序固定按 FILTER_PARAMS 的声明顺序（见 sortFilters），不由用户的
+ *     拖动先后决定。饱和度与自然饱和度都依赖像素当前值、不可交换，若听任
+ *     操作顺序，同样的数值会因拖动次序不同而得出不同画面，且预设高亮判定
+ *     （只比值不比顺序）与效果缩略图都会与实际画面对不上。
  */
 
 import { clamp } from './helpers.js';
 
-/** 滤镜类型 → fabric.Image.filters 类名 映射 */
-const FILTER_CLASS_NAME = {
-  brightness: 'Brightness',
-  contrast: 'Contrast',
-  saturation: 'Saturation',
-  hue: 'HueRotation',
-  blur: 'Blur',
-  sepia: 'Sepia',
-  grayscale: 'Grayscale',
-  vibrance: 'Vibrance',
-};
+/** 自然饱和度的 UI 满量程：滑块推到 ±77 即滤镜的 ±1（收窄量程见表内说明） */
+const VIBRANCE_FULL_SCALE = 77;
 
-/** 滤镜类型 → 该滤镜在 fabric 中的属性名 */
-const FILTER_ATTR_NAME = {
-  brightness: 'brightness',
-  contrast: 'contrast',
-  saturation: 'saturation',
-  hue: 'rotation',
-  blur: 'blur',
-  sepia: 'sepia',
-  grayscale: 'grayscale',
-  vibrance: 'vibrance',
-};
+/** 中间调（Gamma）的 UI 满量程：滑块推到 ±77 时 gamma 为 1 ± 0.77（中性值为 1） */
+const GAMMA_FULL_SCALE = 77;
+
+/** 比例型参数的换算：UI 百分比 ↔ 滤镜 -1~1 / 0~1 */
+function percentToFilter(value) {
+  return clamp(value, -100, 100) / 100;
+}
+
+function filterToPercent(value) {
+  return Math.round((value || 0) * 100);
+}
 
 /**
- * UI 滑块范围定义（百分比或度数）
- * 仅这 5 项在属性面板暴露滑块；sepia / grayscale 仅通过预设触发
+ * 调色参数定义表
+ *
+ * 键的书写顺序 = 滤镜在 image.filters 中的应用顺序。
+ *
+ * @typedef {Object} FilterParam
+ * @property {string} label 面板显示名
+ * @property {string} cls   fabric.Image.filters 下的类名
+ * @property {string} attr  该滤镜在 fabric 中的属性名
+ * @property {number} min   滑块最小值（UI 语义）
+ * @property {number} max   滑块最大值（UI 语义）
+ * @property {number} step  滑块步长
+ * @property {number} default 未调整时的 UI 值，写入时不产生滤镜
+ * @property {boolean} inUi 是否在调色面板露出滑块；false 时仅供预设使用
+ * @property {Function} toFilter UI 值 → 滤镜实际值
+ * @property {Function} toUi     滤镜实际值 → UI 值
  */
-export const FILTER_RANGES = {
-  brightness: { min: -100, max: 100, step: 1, default: 0 },
-  contrast:   { min: -100, max: 100, step: 1, default: 0 },
-  saturation: { min: -100, max: 100, step: 1, default: 0 },
-  hue:        { min: -180, max: 180, step: 1, default: 0 },
-  blur:       { min: 0,    max: 100, step: 1, default: 0 },
+export const FILTER_PARAMS = {
+  brightness: {
+    label: '亮度',
+    cls: 'Brightness',
+    attr: 'brightness',
+    min: -100,
+    max: 100,
+    step: 1,
+    default: 0,
+    inUi: true,
+    toFilter: percentToFilter,
+    toUi: filterToPercent,
+  },
+  gamma: {
+    // Gamma 的属性是 [r, g, b] 数组，这里用单滑块等量控制三个通道：
+    // 只抬/压中间调，黑场与白场不动，因此不会像「亮度」那样把暗部推灰或让高光溢出。
+    // UI ±77 → gamma = 1 ± 0.77（中性 1），与「亮度」「对比」互补
+    label: '中间调',
+    cls: 'Gamma',
+    attr: 'gamma',
+    min: -GAMMA_FULL_SCALE,
+    max: GAMMA_FULL_SCALE,
+    step: 1,
+    default: 0,
+    inUi: true,
+    toFilter: value => {
+      const g = 1 + clamp(value, -GAMMA_FULL_SCALE, GAMMA_FULL_SCALE) / 100;
+      return [g, g, g];
+    },
+    // 属性可能是数组：取首个通道即可还原滑块值（三通道由单滑块等量写入）
+    toUi: value => {
+      const g = Array.isArray(value) ? value[0] : value;
+      return Math.round(((g == null ? 1 : g) - 1) * 100);
+    },
+  },
+  contrast: {
+    label: '对比',
+    cls: 'Contrast',
+    attr: 'contrast',
+    min: -100,
+    max: 100,
+    step: 1,
+    default: 0,
+    inUi: true,
+    toFilter: percentToFilter,
+    toUi: filterToPercent,
+  },
+  saturation: {
+    label: '饱和',
+    cls: 'Saturation',
+    attr: 'saturation',
+    min: -100,
+    max: 100,
+    step: 1,
+    default: 0,
+    inUi: true,
+    toFilter: percentToFilter,
+    toUi: filterToPercent,
+  },
+  vibrance: {
+    // 与「饱和」同向但算法不同：只抬低饱和的区域，肤色与天空不容易调过头。
+    // 两者允许同时使用，叠加后最容易过冲，因此满量程收窄到 ±77
+    label: '自然饱和',
+    cls: 'Vibrance',
+    attr: 'vibrance',
+    min: -VIBRANCE_FULL_SCALE,
+    max: VIBRANCE_FULL_SCALE,
+    step: 1,
+    default: 0,
+    inUi: true,
+    toFilter: value => clamp(value, -VIBRANCE_FULL_SCALE, VIBRANCE_FULL_SCALE) / VIBRANCE_FULL_SCALE,
+    toUi: value => Math.round((value || 0) * VIBRANCE_FULL_SCALE),
+  },
+  hue: {
+    label: '色相',
+    cls: 'HueRotation',
+    attr: 'rotation',
+    min: -180,
+    max: 180,
+    step: 1,
+    default: 0,
+    inUi: true,
+    toFilter: value => clamp(value, -180, 180) * Math.PI / 180,
+    toUi: value => Math.round((value || 0) * 180 / Math.PI),
+  },
+  sepia: {
+    label: '棕褐',
+    cls: 'Sepia',
+    attr: 'sepia',
+    min: 0,
+    max: 100,
+    step: 1,
+    default: 0,
+    inUi: false,
+    toFilter: percentToFilter,
+    toUi: filterToPercent,
+  },
+  grayscale: {
+    label: '灰度',
+    cls: 'Grayscale',
+    attr: 'grayscale',
+    min: 0,
+    max: 100,
+    step: 1,
+    default: 0,
+    inUi: false,
+    toFilter: percentToFilter,
+    toUi: filterToPercent,
+  },
+  blur: {
+    label: '模糊',
+    cls: 'Blur',
+    attr: 'blur',
+    min: 0,
+    max: 100,
+    step: 1,
+    default: 0,
+    inUi: true,
+    toFilter: value => clamp(value, 0, 100) / 100,
+    toUi: value => Math.round((value || 0) * 100),
+  },
+  noise: {
+    // 胶片颗粒质感：随机像素扰动，0 无噪点，100 满强度。预设专用。
+    label: '噪点',
+    cls: 'Noise',
+    attr: 'noise',
+    min: 0,
+    max: 100,
+    step: 1,
+    default: 0,
+    inUi: false,
+    toFilter: value => Math.round(clamp(value, 0, 100)),
+    toUi: value => Math.round(value || 0),
+  },
+  pixelate: {
+    // 像素化/马赛克：blocksize=1 原尺寸，越大越粗。预设专用。
+    label: '像素化',
+    cls: 'Pixelate',
+    attr: 'blocksize',
+    min: 0,
+    max: 30,
+    step: 1,
+    default: 0,
+    inUi: false,
+    toFilter: value => Math.max(1, Math.round(clamp(value, 0, 30))),
+    toUi: value => Math.round(value || 0),
+  },
 };
 
-/** 仅通过预设使用的滤镜类型 → 默认值（用于应用预设时重置） */
-const PRESET_ONLY_DEFAULTS = {
-  sepia: 0,
-  grayscale: 0,
-  vibrance: 0,
-};
+/** 全部调色类型，键序即滤镜应用顺序 */
+const ALL_FILTER_TYPES = Object.keys(FILTER_PARAMS);
 
-/** 应用预设时需要重置的全部滤镜类型 */
-const ALL_RESETTABLE_TYPES = [...Object.keys(FILTER_RANGES), ...Object.keys(PRESET_ONLY_DEFAULTS)];
+/** 参数类型 → 应用顺序下标 */
+const FILTER_ORDER_INDEX = {};
+ALL_FILTER_TYPES.forEach((type, index) => {
+  FILTER_ORDER_INDEX[type] = index;
+});
+
+/** 参数类型 → fabric 类名 */
+const FILTER_CLASS_NAME = {};
+/** 参数类型 → 滤镜属性名 */
+const FILTER_ATTR_NAME = {};
+/** fabric 类名 → 参数类型（排序时反查用） */
+const FILTER_TYPE_TO_PARAM = {};
+ALL_FILTER_TYPES.forEach(type => {
+  FILTER_CLASS_NAME[type] = FILTER_PARAMS[type].cls;
+  FILTER_ATTR_NAME[type] = FILTER_PARAMS[type].attr;
+  FILTER_TYPE_TO_PARAM[FILTER_PARAMS[type].cls] = type;
+});
+
+/**
+ * UI 滑块范围定义（仅供读取兜底与外部查询，面板渲染请用 getUiFilterItems）
+ * 仅包含 inUi 为 true 的参数
+ */
+export const FILTER_RANGES = {};
+ALL_FILTER_TYPES.forEach(type => {
+  if (!FILTER_PARAMS[type].inUi) return;
+  const param = FILTER_PARAMS[type];
+  FILTER_RANGES[type] = { min: param.min, max: param.max, step: param.step, default: param.default };
+});
+
+/**
+ * 调色面板的滑块清单（两处调色 UI 共用，避免各抄一份）
+ * @returns {Array<{type: string, label: string, min: number, max: number, step: number, default: number}>}
+ */
+export function getUiFilterItems() {
+  return ALL_FILTER_TYPES
+    .filter(type => FILTER_PARAMS[type].inUi)
+    .map(type => ({
+      type,
+      label: FILTER_PARAMS[type].label,
+      min: FILTER_PARAMS[type].min,
+      max: FILTER_PARAMS[type].max,
+      step: FILTER_PARAMS[type].step,
+      default: FILTER_PARAMS[type].default,
+    }));
+}
+
+/** 某参数的默认 UI 值 */
+function getDefaultUiValue(type) {
+  const param = FILTER_PARAMS[type];
+  return param ? param.default : 0;
+}
+
+/**
+ * 预设中某参数应取的值
+ * 预设未声明的参数一律回落默认值 —— 应用预设的语义是「整套参数换一遍」，
+ * 因此手调过的、预设里没写的参数会被归零（与亮度/饱和等既有表现一致）。
+ * @param {object} preset FILTER_PRESETS 中的一项
+ * @param {string} type
+ * @returns {number}
+ */
+function getPresetParamValue(preset, type) {
+  if (preset && preset.filters && preset.filters[type] != null) {
+    return preset.filters[type];
+  }
+  return getDefaultUiValue(type);
+}
 
 /**
  * 将 UI 滑块值（百分比或度数）换算为 fabric 滤镜实际值
@@ -70,23 +292,9 @@ const ALL_RESETTABLE_TYPES = [...Object.keys(FILTER_RANGES), ...Object.keys(PRES
  * @returns {number}
  */
 export function uiToFilterValue(type, uiValue) {
-  switch (type) {
-    case 'brightness':
-    case 'contrast':
-    case 'saturation':
-    case 'sepia':
-    case 'grayscale':
-    case 'vibrance':
-      // 0~100 → 0~1（brightness/contrast/saturation/vibrance 允许 -100~100）
-      return clamp(uiValue, -100, 100) / 100;
-    case 'hue':
-      // -180°~180° → -π~π 弧度
-      return clamp(uiValue, -180, 180) * Math.PI / 180;
-    case 'blur':
-      return clamp(uiValue, 0, 100) / 100;
-    default:
-      return uiValue;
-  }
+  const param = FILTER_PARAMS[type];
+  if (!param) return uiValue;
+  return param.toFilter(uiValue);
 }
 
 /**
@@ -96,21 +304,9 @@ export function uiToFilterValue(type, uiValue) {
  * @returns {number}
  */
 export function filterToUiValue(type, filterValue) {
-  switch (type) {
-    case 'brightness':
-    case 'contrast':
-    case 'saturation':
-    case 'sepia':
-    case 'grayscale':
-    case 'vibrance':
-      return Math.round((filterValue || 0) * 100);
-    case 'hue':
-      return Math.round((filterValue || 0) * 180 / Math.PI);
-    case 'blur':
-      return Math.round((filterValue || 0) * 100);
-    default:
-      return Math.round(filterValue || 0);
-  }
+  const param = FILTER_PARAMS[type];
+  if (!param) return Math.round(filterValue || 0);
+  return param.toUi(filterValue);
 }
 
 function getFilterClass(type) {
@@ -121,6 +317,23 @@ function getFilterClass(type) {
     : null;
 }
 
+/** 滤镜在固定顺序中的位置；不属于调色参数的滤镜排到末尾 */
+function orderIndexOfFilter(filter) {
+  const type = filter && FILTER_TYPE_TO_PARAM[filter.type];
+  return type ? FILTER_ORDER_INDEX[type] : Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * 按 FILTER_PARAMS 的声明顺序重排滤镜数组
+ *
+ * Array.prototype.sort 自 ES2019 起保证稳定，因此排到末尾的非调色滤镜
+ * 之间仍保持原有相对顺序。
+ * @param {fabric.Image} image
+ */
+function sortFilters(image) {
+  image.filters.sort((a, b) => orderIndexOfFilter(a) - orderIndexOfFilter(b));
+}
+
 /**
  * 读取图片上某类滤镜的当前值（无则返回默认值）
  * @param {fabric.Image} image
@@ -128,13 +341,14 @@ function getFilterClass(type) {
  * @returns {number} UI 滑块值
  */
 export function getFilterUiValue(image, type) {
-  if (!image || !Array.isArray(image.filters)) {
-    return FILTER_RANGES[type] ? FILTER_RANGES[type].default : 0;
-  }
+  const fallback = getDefaultUiValue(type);
+  if (!image || !Array.isArray(image.filters)) return fallback;
 
   const className = FILTER_CLASS_NAME[type];
+  if (!className) return fallback;
+
   const filter = image.filters.find(f => f && f.type === className);
-  if (!filter) return FILTER_RANGES[type] ? FILTER_RANGES[type].default : 0;
+  if (!filter) return fallback;
 
   const attr = FILTER_ATTR_NAME[type];
   return filterToUiValue(type, filter[attr]);
@@ -156,26 +370,26 @@ export function setFilter(image, type, uiValue, skipApply = false) {
     image.filters = [];
   }
 
+  const param = FILTER_PARAMS[type];
+  if (!param) return;
+
   const FilterClass = getFilterClass(type);
   if (!FilterClass) return;
 
   // 移除同类型旧滤镜
-  const className = FILTER_CLASS_NAME[type];
-  image.filters = image.filters.filter(f => !(f && f.type === className));
+  image.filters = image.filters.filter(f => !(f && f.type === param.cls));
 
   // 默认值不写入（避免无效滤镜堆积）
-  const defaultValue = FILTER_RANGES[type]
-    ? FILTER_RANGES[type].default
-    : (PRESET_ONLY_DEFAULTS[type] != null ? PRESET_ONLY_DEFAULTS[type] : 0);
-  if (uiValue === defaultValue) {
+  if (uiValue === getDefaultUiValue(type)) {
     if (!skipApply) applyFilters(image);
     return;
   }
 
   const filterValue = uiToFilterValue(type, uiValue);
-  const attr = FILTER_ATTR_NAME[type];
-  const filter = new FilterClass({ [attr]: filterValue });
+  const filter = new FilterClass({ [param.attr]: filterValue });
   image.filters.push(filter);
+  sortFilters(image);
+
   if (!skipApply) applyFilters(image);
 }
 
@@ -211,51 +425,39 @@ export function hasNoFilters(image) {
 
 // ── 预设 ──
 
+/** 滤镜预设分类（顺序即 UI 显示顺序） */
+export const FILTER_CATEGORIES = ['基础', '复古', '黑白'];
+
 /**
  * 滤镜预设定义
  * 每个预设的 filters 字段为 { type: uiValue } 映射，未列出的类型重置为默认值
+ * category 字段用于面板分组渲染
  */
 export const FILTER_PRESETS = [
-  {
-    preset: 'filter-original',
-    label: '原图',
-    filters: {},
-  },
-  {
-    preset: 'filter-warm',
-    label: '暖色',
-    filters: { brightness: 6, saturation: 18, hue: -12 },
-  },
-  {
-    preset: 'filter-cool',
-    label: '冷色',
-    filters: { brightness: 2, saturation: -8, hue: 14 },
-  },
-  {
-    preset: 'filter-vintage',
-    label: '复古',
-    filters: { brightness: 4, contrast: -8, saturation: -12, sepia: 55 },
-  },
-  {
-    preset: 'filter-bw',
-    label: '黑白',
-    filters: { grayscale: 100, contrast: 8 },
-  },
-  {
-    preset: 'filter-vivid',
-    label: '鲜艳',
-    filters: { saturation: 40, contrast: 14, brightness: 4 },
-  },
-  {
-    preset: 'filter-soft',
-    label: '柔光',
-    filters: { brightness: 10, contrast: -16, blur: 6 },
-  },
-  {
-    preset: 'filter-sharp',
-    label: '锐利',
-    filters: { contrast: 26, saturation: 10, brightness: -2 },
-  },
+  // ── 基础 ──
+  { preset: 'filter-original', label: '原图', category: '基础', filters: {} },
+  { preset: 'filter-warm', label: '暖色', category: '基础', filters: { brightness: 6, saturation: 18, hue: -12, vibrance: 12 } },
+  { preset: 'filter-cool', label: '冷色', category: '基础', filters: { brightness: 2, saturation: -8, hue: 14, vibrance: -6 } },
+  { preset: 'filter-vivid', label: '鲜艳', category: '基础', filters: { saturation: 40, contrast: 14, brightness: 4, vibrance: 22 } },
+  { preset: 'filter-soft', label: '柔光', category: '基础', filters: { brightness: 10, contrast: -16, blur: 6, gamma: 10 } },
+  { preset: 'filter-sharp', label: '锐利', category: '基础', filters: { contrast: 26, saturation: 10, brightness: -2, vibrance: 8 } },
+  { preset: 'filter-airy', label: '通透', category: '基础', filters: { brightness: 8, contrast: 6, gamma: 16, saturation: 6, vibrance: 18 } },
+  { preset: 'filter-rich', label: '浓郁', category: '基础', filters: { contrast: 12, gamma: -14, saturation: 8, vibrance: 26 } },
+  { preset: 'filter-faded', label: '褪色', category: '基础', filters: { brightness: 6, contrast: -14, gamma: 22, saturation: -14 } },
+  // ── 复古 ──
+  { preset: 'filter-vintage', label: '复古', category: '复古', filters: { brightness: 4, contrast: -8, saturation: -12, gamma: 14, sepia: 55 } },
+  { preset: 'filter-sunset', label: '日落', category: '复古', filters: { brightness: 4, saturation: 22, hue: -14, vibrance: 14 } },
+  { preset: 'filter-teal', label: '青调', category: '复古', filters: { contrast: 10, saturation: -12, hue: 16, vibrance: 8 } },
+  { preset: 'filter-moody', label: '暗调', category: '复古', filters: { brightness: -10, contrast: 16, gamma: -12, saturation: -10 } },
+  { preset: 'filter-haze', label: '柔雾', category: '复古', filters: { brightness: 8, contrast: -10, blur: 10, gamma: 14, saturation: -6 } },
+  { preset: 'filter-clarendon', label: 'Clarendon', category: '复古', filters: { saturation: 28, contrast: 20, brightness: 4, vibrance: 12 } },
+  { preset: 'filter-gingham', label: 'Gingham', category: '复古', filters: { brightness: 4, contrast: -10, saturation: -8, sepia: 18, gamma: 10 } },
+  { preset: 'filter-valencia', label: 'Valencia', category: '复古', filters: { sepia: 22, contrast: 10, saturation: 12, brightness: 4, gamma: -8, noise: 8 } },
+  { preset: 'filter-1977', label: '1977', category: '复古', filters: { sepia: 28, contrast: -6, brightness: 6, saturation: -10, gamma: 14, noise: 10 } },
+  // ── 黑白 ──
+  { preset: 'filter-bw', label: '黑白', category: '黑白', filters: { grayscale: 100, contrast: 8, gamma: -6 } },
+  { preset: 'filter-ink', label: '高反差', category: '黑白', filters: { grayscale: 100, contrast: 26, gamma: -10 } },
+  { preset: 'filter-inkwell', label: 'Inkwell', category: '黑白', filters: { grayscale: 100, contrast: 22, gamma: -6 } },
 ];
 
 /**
@@ -270,11 +472,8 @@ export function applyFilterPreset(image, presetName) {
 
   // 重置全部为默认值，再应用预设覆盖
   // 批量设置时跳过逐次 applyFilters，循环结束后统一应用一次，避免重复重算
-  ALL_RESETTABLE_TYPES.forEach(type => {
-    const value = preset.filters[type] != null
-      ? preset.filters[type]
-      : (FILTER_RANGES[type] ? FILTER_RANGES[type].default : (PRESET_ONLY_DEFAULTS[type] != null ? PRESET_ONLY_DEFAULTS[type] : 0));
-    setFilter(image, type, value, true);
+  ALL_FILTER_TYPES.forEach(type => {
+    setFilter(image, type, getPresetParamValue(preset, type), true);
   });
   applyFilters(image);
   return true;
@@ -284,7 +483,8 @@ export function applyFilterPreset(image, presetName) {
  * 计算某个预设应用到图片后的滤镜参数列表（供预览缩略图使用）
  *
  * 与 applyFilterPreset 保持同一套取值规则：未在预设中声明的滤镜重置为默认值，
- * 因而返回结果中会剔除默认值项（与 setFilter 的写入规则一致）。
+ * 因而返回结果中会剔除默认值项（与 setFilter 的写入规则一致）；
+ * 返回顺序同样是 FILTER_PARAMS 的声明顺序，缩略图与实际画面由此保持一致。
  *
  * @param {object} preset - FILTER_PRESETS 中的一项
  * @returns {Array<{type: string, attr: string, value: number}>}
@@ -292,15 +492,9 @@ export function applyFilterPreset(image, presetName) {
 export function getPresetFilterValues(preset) {
   if (!preset || !preset.filters) return [];
 
-  return ALL_RESETTABLE_TYPES.map(type => {
-    const uiValue = preset.filters[type] != null
-      ? preset.filters[type]
-      : (FILTER_RANGES[type] ? FILTER_RANGES[type].default : (PRESET_ONLY_DEFAULTS[type] != null ? PRESET_ONLY_DEFAULTS[type] : 0));
-
-    const defaultValue = FILTER_RANGES[type]
-      ? FILTER_RANGES[type].default
-      : (PRESET_ONLY_DEFAULTS[type] != null ? PRESET_ONLY_DEFAULTS[type] : 0);
-    if (uiValue === defaultValue) return null;
+  return ALL_FILTER_TYPES.map(type => {
+    const uiValue = getPresetParamValue(preset, type);
+    if (uiValue === getDefaultUiValue(type)) return null;
 
     return {
       type: FILTER_CLASS_NAME[type],
@@ -321,10 +515,8 @@ export function isPresetActive(image, presetName) {
   const preset = FILTER_PRESETS.find(p => p.preset === presetName);
   if (!preset) return false;
 
-  return ALL_RESETTABLE_TYPES.every(type => {
-    const expected = preset.filters[type] != null
-      ? preset.filters[type]
-      : (FILTER_RANGES[type] ? FILTER_RANGES[type].default : (PRESET_ONLY_DEFAULTS[type] != null ? PRESET_ONLY_DEFAULTS[type] : 0));
+  return ALL_FILTER_TYPES.every(type => {
+    const expected = getPresetParamValue(preset, type);
     const actual = getFilterUiValue(image, type);
     return Math.abs(actual - expected) < 0.5;
   });

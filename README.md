@@ -2,7 +2,7 @@
 
 > 基于 Fabric.js 的轻量图片编辑工具，支持 uTools、ZTools、Web 浏览器多端运行。
 
-当前版本：**v2.5.1-dev**
+当前版本：**v3.0.0-dev**
 
 项目官网：[https://image-toolbox.moruteaven.com](https://image-toolbox.moruteaven.com)
 
@@ -55,7 +55,7 @@
 ```text
 图片工具箱 - 客户端/
 ├── core/                   # 跨端共享核心
-│   ├── package.json       # @img-toolbox/core 包定义
+│   ├── package.json       # @moruteaven/img-toolbox_core 包定义
 │   └── src/
 │       ├── index.js       # 公共无环境依赖入口
 │       ├── EventBus.js     # 事件总线
@@ -63,8 +63,7 @@
 │       ├── LayerManager.js # 图层管理器
 │       ├── HistoryManager.js # 历史记录（撤销/重做）
 │       ├── ToolManager.js  # 工具管理器
-│       ├── changelog.js    # 版本号（APP_VERSION）+ 更新记录（唯一权威来源）
-│       ├── preloadHelpers.js # preload 公共逻辑
+│       ├── preloadHelpers.cjs # preload 公共逻辑（CJS，见 AGENTS.md §7.2）
 │       ├── app/            # 跨平台应用入口
 │       ├── adapters/       # 宿主适配器基类
 │       ├── identity/       # 轻量认证客户端
@@ -73,11 +72,14 @@
 │       ├── utils/          # 工具函数
 │       ├── runtime/        # Fabric.js 运行时入口
 │       └── lib/            # Fabric.js 5.x 本地库文件
+├── packages/              # 可独立子包（pnpm workspace: ora, changelog）
+│
 ├── clients/                # 各平台入口
 │   ├── utools/            # uTools 插件
 │   ├── ztools/            # ZTools 插件
 │   └── web/               # Web 浏览器版
-├── build.ps1               # 构建脚本
+├── scripts/
+│   ├── build.mjs               # 构建编排入口（`pnpm build`，替代原 build.ps1）
 ├── deploy-cf-pages.ps1    # Cloudflare Pages 部署脚本
 └── README.md              # 本文档
 ```
@@ -86,23 +88,62 @@
 
 ### 环境要求
 
-- Node.js（用于构建时 `node --check` 语法校验）
-- PowerShell（执行构建脚本）
-- 构建本身无需 `npm install`，依赖均以本地文件形式引入（Fabric.js、JSZip、Teaven Identity SDK）
-- Teaven Identity SDK 如需升级，需访问公司私有 npm 源，见 `core/src/lib/identity-sdk/README.md`
+- Node.js（构建、门禁、`node --check` 语法校验）
+- 构建前需 `pnpm install`（esbuild 是构建期 devDependency）；运行时依赖（Fabric.js 本地文件；fflate/fast-xml-parser、ag-psd 经 npm 安装打包；Teaven Identity SDK npm 安装）不依赖 CDN
+- Teaven Identity SDK 经 npm 安装，升级用 `pnpm update @moruteaven/identity-sdk`
 
 ### 构建
 
 ```powershell
-.\build.ps1
+pnpm install   # 首次或依赖变更后必须执行（esbuild 是 devDependency）
+pnpm build
 ```
 
-构建流程：
-1. 清理 `dist/` 下旧的平台目录
-2. 对每个平台（uTools、zTools、web）：复制 `clients/<platform>/` 和 `core/src/` 到 `dist/<platform>/`
-3. 把 `#core/` 别名重写为按输出位置计算的相对路径
-4. 对所有 JS 文件执行 `node --check` 语法校验
-5. 执行版本号一致性校验（`scripts/version-check.ps1`）：`core/src/changelog.js` 的 `APP_VERSION` 必须与两个 `plugin.json`、`package.json`、`README.md` 声明一致，不一致直接构建失败
+构建流程（均由 `scripts/build.mjs` 编排，任一失败即构建失败）：
+1. 校验版本号一致性（`scripts/version-check.mjs`）：`packages/changelog/src/changelog.js` 的 `APP_VERSION` 必须与两个 `plugin.json`、`package.json`、`README.md` 声明一致
+2. 对每个平台（uTools、zTools、web）用 `scripts/prepare-build.mjs` 准备暂存（vendor 包装 + bundle 入口 + 页面改写，脚本自带断言），再由 esbuild 产出 `index.html` / `app.js` / `index.css` 三件套；Electron 端额外产出 `preload.js`，并原样拷贝 `plugin.json`、`logo.png`
+3. 依次执行门禁（任一失败即构建失败），清单如下：
+
+| # | 脚本 | 检查什么 |
+|---|------|----------|
+| 0 | `scripts/version-check.mjs` | 版本号一致性（源码与 dist 各跑一次） |
+| 1 | `scripts/verify-artifact.mjs` | esbuild metafile 的输入来源与 external 白名单 |
+| 2 | `scripts/verify-bundle-smoke.mjs` | 页面 bundle 在 DOM 桩件下真实执行 |
+| 3 | `scripts/verify-preload-smoke.mjs` | preload bundle 真 `require()` 并完成桥接 |
+| 4 | `scripts/verify-web-root-load.mjs` | Web 产物按站点根复算首屏请求，有 404 即失败 |
+| 5 | `scripts/verify-security-hardening.mjs` + `scripts/mutation-check-sanitizers.mjs` | 安全加固断言 + 变异自验 |
+| 6 | `scripts/verify-alias-rewrite.mjs` | `#core/` 别名重写安全 |
+| 7 | `scripts/verify-clip-path-session.mjs` | canvas 级 clipPath 会话 |
+| 8 | `scripts/verify-filter-params-table.mjs` | 调色参数表唯一来源 |
+| 9 | `scripts/bom-report.ps1` | UTF-8 BOM 不变量 |
+| 10 | `scripts/verify-doc-refs.mjs` | 本文与 `AGENTS.md` 引用的脚本必须真实存在，且构建实际调用的门禁必须在本文列出 |
+
+> 上表与 `scripts/build.mjs` 的实际调用**互为镜像**，第 10 项门禁就是查这件事：
+> 它同时检查两个方向——文档提到的脚本必须存在、构建调用的门禁必须在本文出现。
+> 历史上 `verify-clip-path-session.mjs` 曾在文档里被列为门禁而文件从未入库（手动跑必 `ERR_MODULE_NOT_FOUND`），
+> `verify-filter-params-table.mjs` 则相反——它在构建里跑，文档却一字未提。
+> 两种偏差都会让人按文档判断质量，而结论是错的。
+>
+> 因此新增或删除门禁脚本时，**必须同时改三处**：`build.mjs` 的调用与头部编号注释、本节上表、`AGENTS.md` §6.1。
+> 漏改任何一处，第 10 项门禁会直接让构建失败并指名道姓。
+
+> 构建脚本是 Node 而非 PowerShell：整条工具链本来就是 Node，PowerShell 层只会带来第二套编码规则——正是那套规则在历史上把 BOM 凭空写进产物（详见 `scripts/bom-report.ps1` 头部说明）。
+
+#### 全新 worktree 首次构建前必读
+
+pnpm 11 起，`pnpm build` 会先跑一次 deps-status 检查，要求所有依赖的安装脚本都已在
+`pnpm-workspace.yaml` 的 `allowBuilds` 中显式批准；未批准时安装即以
+`ERR_PNPM_IGNORED_BUILDS` 失败，`pnpm build` 在构建脚本开始前就中断。本仓库需要
+`esbuild`（postinstall 负责校验平台二进制），因此该条目必须是确定的 `true`：
+
+```yaml
+allowBuilds:
+  esbuild: true
+```
+
+占位值（pnpm 自动写入的 `set this to true or false`）不算批准，同样会让检查失败。
+若在只读或离线环境下不方便跑安装，可绕过该检查直接执行编排脚本
+`node scripts/build.mjs`（等价于 `pnpm build`，全部门禁一致）。
 
 ### 部署 Web 端
 
@@ -125,14 +166,15 @@
 | 语言 | 纯 JavaScript（ES Module），`#core/` 别名引用共享核心 |
 | 引擎 | Fabric.js 5.x（本地引入，非 CDN） |
 | UI | 原生 HTML / CSS / JS，无前端框架 |
-| 构建 | PowerShell 脚本，无打包工具 |
+| 构建 | `pnpm build`（Node 编排 `scripts/build.mjs` 调用 esbuild 打包并执行门禁） |
 | 部署 | Cloudflare Pages（Web 端） |
 
 ## 更新日志
 
 | 版本 | 日期 | 要点 |
 |------|------|------|
-| 2.5.1-dev | 2026-09-23 | 新增图层复制功能（右键菜单、Ctrl+D、复制按钮）；图层右键支持重命名与删除 |
+| 2.6.1-dev | 2026-10-06 | 调色新增中间调参数；新增通透、浓郁、褪色等滤镜预设；暖色、鲜艳等预设改用自然饱和度 |
+| 2.6.0 | 2026-10-06 | 图层复制、右键菜单（复制/重命名/删除）、图层对齐与分布、图层混合模式、调色自然饱和度参数；修复打开插件初始化失败的问题 |
 | 2.5.0 | 2026-09-23 | 调色预设改为效果图卡片，直接显示当前图层调色效果；新增贴纸功能；橡皮擦新增框选模式，拖拽即可一次擦除整片区域；修复保存图片或 ORA 工程文件失败时没有任何提示的问题；修复 Web 版样式丢失、ORA 无法导入导出的问题 |
 | 2.4.3 | 2026-08-31 | 新增五边形图形、画笔光标指示修复与增强 |
 | 2.4.2 | 2026-08-22 | ORA 工程文件导入/导出、马赛克/橡皮擦工具鼠标状态修复 |
@@ -148,4 +190,4 @@
 | 2.0 | 2026-06-12 | 面板布局切换、裁剪多项修复 |
 | 1.0 | 2026-06-10 | 首个可用版本 |
 
-完整更新记录与版本号定义见 `core/src/changelog.js`。
+完整更新记录与版本号定义见 `packages/changelog/src/changelog.js`。

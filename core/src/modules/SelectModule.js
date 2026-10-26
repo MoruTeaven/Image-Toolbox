@@ -33,6 +33,7 @@ class SelectModule extends BaseModule {
     const angle = this._getCommonAngle(targets);
     const flipX = targets.length > 0 && targets.every(obj => !!obj.flipX);
     const flipY = targets.length > 0 && targets.every(obj => !!obj.flipY);
+    const distributeDisabled = targets.length < 3 ? ' disabled title="至少选中3个图层"' : '';
 
     return `
       <div class="options-group">
@@ -44,6 +45,20 @@ class SelectModule extends BaseModule {
       <div class="options-group">
         <button class="options-btn options-btn-sm ${flipX ? 'active' : ''}" data-preset="select-flip-x"${disabled}>左右翻转</button>
         <button class="options-btn options-btn-sm ${flipY ? 'active' : ''}" data-preset="select-flip-y"${disabled}>前后翻转</button>
+      </div>
+      <div class="options-group">
+        <button class="options-btn options-btn-sm" data-preset="select-align-left"${disabled}>左对齐</button>
+        <button class="options-btn options-btn-sm" data-preset="select-align-hcenter"${disabled}>水平居中</button>
+        <button class="options-btn options-btn-sm" data-preset="select-align-right"${disabled}>右对齐</button>
+      </div>
+      <div class="options-group">
+        <button class="options-btn options-btn-sm" data-preset="select-align-top"${disabled}>顶对齐</button>
+        <button class="options-btn options-btn-sm" data-preset="select-align-vcenter"${disabled}>垂直居中</button>
+        <button class="options-btn options-btn-sm" data-preset="select-align-bottom"${disabled}>底对齐</button>
+      </div>
+      <div class="options-group">
+        <button class="options-btn options-btn-sm" data-preset="select-distribute-h"${distributeDisabled}>水平等距</button>
+        <button class="options-btn options-btn-sm" data-preset="select-distribute-v"${distributeDisabled}>垂直等距</button>
       </div>
     `;
   }
@@ -71,6 +86,29 @@ class SelectModule extends BaseModule {
 
     if (presetName === 'select-flip-y') {
       this._flipTargets(targets, 'flipY');
+      return;
+    }
+
+    const alignMap = {
+      'select-align-left': 'left',
+      'select-align-hcenter': 'h-center',
+      'select-align-right': 'right',
+      'select-align-top': 'top',
+      'select-align-vcenter': 'v-center',
+      'select-align-bottom': 'bottom',
+    };
+    if (Object.prototype.hasOwnProperty.call(alignMap, presetName)) {
+      this._alignTargets(targets, alignMap[presetName]);
+      return;
+    }
+
+    if (presetName === 'select-distribute-h') {
+      this._distributeTargets(targets, 'x');
+      return;
+    }
+
+    if (presetName === 'select-distribute-v') {
+      this._distributeTargets(targets, 'y');
     }
   }
 
@@ -92,6 +130,116 @@ class SelectModule extends BaseModule {
     this._refreshActiveSelection(targets);
     this._refreshDynamicMosaics();
     this._requestRender();
+  }
+
+  /**
+   * 图层对齐。多选时以选择组包围盒为基准，单选时退化为对齐画布。
+   * 子对象处于 ActiveSelection 时 left/top 在选择容器坐标空间，
+   * 直接改会错位；因此先解组、在画布绝对坐标下算 AABB 与位移，结束后重建选区。
+   * @param {object[]} targets 目标对象
+   * @param {string} mode left|h-center|right|top|v-center|bottom
+   */
+  _alignTargets(targets, mode) {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas || targets.length === 0) return;
+
+    const wasMulti = targets.length > 1;
+    canvas.discardActiveObject();
+
+    try {
+      const boxes = targets.map(obj => obj.getBoundingRect());
+      const ref = wasMulti
+        ? {
+          left: Math.min(...boxes.map(b => b.left)),
+          top: Math.min(...boxes.map(b => b.top)),
+          right: Math.max(...boxes.map(b => b.left + b.width)),
+          bottom: Math.max(...boxes.map(b => b.top + b.height)),
+        }
+        : { left: 0, top: 0, right: canvas.getWidth(), bottom: canvas.getHeight() };
+
+      const deltas = boxes.map(b => {
+        switch (mode) {
+          case 'left':
+            return { x: ref.left - b.left, y: 0 };
+          case 'right':
+            return { x: ref.right - (b.left + b.width), y: 0 };
+          case 'h-center':
+            return { x: (ref.left + ref.right) / 2 - (b.left + b.width / 2), y: 0 };
+          case 'top':
+            return { x: 0, y: ref.top - b.top };
+          case 'bottom':
+            return { x: 0, y: ref.bottom - (b.top + b.height) };
+          case 'v-center':
+            return { x: 0, y: (ref.top + ref.bottom) / 2 - (b.top + b.height / 2) };
+          default:
+            return { x: 0, y: 0 };
+        }
+      });
+
+      if (!deltas.some(d => Math.abs(d.x) > 0.01 || Math.abs(d.y) > 0.01)) return;
+
+      this.history.saveState();
+      targets.forEach((obj, i) => this._translateObject(obj, deltas[i].x, deltas[i].y));
+      this._refreshDynamicMosaics();
+      this._requestRender();
+    } finally {
+      this._restoreSelection(targets, wasMulti);
+    }
+  }
+
+  /**
+   * 等距分布：按中心点排序，首尾固定，其余按等间距摆到两点之间。
+   * @param {object[]} targets 目标对象（>=3）
+   * @param {string} axis x|y
+   */
+  _distributeTargets(targets, axis) {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas || targets.length < 3) return;
+
+    const wasMulti = true;
+    canvas.discardActiveObject();
+
+    try {
+      const isX = axis === 'x';
+      const items = targets.map(obj => {
+        const b = obj.getBoundingRect();
+        return { obj, center: isX ? b.left + b.width / 2 : b.top + b.height / 2 };
+      }).sort((a, b) => a.center - b.center);
+
+      const first = items[0].center;
+      const last = items[items.length - 1].center;
+      if (Math.abs(last - first) < 0.01) return;
+
+      const step = (last - first) / (items.length - 1);
+      const deltas = items.map((it, i) => first + i * step - it.center);
+      if (!deltas.every(d => Math.abs(d) <= 0.01)) {
+        this.history.saveState();
+        items.forEach((it, i) => this._translateObject(it.obj, isX ? deltas[i] : 0, isX ? 0 : deltas[i]));
+        this._refreshDynamicMosaics();
+        this._requestRender();
+      }
+    } finally {
+      this._restoreSelection(targets, wasMulti);
+    }
+  }
+
+  /** 纯平移对象：旋转/缩放不受影响（AABB 随对象整体平移）。 */
+  _translateObject(obj, dx, dy) {
+    if (dx === 0 && dy === 0) return;
+    obj.set({ left: obj.left + dx, top: obj.top + dy });
+    obj.dirty = true;
+    obj.setCoords();
+  }
+
+  /** 对齐/分布完成后重建选区，保持用户选中的对象不变。 */
+  _restoreSelection(targets, wasMulti) {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas || targets.length === 0) return;
+    if (wasMulti && typeof fabric !== 'undefined' && fabric.ActiveSelection) {
+      canvas.setActiveObject(new fabric.ActiveSelection(targets, { canvas }));
+    } else if (targets.length === 1) {
+      canvas.setActiveObject(targets[0]);
+    }
   }
 
   _setObjectTransform(obj, props) {

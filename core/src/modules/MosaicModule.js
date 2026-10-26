@@ -1,6 +1,8 @@
 import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { clamp, requestRender as _requestRender, createClipPathFromSource, normalizeBounds, intersectBounds, getPointsBounds } from '../utils/helpers.js';
+import { acquireClipPathSession } from '../utils/ClipPathSession.js';
+import { createCanvas as createOffscreenCanvas } from '../ports/CanvasPort.js';
 
 const SELECTION_FILL = 'rgba(47,127,134,0.16)';
 const SELECTION_STROKE = '#2f7f86';
@@ -32,9 +34,11 @@ class MosaicModule extends BaseModule {
     this._brushPoints = [];       // 画笔模式的轨迹点
     this._brushPreview = null;    // 画笔预览圆圈
     this._liveBrushOverlay = null; // 画笔模式拖动中的实时马赛克层
-    this._detachedCanvasClipPath = null;
-    this._clipPathDetached = false;
-    this._objectClipPathBackups = null;
+    // 画布级 clipPath 的换入换出统一走共享会话 core/src/utils/ClipPathSession.js。
+    // 此前此处与 CropModule 各存一份 _detachedCanvasClipPath /
+    // _objectClipPathBackups，两份状态操作同一份画布全局，恢复时互相覆盖，
+    // 图层被永久裁掉（AGENTS.md §8.1 记载的事故）。收敛后只剩这一份。
+    this._clipPathSession = null;
 
     this._boundMouseDown = this._onMouseDown.bind(this);
     this._boundMouseMove = this._onMouseMove.bind(this);
@@ -685,14 +689,14 @@ class MosaicModule extends BaseModule {
     const radius = blurRadius || this.options.blurRadius || 8;
 
     // 源 canvas：放原始像素
-    const srcCanvas = document.createElement('canvas');
+    const srcCanvas = createOffscreenCanvas();
     srcCanvas.width = w;
     srcCanvas.height = h;
     const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
     srcCtx.putImageData(new ImageData(data, w, h), 0, 0);
 
     // 目标 canvas：避免自绘制预乘 alpha 色偏
-    const dstCanvas = document.createElement('canvas');
+    const dstCanvas = createOffscreenCanvas();
     dstCanvas.width = w;
     dstCanvas.height = h;
     const dstCtx = dstCanvas.getContext('2d', { willReadFrequently: true });
@@ -730,7 +734,7 @@ class MosaicModule extends BaseModule {
 
   _createDynamicMosaicOverlay({ rect, maskType, brushPoints = null, brushSize = null, lassoPoints = null }) {
     const canvas = this.canvasManager.canvas;
-    const tempCanvas = document.createElement('canvas');
+    const tempCanvas = createOffscreenCanvas();
     tempCanvas.width = Math.max(1, Math.round(rect.width));
     tempCanvas.height = Math.max(1, Math.round(rect.height));
 
@@ -890,7 +894,7 @@ class MosaicModule extends BaseModule {
     const needsResize = !needsCanvas && (element.width !== width || element.height !== height);
 
     if (needsCanvas) {
-      element = document.createElement('canvas');
+      element = createOffscreenCanvas();
       if (typeof obj.setElement === 'function') {
         obj.setElement(element);
       } else {
@@ -912,7 +916,7 @@ class MosaicModule extends BaseModule {
 
   _captureDynamicMosaicSource(obj, width, height) {
     const sourceCanvas = this._renderObjectsBelow(obj);
-    const sampleCanvas = document.createElement('canvas');
+    const sampleCanvas = createOffscreenCanvas();
     sampleCanvas.width = width;
     sampleCanvas.height = height;
     const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
@@ -1042,7 +1046,7 @@ class MosaicModule extends BaseModule {
     const canvas = this.canvasManager.canvas;
     const width = Math.max(1, Math.ceil(canvas.width || 1));
     const height = Math.max(1, Math.ceil(canvas.height || 1));
-    const sourceCanvas = document.createElement('canvas');
+    const sourceCanvas = createOffscreenCanvas();
     sourceCanvas.width = width;
     sourceCanvas.height = height;
     const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
@@ -1103,7 +1107,7 @@ class MosaicModule extends BaseModule {
   }
 
   _createBrushMaskCanvas(width, height, points, brushSize) {
-    const maskCanvas = document.createElement('canvas');
+    const maskCanvas = createOffscreenCanvas();
     maskCanvas.width = width;
     maskCanvas.height = height;
     const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
@@ -1121,7 +1125,7 @@ class MosaicModule extends BaseModule {
   }
 
   _createLassoMaskCanvas(width, height, points) {
-    const maskCanvas = document.createElement('canvas');
+    const maskCanvas = createOffscreenCanvas();
     maskCanvas.width = width;
     maskCanvas.height = height;
     const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
@@ -1213,60 +1217,68 @@ class MosaicModule extends BaseModule {
   }
 
   _getActiveCropClipPath() {
-    return this._detachedCanvasClipPath || this.canvasManager.canvas?.clipPath || null;
+    return this._getDetachedCanvasClipPath()
+      || this.canvasManager.canvas?.clipPath
+      || null;
+  }
+
+  /** 本模块参与的辅助对象：排除出「临时挂载 clipPath」之外。 */
+  _clipPathExclusions() {
+    return [this._selectionRect, this._brushPreview, this._lassoPreview].filter(Boolean);
+  }
+
+  /**
+   * 取得（或复用）本画布上的画布级 clipPath 会话。
+   * 同一画布同时只允许一个会话——这就是当年两个模块各持一份备份、互相覆盖
+   * 导致图层被永久裁掉的成因，共享会话从结构上排除它。
+   */
+  _ensureClipPathSession() {
+    if (this._clipPathSession) return this._clipPathSession;
+    this._clipPathSession = acquireClipPathSession(this.canvasManager.canvas, {
+      exclude: this._clipPathExclusions(),
+      onRender: () => this._requestRender(),
+    });
+    return this._clipPathSession;
   }
 
   _detachCanvasClipPath() {
     const canvas = this.canvasManager.canvas;
     if (!canvas?.clipPath) return;
 
-    this._detachedCanvasClipPath = canvas.clipPath;
-    this._clipPathDetached = true;
-    canvas.clipPath = null;
-    this._applyTemporaryObjectClipPaths(this._detachedCanvasClipPath, false);
-    this._requestRender();
+    this._ensureClipPathSession().detach();
+  }
+
+  _getDetachedCanvasClipPath() {
+    return (this._clipPathSession && this._clipPathSession.getDetached()) || null;
+  }
+
+  _restoreDetachedCanvasClipPath(render = true) {
+    const session = this._clipPathSession;
+    if (!session) return;
+    session.release();
+    this._clipPathSession = null;
+    if (render) this._requestRender();
   }
 
   _applyTemporaryObjectClipPaths(clipPath, render = true) {
-    const canvas = this.canvasManager.canvas;
-    if (!canvas || !clipPath) return;
-
-    this._clearTemporaryObjectClipPaths(false);
-    this._objectClipPathBackups = canvas.getObjects()
-      .filter(obj => obj !== this._selectionRect && obj !== this._brushPreview && obj !== this._lassoPreview)
-      .map(obj => ({ obj, clipPath: obj.clipPath || null }));
-
-    this._objectClipPathBackups.forEach(({ obj }) => {
-      obj.set('clipPath', this._createClipPathFromSource(clipPath));
-      obj.dirty = true;
-    });
-
+    if (!clipPath) return;
+    // 会话自己负责「备份原值 → 临时挂上 → 还原」，这里只触发重挂。
+    this._ensureClipPathSession();
     if (render) this._requestRender();
   }
 
   _clearTemporaryObjectClipPaths(render = true) {
-    if (!this._objectClipPathBackups) return;
-
-    this._objectClipPathBackups.forEach(({ obj, clipPath }) => {
-      obj.set('clipPath', clipPath || null);
-      obj.dirty = true;
-    });
-    this._objectClipPathBackups = null;
-
-    if (render) this._requestRender();
+    // 对象级原值由会话逐个还原；没有会话时无需任何动作。
+    if (render && this._clipPathSession) this._requestRender();
   }
 
-  _restoreDetachedCanvasClipPath(render = true) {
+  _discardDetachedCanvasClipPath(render = true) {
     const canvas = this.canvasManager.canvas;
-    if (!canvas) return;
-
-    this._clearTemporaryObjectClipPaths(false);
-    if (this._clipPathDetached) {
-      canvas.clipPath = this._detachedCanvasClipPath;
+    const detached = this._getDetachedCanvasClipPath();
+    this._restoreDetachedCanvasClipPath(false);
+    if (canvas && detached) {
+      canvas.clipPath = detached;
     }
-    this._detachedCanvasClipPath = null;
-    this._clipPathDetached = false;
-
     if (render) this._requestRender();
   }
 
@@ -1281,21 +1293,17 @@ class MosaicModule extends BaseModule {
       .filter(obj => obj && obj.canvas === canvas);
     transientObjects.forEach(obj => canvas.remove(obj));
 
+    const session = this._clipPathSession;
     try {
-      if (!this._clipPathDetached) {
+      if (!session || !session.isHeld()) {
         this.history.saveState();
         return;
       }
 
-      const currentClipPath = canvas.clipPath;
-      this._clearTemporaryObjectClipPaths(false);
-      canvas.clipPath = this._detachedCanvasClipPath;
-      try {
-        this.history.saveState();
-      } finally {
-        canvas.clipPath = currentClipPath;
-        this._applyTemporaryObjectClipPaths(this._detachedCanvasClipPath, false);
-      }
+      // 暂存时需要看到未裁剪的画布：由共享会话负责「还原对象级临时挂载 /
+      // 写回画布级 clipPath / 跑完再逐个恢复」。手工版要把这三步成对写出，
+      // 漏一步就是图层被永久裁掉那一类 bug（见 ClipPathSession.js 头部）。
+      session.withCanvasClipPath(() => this.history.saveState());
     } finally {
       transientObjects.forEach(obj => canvas.add(obj));
       this._bringBrushPreviewToFront();

@@ -25,12 +25,28 @@ class StubClassList {
   contains(name) { return this._set.has(name); }
 }
 
+// 最小 CSSStyleDeclaration 桩件：Fabric 与 UI 层都按 style.setProperty 的接口写，
+// 普通对象（style.display = 'none' 那种）会让它抛错。
+function makeStubStyle() {
+  const props = new Map();
+  return {
+    setProperty(name, value) { props.set(name, String(value)); },
+    getPropertyValue(name) { return props.has(name) ? props.get(name) : ''; },
+    removeProperty(name) { props.delete(name); },
+    get cssText() {
+      return Array.from(props.entries()).map(([k, v]) => k + ':' + v).join(';');
+    }
+  };
+}
+
 class StubElement {
   constructor(tagName = 'div', id = '') {
     this.tagName = tagName.toUpperCase();
     this.id = id;
     this.children = [];
-    this.style = {};
+    // Fabric 的 util.setStyle 走 style.setProperty（而非 style[name]=），
+    // 桩件必须提供 CSSStyleDeclaration 的这两个方法，否则 canvas 初始化即抛错。
+    this.style = makeStubStyle();
     this.dataset = {};
     this.classList = new StubClassList();
     this._listeners = [];

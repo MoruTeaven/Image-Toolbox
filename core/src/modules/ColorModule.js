@@ -2,8 +2,9 @@ import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { requestRender as _requestRender } from '../utils/helpers.js';
 import {
-  FILTER_RANGES,
+  getUiFilterItems,
   FILTER_PRESETS,
+  FILTER_CATEGORIES,
   getFilterUiValue,
   getPresetFilterValues,
   setFilter,
@@ -11,7 +12,7 @@ import {
   applyFilterPreset,
   isPresetActive,
 } from '../utils/filters.js';
-import { createFilterPreviewDataURL, disposeFilterPreview, getPreviewSize } from '../utils/filterPreview.js';
+import { createFilterPreviewDataURL, disposeFilterPreview, getPreviewSize, getPreviewSourceKey } from '../utils/filterPreview.js';
 
 /**
  * 预览对象标识种子
@@ -26,7 +27,7 @@ let previewIdSeed = 0;
  * 激活后保持画布可选（与移动/框选一致），用户选中图片图层后：
  *   - 顶部预设栏以「效果缩略图 + 名称」卡片展示滤镜预设（原图/暖色/冷色/复古/黑白/鲜艳/柔光/锐利），
  *     缩略图取当前选中图层并实时套用对应预设，直观对比调色前后差异
- *   - 右侧属性面板显示调色滑块（亮度/对比/饱和/色相/模糊）+ 重置按钮
+ *   - 右侧属性面板显示调色滑块（亮度/对比/饱和/自然饱和/色相/模糊）+ 重置按钮
  */
 class ColorModule extends BaseModule {
   constructor(canvasManager, historyManager, defaultOptions = {}) {
@@ -39,6 +40,7 @@ class ColorModule extends BaseModule {
     this._previewCache = new Map();
     this._previewCacheKey = null;
     this._previewSource = null;
+    this._filterCategory = FILTER_CATEGORIES[0];
   }
 
   activate(options = {}) {
@@ -103,13 +105,17 @@ class ColorModule extends BaseModule {
   }
 
   /**
-   * 预览缓存的判定键：图片对象 + 源图地址，二者变化时重建缩略图
+   * 预览缓存的判定键：图片对象 + 原图地址，二者变化时重建缩略图
+   *
+   * 地址取原图元素（getPreviewSourceKey）而非 getElement()：图层套上滤镜后
+   * getElement() 会变成无 src 的 canvas，键值抖动会把缓存反复清空重建。
+   * 注意：滤镜变化不在此键内——缩略图一律从原图独立计算，与当前滤镜无关。
+   *
    * @param {fabric.Image} reference
    * @returns {string}
    */
   _getPreviewCacheKey(reference) {
-    const src = reference?.getElement?.()?.src || '';
-    return `${this._objectId(reference)}|${src}`;
+    return `${this._objectId(reference)}|${getPreviewSourceKey(reference)}`;
   }
 
   _objectId(obj) {
@@ -140,22 +146,29 @@ class ColorModule extends BaseModule {
     // 卡片宽度按源图宽高比动态计算，避免固定宽度导致横图被裁、竖图留白
     const { aspect } = getPreviewSize(reference);
 
-    const presets = FILTER_PRESETS.map(preset => {
-      const isActive = this._getFilterScope() === 'all'
-        ? targets.every(image => isPresetActive(image, preset.preset))
-        : isPresetActive(reference, preset.preset);
-      const previewURL = previews.get(preset.preset);
-      const preview = previewURL
-        ? `<img class="filter-preset-btn__preview" src="${previewURL}" alt="" draggable="false" />`
-        : `<span class="filter-preset-btn__preview filter-preset-btn__preview--empty"></span>`;
-      return `<button type="button" class="filter-preset-btn ${isActive ? 'active' : ''}" data-preset="${preset.preset}" title="${preset.label}">${preview}<span class="filter-preset-btn__label">${preset.label}</span></button>`;
+    const categoryTabs = FILTER_CATEGORIES.map(cat => {
+      const isActiveCat = cat === this._filterCategory ? 'active' : '';
+      return `<button type="button" class="filter-category-tab ${isActiveCat}" data-category="${cat}">${cat}</button>`;
     }).join('');
+
+    const presets = FILTER_PRESETS
+      .filter(preset => preset.category === this._filterCategory)
+      .map(preset => {
+        const isActive = this._getFilterScope() === 'all'
+          ? targets.every(image => isPresetActive(image, preset.preset))
+          : isPresetActive(reference, preset.preset);
+        const previewURL = previews.get(preset.preset);
+        const preview = previewURL
+          ? `<img class="filter-preset-btn__preview" src="${previewURL}" alt="" draggable="false" />`
+          : `<span class="filter-preset-btn__preview filter-preset-btn__preview--empty"></span>`;
+        return `<button type="button" class="filter-preset-btn ${isActive ? 'active' : ''}" data-preset="${preset.preset}" title="${preset.label}">${preview}<span class="filter-preset-btn__label">${preset.label}</span></button>`;
+      }).join('');
 
     const scopeHint = this._getFilterScope() === 'all'
       ? `<span class="options-hint">全部图片图层 (${targets.length})</span>`
       : '<span class="options-hint">当前图层</span>';
 
-    return `<div class="options-group options-group--filter" style="--preset-aspect: ${aspect}">${scopeHint}<div class="filter-preset-scroll">${presets}</div></div>`;
+    return `<div class="options-group options-group--filter" style="--preset-aspect: ${aspect}">${scopeHint}<div class="filter-categories">${categoryTabs}</div><div class="filter-preset-scroll">${presets}</div></div>`;
   }
 
   /**
@@ -183,22 +196,14 @@ class ColorModule extends BaseModule {
       return `${scopeControl}<div class="property-empty">${hint}</div>`;
     }
 
-    const items = [
-      { type: 'brightness', label: '亮度' },
-      { type: 'contrast',   label: '对比' },
-      { type: 'saturation', label: '饱和' },
-      { type: 'hue',        label: '色相' },
-      { type: 'blur',       label: '模糊' },
-    ];
-
-    const sliders = items.map(({ type, label }) => {
-      const range = FILTER_RANGES[type];
+    // 滑块清单由 utils/filters.js 的参数表派生：新增调色参数只改那一处
+    const sliders = getUiFilterItems().map(({ type, label, min, max, step }) => {
       const value = getFilterUiValue(reference, type);
       return `
         <div class="property-item property-item--wide">
           <label>${label}</label>
           <input type="range" class="property-range" data-module-prop="filter:${type}"
-                 min="${range.min}" max="${range.max}" step="${range.step}" value="${value}" data-value-suffix="" />
+                 min="${min}" max="${max}" step="${step}" value="${value}" data-value-suffix="" />
           <span class="property-value">${value}</span>
         </div>
       `;
@@ -216,6 +221,12 @@ class ColorModule extends BaseModule {
         <button type="button" class="property-btn" data-module-action="filter-reset">重置调色</button>
       </div>
     `;
+  }
+
+  // ── 滤镜分类切换 ──
+  setFilterCategory(category) {
+    if (!FILTER_CATEGORIES.includes(category)) return;
+    this._filterCategory = category;
   }
 
   // ── 滤镜预设点击（顶部预设栏） ──
