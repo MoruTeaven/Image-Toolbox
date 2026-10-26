@@ -45,7 +45,9 @@
  *   5. Security regression gate: verify-security-hardening.mjs AND
  *      mutation-check-sanitizers.mjs, both required. The mutation half proves
  *      the assertions can actually fail - a red-free suite that covers nothing
- *      is the exact failure this pair exists to prevent.
+ *      is the exact failure this pair exists to prevent. Both scripts' complete
+ *      output goes to dist/security-gate.log, and a red gate replays that file:
+ *      an exit code alone tells a reviewer nothing about which assertion failed.
  *   6. verify-alias-rewrite.mjs - no ../core/src/ rewrite trace or #core/
  *      leftover in the output, no copied core/src tree, #core/ literals survive
  *      bundling verbatim, plus a mutation self-check.
@@ -149,6 +151,30 @@ function node(script, ...scriptArgs) {
   const target = path.join(SCRIPTS, script);
   if (!fs.existsSync(target)) throw new Error(`Gate script not found: ${script}`);
   return gate(`node ${path.relative(ROOT, target)} ${scriptArgs.join(' ')}`.trim(), process.execPath, [target, ...scriptArgs]);
+}
+
+// Like node(), but captures stdout+stderr instead of streaming it, so a gate can
+// archive its own evidence (the security gate does). Exit-code arbitration is
+// identical: a spawn error or a signal is a failure, never a pass.
+function nodeCaptured(label, script) {
+  const target = path.join(SCRIPTS, script);
+  if (!fs.existsSync(target)) throw new Error(`Gate script not found: ${script}`);
+  log(`  ${label}`);
+  const result = spawnSync(process.execPath, [target], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024
+  });
+  const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  if (result.error) {
+    log(c.red(`  FAIL: could not start node: ${result.error.message}`));
+    return { code: 1, text, stdout: '' };
+  }
+  if (result.signal) {
+    log(c.red(`  FAIL: node terminated by signal ${result.signal}`));
+    return { code: 1, text, stdout: '' };
+  }
+  return { code: result.status ?? 1, text, stdout: result.stdout ?? '' };
 }
 
 // node --check <file> for files outside scripts/ (the emitted bundles).
@@ -443,20 +469,36 @@ if (process.env.SKIP_SECURITY_GATE === '1') {
 } else {
   log(c.cyan('Running security regression gate ...'));
   const gateLog = path.join(DIST_ROOT, 'security-gate.log');
-  const lines = [];
+  const results = [];
   let gateOk = true;
   for (const gateScript of ['verify-security-hardening.mjs', 'mutation-check-sanitizers.mjs']) {
-    const code = node(gateScript);
-    lines.push(`exit=${code}  ${gateScript}`);
-    if (code !== 0) gateOk = false;
+    const r = nodeCaptured(`node scripts/${gateScript}`, gateScript);
+    results.push({ script: gateScript, code: r.code, text: r.text, stdout: r.stdout });
+    if (r.code !== 0) gateOk = false;
   }
-  // This log is a build artifact and must not carry a BOM: PowerShell's
-  // Out-File -Encoding utf8 used to prepend one here, and the old BOM report
-  // never scanned .log files, so the whole build still reported OK.
-  fs.writeFileSync(gateLog, `${lines.join('\n')}\n`, 'utf8');
+  // The log is the evidence a reviewer reads after a red build, so it carries
+  // both scripts' complete output rather than only their exit codes: "exit=1"
+  // alone never says which assertion failed, and the previous version of this
+  // gate wrote nothing else into the file. This log is also a build artifact
+  // and must not carry a BOM: PowerShell's Out-File -Encoding utf8 used to
+  // prepend one here, and the old BOM report never scanned .log files, so the
+  // whole build still reported OK.
+  const logText = results.map((r) => `# ${r.script} (exit=${r.code})\n${r.text.trimEnd()}`).join('\n\n');
+  fs.writeFileSync(gateLog, `${logText}\n`, 'utf8');
   if (!gateOk) {
     allOk = false;
-    for (const line of lines) log(line);
+    log(c.red('Security gate FAILED - full output follows (also written to dist/security-gate.log):'));
+    log(fs.readFileSync(gateLog, 'utf8'));
+  } else {
+    // Green path: print each script's own summary line instead of replaying
+    // every assertion into the build output. Read it from stdout only - the
+    // scripts also log warnings on stderr, and those would otherwise become
+    // the "summary" just because they were emitted last.
+    for (const r of results) {
+      const lines = r.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const summary = lines.filter((line) => /通过/.test(line)).pop() ?? lines.pop() ?? '';
+      log(c.green(`  ${r.script}: ${summary}`));
+    }
   }
 }
 

@@ -111,7 +111,7 @@ pnpm build
 | 2 | `scripts/verify-bundle-smoke.mjs` | 页面 bundle 在 DOM 桩件下真实执行 |
 | 3 | `scripts/verify-preload-smoke.mjs` | preload bundle 真 `require()` 并完成桥接 |
 | 4 | `scripts/verify-web-root-load.mjs` | Web 产物按站点根复算首屏请求，有 404 即失败 |
-| 5 | `scripts/verify-security-hardening.mjs` + `scripts/mutation-check-sanitizers.mjs` | 安全加固断言 + 变异自验 |
+| 5 | `scripts/verify-security-hardening.mjs` + `scripts/mutation-check-sanitizers.mjs` | 安全加固断言 + 变异自验；两项完整输出写入 `dist/security-gate.log`，失败时全文回放 |
 | 6 | `scripts/verify-alias-rewrite.mjs` | `#core/` 别名重写安全 |
 | 7 | `scripts/verify-clip-path-session.mjs` | canvas 级 clipPath 会话 |
 | 8 | `scripts/verify-filter-params-table.mjs` | 调色参数表唯一来源 |
