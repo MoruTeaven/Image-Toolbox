@@ -1,5 +1,5 @@
 /**
- * prepare-build.mjs — esbuild 构建的暂存准备（由 build.ps1 调用）
+ * prepare-build.mjs — esbuild 构建的暂存准备（由 scripts/build.mjs 调用）
  *
  * 为指定平台生成三样东西到 dist/.build/<platform>/：
  *   1. vendor/fabric.js —— classic-script 全局库的 ES 包装
@@ -8,7 +8,7 @@
  *        不复制、不改写源码逻辑，避免原型期「手工搬 boot 代码」的漂移风险）
  *   3. index.html —— 页面改写：库 <script> 移除、style.css/入口指向打包产物
  *
- * 打包本身由 build.ps1 调 esbuild CLI 完成（见 build.ps1 的说明）。
+ * 打包本身由 scripts/build.mjs 调 esbuild CLI 完成。
  *
  * Usage: node scripts/prepare-build.mjs --platform <web|utools|ztools>
  */
@@ -34,7 +34,7 @@ const platform = (() => {
 const clientSrc = path.join(root, 'clients', platform, 'src');
 // 暂存区落在系统临时目录，而不是 dist/ 下：
 //   1. 它是构建中间物，不该出现在产物目录里被误当作交付内容；
-//   2. dist/ 会被 build.ps1 清理，中间物混在里面既冗余又容易被删到一半；
+//   2. dist/ 会被 scripts/build.mjs 清理，中间物混在里面既冗余又容易被删到一半；
 //   3. 个别受限宿主对 dist 下旧文件有句柄锁，导致重建时 EPERM（本次踩到）。
 // 需要排查中间物时用环境变量 IMG_TOOLBOX_BUILD_DIR 指定即可。
 const buildDir = process.env.IMG_TOOLBOX_BUILD_DIR

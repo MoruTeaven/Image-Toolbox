@@ -11,7 +11,8 @@
  *   package.json                   ← 仓库发布版本（与 plugin.json 同源）
  *   README.md / agents.md          ← 文档中的「当前版本」
  *
- * 构建脚本 build.ps1 的 Test-AppVersion 会逐项比对并在不一致时直接构建失败。
+ * 构建脚本 scripts/build.mjs 会调用 scripts/version-check.mjs 逐项比对，
+ * 任一处不一致都会直接构建失败。
  *
  * 本文件取代了历史上的 core/src/updateRecords.js：
  *   - 记录数组从 updateRecords 改名为 CHANGELOG，专门表示「更新记录」，
@@ -35,7 +36,7 @@
  *   2. 在 CHANGELOG 顶部插入同版本号的记录条目
  *   3. 同步两个 plugin.json 的 version 与 package.json 的 version
  *   4. 同步 README.md / agents.md 中的「当前版本」
- *   5. 执行 .\build.ps1，构建期校验通过才算发版完成
+ *   5. 执行 pnpm build，构建期校验通过才算发版完成
  *
  * ═══ 文案规范 ═══
  *

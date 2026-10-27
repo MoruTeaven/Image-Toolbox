@@ -8,7 +8,7 @@
  *   3. App / WebHostAdapter / EventBus 从 bundle 内可用
  *
  * 用法：node scripts/verify-bundle-smoke.mjs <bundle.mjs>
- * 由 build.ps1 调用：page bundle 复制为临时 .mjs 后传入，退出码非 0 即构建失败。
+ * 由 scripts/build.mjs 调用：page bundle 复制为临时 .mjs 后传入，退出码非 0 即构建失败。
  */
 import fs from 'node:fs';
 import path from 'node:path';
