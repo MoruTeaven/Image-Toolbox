@@ -195,7 +195,7 @@ class PropertyPanel {
         <select class="property-select property-select--short" data-prop="blendMode"${editDisabled}>
           ${this._getSelectOption('source-over', '正常', blend)}
           ${this._getSelectOption('multiply', '正片叠底', blend)}
-          ${this._getSelectOption('screen', '滤色', blend)}
+          ${this._getSelectOption('screen', '屏幕', blend)}
           ${this._getSelectOption('overlay', '叠加', blend)}
           ${this._getSelectOption('soft-light', '柔光', blend)}
           ${this._getSelectOption('lighten', '变亮', blend)}
