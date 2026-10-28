@@ -40,6 +40,11 @@
  *   3b. verify-preload-smoke.mjs (Electron only) - preload.js really require()s
  *       under stubbed electron + window and completes the bridge: catches
  *       "syntactically valid but interop-shell" breakage node --check cannot.
+ *       It also pins the host's real shape: uTools/ZTools run with
+ *       contextIsolation off, so the preload must not call contextBridge there
+ *       at all (otherwise every launch logs "contextBridge API can only be used
+ *       when contextIsolation is enabled"). Three isolation states plus a
+ *       mutation self-check prove that assertion can fail.
  *   4. verify-web-root-load.mjs (web only) - every first-screen request resolves
  *      on disk from the site root.
  *   5. Security regression gate: verify-security-hardening.mjs AND

@@ -109,7 +109,7 @@ pnpm build
 | 0 | `scripts/version-check.mjs` | 版本号一致性（源码与 dist 各跑一次） |
 | 1 | `scripts/verify-artifact.mjs` | esbuild metafile 的输入来源与 external 白名单 |
 | 2 | `scripts/verify-bundle-smoke.mjs` | 页面 bundle 在 DOM 桩件下真实执行 |
-| 3 | `scripts/verify-preload-smoke.mjs` | preload bundle 真 `require()` 并完成桥接 |
+| 3 | `scripts/verify-preload-smoke.mjs` | preload bundle 真 `require()` 并完成桥接；隔离关闭（uTools 真实形态）时断言一次 contextBridge 都不许调；含变异自验 |
 | 4 | `scripts/verify-web-root-load.mjs` | Web 产物按站点根复算首屏请求，有 404 即失败 |
 | 5 | `scripts/verify-security-hardening.mjs` + `scripts/mutation-check-sanitizers.mjs` | 安全加固断言 + 变异自验；两项完整输出写入 `dist/security-gate.log`，失败时全文回放 |
 | 6 | `scripts/verify-alias-rewrite.mjs` | `#core/` 别名重写安全 |
