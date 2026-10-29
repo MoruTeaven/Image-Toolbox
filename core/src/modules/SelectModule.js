@@ -136,6 +136,13 @@ class SelectModule extends BaseModule {
    * 图层对齐。多选时以选择组包围盒为基准，单选时退化为对齐画布。
    * 子对象处于 ActiveSelection 时 left/top 在选择容器坐标空间，
    * 直接改会错位；因此先解组、在画布绝对坐标下算 AABB 与位移，结束后重建选区。
+   *
+   * 坐标系统一约定（AGENTS.md §8.1）：全部使用画布坐标（getBoundingRect(true)）。
+   * getBoundingRect() 默认返回视口坐标（已含 viewportTransform 缩放平移），
+   * 而 left/top 是画布坐标，混算会在用户缩放/平移画布后得到成比例错位的
+   * 对齐结果；单选基准 [0, W] × [0, H] 也因此是画布文档边缘而非屏幕视口，
+   * 与 PS「对齐画布」语义一致，且与当前视图状态无关。
+   *
    * @param {object[]} targets 目标对象
    * @param {string} mode left|h-center|right|top|v-center|bottom
    */
@@ -147,7 +154,8 @@ class SelectModule extends BaseModule {
     canvas.discardActiveObject();
 
     try {
-      const boxes = targets.map(obj => obj.getBoundingRect());
+      targets.forEach(obj => obj.setCoords());
+      const boxes = targets.map(obj => obj.getBoundingRect(true));
       const ref = wasMulti
         ? {
           left: Math.min(...boxes.map(b => b.left)),
@@ -200,9 +208,11 @@ class SelectModule extends BaseModule {
     canvas.discardActiveObject();
 
     try {
+      // 与 _alignTargets 相同：画布坐标计算，兼容 viewportTransform 缩放平移。
+      targets.forEach(obj => obj.setCoords());
       const isX = axis === 'x';
       const items = targets.map(obj => {
-        const b = obj.getBoundingRect();
+        const b = obj.getBoundingRect(true);
         return { obj, center: isX ? b.left + b.width / 2 : b.top + b.height / 2 };
       }).sort((a, b) => a.center - b.center);
 
@@ -223,7 +233,7 @@ class SelectModule extends BaseModule {
     }
   }
 
-  /** 纯平移对象：旋转/缩放不受影响（AABB 随对象整体平移）。 */
+  /** 纯平移对象（画布坐标）：旋转/缩放/翻转不受影响（AABB 随对象整体平移）。 */
   _translateObject(obj, dx, dy) {
     if (dx === 0 && dy === 0) return;
     obj.set({ left: obj.left + dx, top: obj.top + dy });
