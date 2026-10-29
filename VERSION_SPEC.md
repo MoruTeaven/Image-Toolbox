@@ -34,7 +34,7 @@ dist/web/
 
 | 目标 | 手段 |
 |------|------|
-| 缓存命中时 0 网络请求 | 资源 URL 带版本号 + `immutable` 强缓存 |
+| 缓存命中时资源 0 网络请求 | 资源 URL 带版本号 + `immutable` 强缓存；版本检查仍是一次 `no-cache` 条件请求（通常 304） |
 | 版本切换安全 | 一个版本一个目录，已发布目录永不改写 |
 | 可回滚 | `version.json` 重新指向旧版本即可，旧目录保留 |
 | 多宿主共享缓存 | 同源 CDN + 同源 Service Worker 缓存 |
@@ -124,7 +124,7 @@ dist/web/
 - 解析后必须落在 `{base}/v{version}/` 下，且 URL 相对该目录的部分等于 `assets` 的键。
 - 推荐写成根绝对路径：`/img-toolbox/v3.0.0/app.js`（部署在子路径时最直观）。
 - 跨 CDN 域名时使用绝对 URL：`https://cdn.example.com/img-toolbox/v3.0.0/app.js`（只接受 `https://`；本地调试用根绝对路径）。
-- 键不得以 `/` 开头，不得包含 `.`、`..` 路径段；发布脚本必须拒绝（JSON Schema 只能挡住大部分）。
+- 键不得以 `/` 开头，不得包含 `.`、`..` 作为路径段；发布脚本必须拒绝（JSON Schema 只能挡住大部分）。
 - 不使用带版本参数的查询串（`app.js?v=3.0.0`）：query 不是缓存身份的一部分，且会被部分中间层丢弃，无法保证 `immutable` 语义（见 §4）。
 
 **必需资源集**（v1 固定）：
@@ -214,7 +214,7 @@ https://cdn.example.com/img-toolbox/v3.0.0/index.css
 | 动态灰度接口（若使用） | `no-store` 或 `private, no-cache` | `Vary: User-Agent, Cookie` | 每个请求可能不同，禁止 CDN 共享缓存（§7） |
 | `{base}/v{version}/**` | `public, max-age=31536000, immutable` | 正确的 `Content-Type`、`Access-Control-Allow-Origin: *`、`X-Content-Type-Options: nosniff` | 版本目录不可变，永久缓存 |
 | `{base}/index.html`（可选兜底入口） | `no-cache` | 同 HTML | 第一版可不实现；若实现，仅用于版本接口故障兜底 |
-| `{base}/sw.js`（若有） | `no-cache` | `Service-Worker-Allowed: /img-toolbox/` | 引导脚本，必须能更新 |
+| `{base}/sw.js`（若有） | `no-cache` | `Service-Worker-Allowed: {base 路径}` | 引导脚本，必须能更新 |
 
 MIME 必须正确（`nosniff` 下错误 MIME 会直接阻断）：
 
@@ -264,7 +264,8 @@ MIME 必须正确（`nosniff` 下错误 MIME 会直接阻断）：
 
 - **先资源、后清单**：任何时刻 `version.json` 指向的版本目录都必须是完整可用的。
 - 用 Cloudflare Pages / 对象存储的部署原子性保证 `version.json` 与资源同一批次；若分开发布，必须遵守“先资源后清单”。
-- **禁止**修改已发布版本目录中的任何文件；发现坏资源只能发新版本（补丁版本号）并重新指向。
+- **禁止**修改已发布版本目录中的任何文件；发现坏资源只能发新版本（补丁版本号）并重新指向。部署脚本发现线上已存在同名版本目录时必须**失败退出**，不能覆盖。
+- **Cloudflare Pages 是整站替换**：新部署的 `dist/web` 必须包含要保留的历史 `v{version}/` 目录，否则旧目录会随部署消失、回滚失效；若做不到，改用对象存储按目录独立上传。
 - `version.json` 更新后无需刷新版本化资源缓存；旧版本目录保留至少一个发布周期。
 
 ### 5.2 回滚
@@ -303,6 +304,8 @@ MIME 必须正确（`nosniff` 下错误 MIME 会直接阻断）：
 - 形态 B 下，Loader 自己可以读取 Cache API 做完整校验。
 
 两种形态的 `version.json` 契约、路径、缓存头完全相同。
+
+注意：第一次访问某个版本时 SW 尚未控制页面（或缓存为空），这一轮必然走网络；缓存收益从第二次访问该版本开始。这是预期行为，不是缓存失效。
 
 ### 6.2 缓存版本“可用”的判定
 
@@ -402,6 +405,8 @@ GET /img-toolbox/version.json
 ```
 
 字段语义（冻结形状，求值逻辑未来实现）：
+
+> 下面的示例只展示扩展字段，`assets` 用省略写法；真实清单的 `assets` 仍必须满足 §3.2。
 
 | 字段 | 说明 |
 |------|------|
@@ -585,4 +590,14 @@ curl -s "https://cdn.example.com/img-toolbox/version.json" | sha256sum   # 与�
 
 | 日期 | 方式 | 结论 | 处理 |
 |------|------|------|------|
-| 2026-10-29 | 独立 review（对照源码、EMBED_PROTOCOL.md 与 DoD 检查项） | 待补充 | — |
+| 2026-10-29 | 评审：对照 `scripts/build.mjs` 的 Web 产物、`deploy-cf-pages.ps1` 的部署方式、`EMBED_PROTOCOL.md`，并按 DoD 五项检查 | 通过。JSON 结构 / JSON Schema / 缓存头 / 版本路径 / 可用性判定 / 灰度扩展齐全；无关键场景遗漏 | 已回填本文档 |
+
+评审中确认并修正的点：
+
+- 修正“缓存命中 0 网络请求”的口径：资源 0 请求，但 `version.json` 每次仍有 1 次 `no-cache` 条件请求（通常 304）。
+- 补充 Cloudflare Pages 整站替换会删除未包含在部署包里的旧版本目录，回滚能力依赖部署包保留历史版本（或改用对象存储）。
+- 补充部署脚本必须拒绝覆盖已存在的同名版本目录，强化“版本目录不可变”契约。
+- 明确 Service Worker 的注册边界：跨域 `sdk.js` 不能替 CDN origin 注册 SW；缓存归属按 §6.1 的两种形态处理。
+- 补充首次访问某版本必然走网络、缓存收益从第二次开始，避免把正常首访误判为缓存失效。
+- 修正 `sw.js` 的 `Service-Worker-Allowed` 示例写死 `/img-toolbox/` 的问题，改为 `{base 路径}`。
+- 给灰度示例加注“assets 省略”，避免被误当成可直接发布的合法清单。

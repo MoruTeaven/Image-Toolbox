@@ -111,6 +111,7 @@ https://cdn.example.com/img-toolbox/v3.0.0/index.html?embed=1&hostOrigin=https%3
 - 若使用 `sandbox`，**必须**同时包含 `allow-scripts allow-same-origin`；否则脚本无法运行、origin 退化为 `null`，协议无法工作。不要添加 `allow-top-navigation`。
 - 不要给 iframe 设置 `loading="lazy"` 以外的延迟加载策略；编辑器初始化依赖页面可见。
 - 跨域时 iframe 内是**第三方上下文**，第三方 Cookie 策略可能生效。因此嵌入模式默认**关闭账号登录入口**，见 §2.4。
+- 建议加 `referrerpolicy="no-referrer"`（或由编辑器页面返回 `Referrer-Policy: no-referrer`）：iframe URL 里带着 `hostOrigin`，不必要地把它通过 Referer 泄露给图片服务器没有好处。
 
 ### 2.4 嵌入模式（`embed=1`）的必需行为
 
@@ -586,6 +587,7 @@ sequenceDiagram
 
 - 编辑器页面**不得**返回 `X-Frame-Options: DENY/SAMEORIGIN`（会直接阻止嵌入）。
 - 若配置 CSP，`frame-ancestors` 必须允许宿主页面（或省略）；**不要**用 `frame-ancestors 'none'`。
+- CSP 必须允许编辑器所需的图片来源：`img-src 'self' data: blob: https:`（`load-image` 允许 data URL 与跨源 https 图片）；`script-src` 至少允许自身 bundle（无内联脚本）。
 - 资源响应使用 `X-Content-Type-Options: nosniff`。
 - 版本化资源的缓存头见 [VERSION_SPEC.md](VERSION_SPEC.md)。
 
@@ -764,4 +766,13 @@ if (embedded) {
 
 | 日期 | 方式 | 结论 | 处理 |
 |------|------|------|------|
-| 2026-10-29 | 独立 review（对照源码与 DoD 检查项） | 待补充 | — |
+| 2026-10-29 | 评审：对照 `clients/web`、`core/src/app/App.js`、`ExportModule.js`、`CanvasManager.js`、`ToolManager.js`、`theme.js` 逐项核对，并按 DoD 五项检查 | 通过。4 个命令 / 4 个事件、载荷、错误码、4 张时序图、双向 origin/source 校验齐全；无关键场景遗漏 | 已回填本文档 |
+
+评审中确认并修正的点：
+
+- 明确 ready 必须在桥接层与 App 初始化成功后才发送；宿主必须先挂监听再创建 iframe（否则丢 ready）。
+- 明确 `load-image` 成功不回执是有意设计，失败必须走 `editor:error`；宿主不要自造导出命令。
+- 明确同源嵌入省略 `hostOrigin` 时的 targetOrigin 为 `location.origin`，仍禁止 `'*'`。
+- 补充 iframe URL 携带 `hostOrigin` 的 Referer 泄露风险与 `referrerpolicy` 建议。
+- 补充编辑器页面 CSP 必须放行 `img-src data: blob: https:`，否则 `load-image` 的图片来源会被 CSP 拦掉。
+- 明确嵌入模式不得持久化偏好、不得接入账号，避免同一 CDN origin 下多宿主串味。
