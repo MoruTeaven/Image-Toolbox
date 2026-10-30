@@ -4,6 +4,7 @@ import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../utils/theme.
 import { updateCategories, CHANGELOG, PLATFORMS, getAppVersion } from '@moruteaven/img-toolbox_changelog';
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
 import IdentityClient from '../identity/IdentityClient.js';
+import { isLocalOnnxAvailable, disposeLocalOnnxProvider } from '../ai/LocalOnnxProvider.js';
 
 /**
  * 读取平台标识（全局变量嗅探的回退实现）。
@@ -273,6 +274,13 @@ class AccountPage {
         return;
       }
 
+      // ── AI 配置 ──
+      const aiAction = this._closest(e.target, '[data-ai-action]')?.getAttribute('data-ai-action');
+      if (aiAction === 'release') {
+        this._releaseAiSession();
+        return;
+      }
+
       // ── 账户区域操作 ──
       const accountAction = this._closest(e.target, '[data-action]')?.getAttribute('data-action');
       if (accountAction === 'login') {
@@ -450,6 +458,7 @@ class AccountPage {
     const toolbarLabels = this._getToolbarLabelsVisible();
     const toolbarCollapsed = this._getToolbarCollapsed();
     const toolbarToggleVisible = this._getToolbarToggleVisible();
+    const aiAvailable = isLocalOnnxAvailable();
     return `
       <div class="account-card">
         <div class="account-card__label">外观</div>
@@ -521,7 +530,40 @@ class AccountPage {
           <button class="account-page__theme-choice ${toolbarToggleVisible === TOOLBAR_TOGGLE_VISIBLE.OFF ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-toggle-visible="${TOOLBAR_TOGGLE_VISIBLE.OFF}">隐藏按钮</button>
         </div>
       </div>
+
+      <div class="account-card">
+        <div class="account-card__label">AI</div>
+        <div class="account-card__value">AI 修图</div>
+        <p>一键抠图在本地完成推理，图片不会上传到服务器。模型 u2netp（约 4.4 MB，Apache-2.0），推理引擎 onnxruntime-web（MIT），无需网络与密钥。</p>
+        <div class="account-page__theme-row">
+          <span class="account-page__ai-status ${aiAvailable ? 'account-page__ai-status--ready' : 'account-page__ai-status--unavailable'}">
+            ${aiAvailable ? '本地推理可用' : '模型资源不可用'}
+          </span>
+        </div>
+      </div>
+
+      <div class="account-card">
+        <div class="account-card__label">AI</div>
+        <div class="account-card__value">推理会话</div>
+        <p>推理会话常驻内存以加快重复抠图。释放后再次使用会重新加载模型（数秒）。</p>
+        <div class="account-page__theme-row">
+          <button class="account-page__theme-choice" type="button" data-ai-action="release">释放推理会话</button>
+        </div>
+      </div>
     `;
+  }
+
+  /**
+   * 释放常驻的本地推理会话（设置页「AI 修图」卡片）。
+   * 释放后下次抠图会重新加载模型，用于回收内存。
+   */
+  async _releaseAiSession() {
+    try {
+      await disposeLocalOnnxProvider();
+      eventBus.emit('toast:show', { message: '推理会话已释放，下次抠图将重新加载模型', type: 'success' });
+    } catch (e) {
+      eventBus.emit('toast:show', { message: e?.message || '释放推理会话失败', type: 'error' });
+    }
   }
 
   _renderAbout() {
