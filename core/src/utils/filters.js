@@ -12,16 +12,19 @@
  *   Saturation   饱和度    saturation 属性 -1 ~ 1
  *   Vibrance     自然饱和  vibrance   属性 -1 ~ 1
  *   HueRotation  色相旋转  rotation   属性 弧度（-π ~ π）
+ *   ColorMatrix  色温      matrix     属性 4x5 数组（仅作色温载体，只平移 R/B 常数项，见表内说明）
+ *   Invert       反色      invert     属性 布尔开关（预设专用，inUi:false）
  *   Blur         高斯模糊  blur       属性 0 ~ 1
  *   Noise        噪点      noise      属性 0 ~ 100（预设专用，inUi:false）
  *   Pixelate     像素化    blocksize  属性 1 ~ 30（预设专用，inUi:false）
  *
- * ⚠ Sepia 与 Grayscale 没有强度属性，别把它们做成滑块：
+ * ⚠ Sepia / Grayscale / Invert 是「无强度属性」的滤镜，别把它们做成滑块：
  *   Sepia 是 ColorMatrix 派生的固定矩阵（mainParameter 为 false），
- *   Grayscale 只有 mode（average / lightness / luminosity）。
- *   传进去的 sepia / grayscale 数值只会成为滤镜对象上的多余字段，画面强度恒定
- *   （棕褐恒为满强度、灰度恒为全灰）。所以这两项目前只当预设的整体开关用，
- *   inUi 一律为 false；改成真正可调强度的方案见看板卡 t-mumiz038-z392ul。
+ *   Grayscale 只有 mode（average / lightness / luminosity），
+ *   Invert 只有 invert 布尔开关。
+ *   传进去的数值只会成为滤镜对象上的多余字段，画面强度恒定
+ *   （棕褐恒为满强度、灰度恒为全灰、反色恒为全反）。所以这几项只当预设的
+ *   整体开关用，inUi 一律为 false；改成真正可调强度的方案见看板卡 t-mumiz038-z392ul。
  *
  * 每个 fabric.Image 实例都有一个 filters 数组，滤镜按数组顺序依次应用。
  * 本模块约定：
@@ -39,6 +42,9 @@ const VIBRANCE_FULL_SCALE = 77;
 
 /** 中间调（Gamma）的 UI 满量程：滑块推到 ±77 时 gamma 为 1 ± 0.77（中性值为 1） */
 const GAMMA_FULL_SCALE = 77;
+
+/** 色温的 UI 满量程：滑块推到 ±77 时 R/B 常数项平移 ±0.77（中性值为 0） */
+const TEMPERATURE_FULL_SCALE = 77;
 
 /** 比例型参数的换算：UI 百分比 ↔ 滤镜 -1~1 / 0~1 */
 function percentToFilter(value) {
@@ -151,6 +157,31 @@ export const FILTER_PARAMS = {
     toFilter: value => clamp(value, -180, 180) * Math.PI / 180,
     toUi: value => Math.round((value || 0) * 180 / Math.PI),
   },
+  temperature: {
+    // 色温：暖（正）整体偏红黄，冷（负）整体偏蓝青。复用现成 ColorMatrix 滤镜：
+    // 只平移 R/B 两通道的常数项（4x5 矩阵第 5 列的 index 4 与 14），不动增益与
+    // alpha（ColorMatrix 默认 colorsOnly），画面明暗不受影响。
+    // UI ±77 → R/B 常数项 ±0.77，与「自然饱和」「中间调」同款满量程约定。
+    // 注意 ColorMatrix 类已被本表占用为色温载体：若未来再加矩阵类参数，
+    // 需要新的滤镜类，不能共用 cls（同类型滤镜在数组中只保留一个实例）。
+    label: '色温',
+    cls: 'ColorMatrix',
+    attr: 'matrix',
+    min: -TEMPERATURE_FULL_SCALE,
+    max: TEMPERATURE_FULL_SCALE,
+    step: 1,
+    default: 0,
+    inUi: true,
+    toFilter: value => {
+      const t = clamp(value, -TEMPERATURE_FULL_SCALE, TEMPERATURE_FULL_SCALE) / 100;
+      return [1, 0, 0, 0, t, 0, 1, 0, 0, 0, 0, 0, 1, 0, -t, 0, 0, 0, 1, 0];
+    },
+    // 属性是 4x5 矩阵：从 R 通道常数项（index 4）反算滑块值
+    toUi: value => {
+      const t = Array.isArray(value) ? value[4] : value;
+      return Math.round((t == null ? 0 : t) * 100);
+    },
+  },
   sepia: {
     label: '棕褐',
     cls: 'Sepia',
@@ -174,6 +205,23 @@ export const FILTER_PARAMS = {
     inUi: false,
     toFilter: percentToFilter,
     toUi: filterToPercent,
+  },
+  invert: {
+    // 反色（底片）：fabric 5.3 的 Invert 是开关型（invert 为 true/false），
+    // 没有强度属性，别做成滑块——只当预设的整体开关用，与棕褐/灰度同理。
+    // UI 值 0 = 关（默认，不写滤镜），1 = 开（写入 invert:true）。
+    // 应用顺序刻意排在灰度之后：先变灰再反转才是「底片」，反过来会得到
+    // 彩色反转后再压灰的另一种效果。
+    label: '反色',
+    cls: 'Invert',
+    attr: 'invert',
+    min: 0,
+    max: 1,
+    step: 1,
+    default: 0,
+    inUi: false,
+    toFilter: value => value > 0,
+    toUi: value => (value ? 1 : 0),
   },
   blur: {
     label: '模糊',
@@ -458,6 +506,7 @@ export const FILTER_PRESETS = [
   { preset: 'filter-bw', label: '黑白', category: '黑白', filters: { grayscale: 100, contrast: 8, gamma: -6 } },
   { preset: 'filter-ink', label: '高反差', category: '黑白', filters: { grayscale: 100, contrast: 26, gamma: -10 } },
   { preset: 'filter-inkwell', label: 'Inkwell', category: '黑白', filters: { grayscale: 100, contrast: 22, gamma: -6 } },
+  { preset: 'filter-negative', label: '底片', category: '黑白', filters: { grayscale: 100, invert: 1 } },
 ];
 
 /**

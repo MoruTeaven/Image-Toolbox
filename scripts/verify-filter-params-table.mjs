@@ -74,6 +74,8 @@ const FILTER_CLASSES = {
   Blur: makeFilterClass('Blur'),
   Sepia: makeFilterClass('Sepia'),
   Grayscale: makeFilterClass('Grayscale'),
+  ColorMatrix: makeFilterClass('ColorMatrix'),
+  Invert: makeFilterClass('Invert'),
   Noise: makeFilterClass('Noise'),
   Pixelate: makeFilterClass('Pixelate')
 };
@@ -189,10 +191,11 @@ check(
 );
 // 预设里用到的「有强度属性」的类型必须在 UI 露出，否则出现「预设改了但滑块不动」——
 // vibrance 就曾长期只存在于预设集合里（看板评论记载的迁移陷阱）。
-// 合法例外有两类：
-//   • sepia / grayscale：fabric 5.3 没有强度属性，做成滑块只会写多余字段（t-mumiz038-z392ul）
+// 合法例外有三类：
+//   • sepia / grayscale / invert：fabric 5.3 没有强度属性，做成滑块只会写多余字段或恒为满强度
+//     （sepia/grayscale 见 t-mumiz038-z392ul；invert 是布尔开关，同理）
 //   • noise / pixelate：预设专用的质感参数，量纲（0~100 / blocksize 1~30）与常规调色不同
-const PRESET_ONLY_OK = ['sepia', 'grayscale', 'noise', 'pixelate'];
+const PRESET_ONLY_OK = ['sepia', 'grayscale', 'invert', 'noise', 'pixelate'];
 const usedByPresets = new Set(
   FILTER_PRESETS.flatMap(p => Object.keys(p.filters || {}))
 );
@@ -203,7 +206,7 @@ check(
 );
 check(
   '无强度属性的滤镜确实保持 inUi:false',
-  ['sepia', 'grayscale'].every(t => FILTER_PARAMS[t] && FILTER_PARAMS[t].inUi === false)
+  ['sepia', 'grayscale', 'invert'].every(t => FILTER_PARAMS[t] && FILTER_PARAMS[t].inUi === false)
 );
 
 // 源码级断言：调色 UI 不得再维护自己的滤镜清单
@@ -447,6 +450,65 @@ check(
   'applyFilterPreset 全程只 applyFilters 一次（skipApply 生效）',
   batchImage.applyCount === 1,
   `applyCount=${batchImage.applyCount}`
+);
+
+console.log('\n8. 新增参数专项：色温（ColorMatrix 矩阵）与反色（Invert 开关）');
+
+// 色温：toFilter 必须产出 20 元素 4x5 矩阵，且除 R/B 常数项外保持恒等，
+// 否则色温滑块会连带改变增益或 alpha，画面明暗随之漂移。
+const tempParam = FILTER_PARAMS.temperature;
+check(
+  'temperature 存在且以 ColorMatrix.matrix 承载',
+  !!tempParam && tempParam.cls === 'ColorMatrix' && tempParam.attr === 'matrix'
+);
+check(
+  'temperature 矩阵只平移 R/B 常数项（其余保持恒等）',
+  (() => {
+    if (!tempParam) return false;
+    const m = tempParam.toFilter(tempParam.max);
+    const identity = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0];
+    return m.length === 20
+      && m.every((v, i) => (i === 4 || i === 14) || v === identity[i])
+      && m[4] > 0 && m[4] === -m[14];
+  })()
+);
+check(
+  'temperature 中性矩阵全零偏移、端点可往返',
+  tempParam
+    && tempParam.toFilter(0)[4] === 0 && tempParam.toFilter(0)[14] === 0
+    && Math.abs(tempParam.toUi(tempParam.toFilter(tempParam.max)) - tempParam.max) <= 1
+    && Math.abs(tempParam.toUi(tempParam.toFilter(tempParam.min)) - tempParam.min) <= 1
+);
+
+// 反色：默认值不写滤镜；底片预设写入 grayscale+invert 两枚滤镜并正确高亮
+const negPreset = FILTER_PRESETS.find(p => p.preset === 'filter-negative');
+check(
+  'filter-negative 底片预设存在且为 grayscale+invert',
+  !!negPreset && negPreset.filters.grayscale === 100 && negPreset.filters.invert === 1
+);
+const negImage = new StubImage();
+filters.setFilter(negImage, 'invert', FILTER_PARAMS.invert ? FILTER_PARAMS.invert.default : 0);
+check('invert 默认值不写入滤镜数组', negImage.filters.length === 0);
+filters.applyFilterPreset(negImage, 'filter-negative');
+check(
+  '底片预设写入 Grayscale+Invert 两枚滤镜（invert 为 true）',
+  negImage.filters.length === 2
+    && negImage.filters.some(f => f.type === 'Invert' && f.invert === true)
+    && negImage.filters.some(f => f.type === 'Grayscale')
+);
+check(
+  '底片预设应用后判为高亮，且不误伤相邻黑白预设',
+  filters.isPresetActive(negImage, 'filter-negative') === true
+    && filters.isPresetActive(negImage, 'filter-bw') === false
+);
+check(
+  '底片预设的缩略图清单与实际滤镜同源',
+  (() => {
+    const expected = filters.getPresetFilterValues(negPreset);
+    return expected.length === 2
+      && expected.some(e => e.type === 'Invert' && e.attr === 'invert' && e.value === true)
+      && expected.some(e => e.type === 'Grayscale');
+  })()
 );
 
 // ── 汇总 ──

@@ -77,7 +77,9 @@ export const CHANGELOG = [
         { text: '调色新增通透、浓郁、褪色、日落、青调、暗调、高反差、柔雾滤镜预设', platforms: null },
         { text: '滤镜预设新增分类（基础/复古/黑白），可按类别切换', platforms: null },
         { text: '新增 Clarendon、Gingham、Valencia、1977、Inkwell 等 Instagram 风格滤镜预设', platforms: null },
-        { text: '调色新增暖阳、清冷、朦胧、Lomo、Sutro、Nashville、银盐、碳素滤镜预设', platforms: null }
+        { text: '调色新增暖阳、清冷、朦胧、Lomo、Sutro、Nashville、银盐、碳素滤镜预设', platforms: null },
+        { text: '调色新增色温参数，可整体调暖或调冷画面', platforms: null },
+        { text: '滤镜预设新增底片效果', platforms: null }
       ],
       fixed: [
         { text: '修复画布缩放或平移后，图层对齐与分布位置偏移的问题', platforms: null },
