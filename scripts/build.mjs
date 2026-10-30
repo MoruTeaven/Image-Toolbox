@@ -243,11 +243,15 @@ function getStagingDir(clientName) {
 function testBuildOutput({ target, distName, pageBundle }) {
   let ok = true;
 
-  // 1. Syntax of the emitted bundles. app.js is format=esm; the minified body
-  //    carries no import/export statements, but parsing it through a .cjs copy
-  //    proves the syntax even under CJS rules. preload.js is cjs and checked
-  //    in place.
-  const pageCheck = path.join(os.tmpdir(), `imgtb-check-${distName}-${Date.now()}-${process.pid}.cjs`);
+  // 1. Syntax of the emitted bundles. app.js is format=esm and is checked
+  //    through an .mjs copy under ESM rules. Historically the copy was .cjs
+  //    ("prove the syntax even under CJS rules") - valid while the minified
+  //    body carried no ESM-only syntax, but the AI runtime (onnxruntime-web
+  //    ecosystem) legitimately uses import.meta.url, which is a syntax error
+  //    under CJS parsing. The page bundle is loaded by the browser as an ES
+  //    module, so ESM rules are the honest check. preload.js is cjs and stays
+  //    checked in place under CJS rules.
+  const pageCheck = path.join(os.tmpdir(), `imgtb-check-${distName}-${Date.now()}-${process.pid}.mjs`);
   fs.copyFileSync(pageBundle, pageCheck);
   if (nodeCheck(`${distName} page bundle`, pageCheck) !== 0) {
     log(c.red(`  FAIL: node --check on dist/${distName} page bundle`));
@@ -326,6 +330,9 @@ fs.mkdirSync(DIST_ROOT, { recursive: true });
 for (const legacy of ['src', 'core', 'plugin.json', 'preload.js', 'logo.png']) {
   fs.rmSync(path.join(DIST_ROOT, legacy), { recursive: true, force: true });
 }
+// Metafile scratch dir from a previous run (esbuild writes them inside dist
+// because the sandbox may deny %TEMP% writes to the esbuild child process).
+fs.rmSync(path.join(DIST_ROOT, '.meta'), { recursive: true, force: true });
 // dist/.build is where staging used to live before it moved to the temp dir;
 // remove it if present. Best effort: it is inert scratch, never deployed.
 fs.rmSync(path.join(DIST_ROOT, '.build'), { recursive: true, force: true });
@@ -367,6 +374,18 @@ for (const platform of PLATFORMS) {
   //    stays external because the vendored fabric.min.js keeps a Node-only
   //    require("jsdom") branch that never runs in a browser and would not
   //    resolve from this repo.
+  //
+  //    Metafiles are written under dist/.meta/, NOT the OS temp dir: the
+  //    esbuild child process may be denied %TEMP% writes entirely (sandbox /
+  //    antivirus policy on this machine — a probe write from the orchestrator
+  //    succeeds while esbuild gets "Access is denied"), while writes inside
+  //    the repo always succeed. The bundle itself already goes to dist/ for
+  //    the same reason. Files here are build scratch: verify-artifact reads
+  //    them right away and the next build wipes dist/ wholesale.
+  const metaDir = path.join(DIST_ROOT, '.meta');
+  fs.mkdirSync(metaDir, { recursive: true });
+  const metaPagePath = path.join(metaDir, `meta-page-${distName}-${process.pid}.json`);
+  const metaPreloadPath = path.join(metaDir, `meta-preload-${distName}-${process.pid}.json`);
   esbuildBuild(`page-${distName}`, [
     path.join(stage, 'entry.js'),
     '--bundle',
@@ -376,12 +395,16 @@ for (const platform of PLATFORMS) {
     '--target=chrome100',
     '--charset=utf8',
     '--define:global=globalThis',
+    // AI 运行时只用 wasm 执行提供器：把 rmbg-webgpu 写死的 webgpu 入口
+    // 重定向到主入口，避免把 25.6MB 的 jsep（含 WebGPU/Dawn）wasm 卷进资产
+    // —— 主入口对应的 ort-wasm-simd-threaded.wasm 只有 12.9MB。
+    '--alias:onnxruntime-web/webgpu=onnxruntime-web',
     '--minify',
     '--legal-comments=inline',
     '--external:jsdom',
     '--external:jsdom/lib/*',
     '--log-level=warning',
-    `--metafile=${path.join(stage, 'meta-page.json')}`
+    `--metafile=${metaPagePath}`
   ]);
 
   // 2. Stylesheet.
@@ -402,6 +425,39 @@ for (const platform of PLATFORMS) {
   // 4. Client assets. plugin.json / preload.js are Electron-only, logo.png is
   //    the plugin icon on Electron and kept as a favicon on web.
   fs.copyFileSync(path.join(clientRoot, 'logo.png'), path.join(target, 'logo.png'));
+
+  // 4b. AI runtime assets (AI tool). File names mirror AI_ASSET_FILES in
+  //     core/src/ports/AIPort.js — keep the two in step:
+  //   - the wasm glue .mjs ships on every platform: onnxruntime-web loads it
+  //     with a runtime dynamic import under the wasmPaths prefix;
+  //   - .wasm and the u2netp model only ship on web, which fetches them on
+  //     demand by relative URL. Electron platforms inline both as base64 via
+  //     the staging ai-assets-inline.js (see prepare-build.mjs) and feed them
+  //     to onnxruntime-web as byte buffers, so no file copy and no page-level
+  //     fetch of local files on restricted host protocols.
+  //     Electron pages live under src/, so the directory must go there too or
+  //     the relative './assets/ai/' prefix resolves outside the plugin payload.
+  // AI 资产（AI 修图工具）。文件名与 core/src/ports/AIPort.js 的
+  // AI_ASSET_FILES 一一对应，改动须两处同步：
+  //   - 胶水 .mjs + 运行时 .wasm 用「非 jsep」变体（esbuild 已把
+  //     onnxruntime-web/webgpu alias 到主入口，对应 ort-wasm-simd-threaded.*，
+  //     12.9MB，而非 25.6MB 的 jsep 变体）；
+  //   - 三端都拷 .mjs（onnxruntime-web 运行时按 wasmPaths 前缀动态 import 它）；
+  //   - .wasm 与 u2netp 模型仅 Web 端按相对 URL 按需 fetch；Electron 端两者
+  //     经 prepare-build 生成的 ai-assets-inline.js 以 base64 内联、字节直喂
+  //     onnxruntime-web，受限页面协议下零本地 fetch。
+  //     Electron 页面在 src/ 下，目录必须落在 src/assets/ai 才与
+  //     './assets/ai/' 前缀对得上。
+  const ortDist = path.join(ROOT, 'node_modules', 'onnxruntime-web', 'dist');
+  const rmbgModel = path.join(ROOT, 'node_modules', '@planby-tech', 'rmbg-webgpu', 'models', 'u2netp.onnx');
+  const aiAssetsTarget = path.join(isElectron ? path.join(target, 'src') : target, 'assets', 'ai');
+  fs.mkdirSync(aiAssetsTarget, { recursive: true });
+  fs.copyFileSync(path.join(ortDist, 'ort-wasm-simd-threaded.mjs'), path.join(aiAssetsTarget, 'ort-wasm-simd-threaded.mjs'));
+  if (!isElectron) {
+    fs.copyFileSync(path.join(ortDist, 'ort-wasm-simd-threaded.wasm'), path.join(aiAssetsTarget, 'ort-wasm-simd-threaded.wasm'));
+    fs.copyFileSync(rmbgModel, path.join(aiAssetsTarget, 'u2netp.onnx'));
+  }
+
   if (isElectron) {
     fs.copyFileSync(path.join(clientRoot, 'plugin.json'), path.join(target, 'plugin.json'));
 
@@ -417,20 +473,20 @@ for (const platform of PLATFORMS) {
       '--external:electron',
       '--charset=utf8',
       '--log-level=warning',
-      `--metafile=${path.join(stage, 'meta-preload.json')}`
+      `--metafile=${metaPreloadPath}`
     ]);
   }
 
   // Gate 1: metafile scope assertions.
   node('verify-artifact.mjs',
-    path.join(stage, 'meta-page.json'),
+    metaPagePath,
     '--staging', stage,
     '--allow-external', 'jsdom',
     '--label', `page-${distName}`);
 
   if (isElectron) {
     node('verify-artifact.mjs',
-      path.join(stage, 'meta-preload.json'),
+      metaPreloadPath,
       '--allow-external', 'electron,fs,path,os,child_process,events,util',
       '--label', `preload-${distName}`);
 

@@ -67,10 +67,74 @@ const entry = [
   '// 构建期生成：vendor 全局库先行加载（与页面原先的 <script> 顺序一致），',
   '// 再引入平台真实入口。逻辑零改动 —— 入口内容始终来自 clients/ 源码。',
   "import './vendor/fabric.js';",
+  ...(platform !== 'web' ? ["import './ai-assets-inline.js';"] : []),
   `import '${realEntry.split(path.sep).join('/')}';`,
   ''
 ].join('\n');
 fs.writeFileSync(path.join(buildDir, 'entry.js'), entry, 'utf8');
+
+// 2b. AI 内联资产（仅 Electron 端）。uTools / ZTools 页面运行在受限协议下，
+// 运行时 fetch 本地模型文件不可靠，因此把 u2netp 模型与 ONNX Runtime wasm
+// 转成 base64 生成入口模块，在 core/src/ai/assetSource.js 注册后由
+// ports/AIPort.js 解码直喂 onnxruntime-web（全程零网络、零 file:// fetch）。
+// Web 端走 dist 内 assets/ai/ 的相对 URL 按需加载，不生成此模块。
+if (platform !== 'web') {
+  const assetSources = [
+    {
+      key: 'u2netpModelBase64',
+      file: path.join(root, 'node_modules', '@planby-tech', 'rmbg-webgpu', 'models', 'u2netp.onnx'),
+      minBytes: 1024 * 1024,
+      what: 'u2netp 模型（@planby-tech/rmbg-webgpu，Apache-2.0）',
+    },
+    {
+      key: 'ortWasmBase64',
+      // 非 jsep 变体：构建期 esbuild 把 onnxruntime-web/webgpu alias 到主入口，
+      // 对应 wasm 为 ort-wasm-simd-threaded.wasm（12.9MB，jsep 变体 25.6MB）。
+      file: path.join(root, 'node_modules', 'onnxruntime-web', 'dist', 'ort-wasm-simd-threaded.wasm'),
+      minBytes: 1024 * 1024,
+      what: 'onnxruntime-web wasm 运行时',
+    },
+  ];
+  const inlineParts = [
+    '// 构建期生成：AI 内联资产（base64）。源文件与最小尺寸断言见本脚本 assetSources。',
+    // staging 目录没有祖先 package.json，#core/ 别名在此不可解析，
+    // 与 entry.js 引用真实入口一样用绝对路径（posix 分隔符）。
+    `import { setInlineAiAssets } from '${path.resolve(root, 'core/src/ai/assetSource.js').split(path.sep).join('/')}';`,
+  ];
+  const inlineValues = {};
+  for (const asset of assetSources) {
+    if (!fs.existsSync(asset.file)) {
+      console.error(`FAIL  AI 资产缺失（${asset.what}）: ${asset.file}`);
+      console.error('      请先执行 pnpm install 安装依赖。');
+      process.exit(1);
+    }
+    const bytes = fs.readFileSync(asset.file);
+    if (bytes.length < asset.minBytes) {
+      console.error(`FAIL  AI 资产异常偏小（${asset.what}）: ${bytes.length} bytes`);
+      process.exit(1);
+    }
+    const base64 = bytes.toString('base64');
+    inlineParts.push(`const ${asset.key} = '${base64}';`);
+    inlineValues[asset.key] = base64.length;
+  }
+  inlineParts.push('setInlineAiAssets({');
+  for (const asset of assetSources) {
+    inlineParts.push(`  ${asset.key},`);
+  }
+  inlineParts.push('});', '');
+  const inlineModule = inlineParts.join('\n');
+  fs.writeFileSync(path.join(buildDir, 'ai-assets-inline.js'), inlineModule, 'utf8');
+  // 自断言：写出的模块必须完整包含每个资产的字面量（长度一致），
+  // 防止「生成了空壳模块」这类静默失败。
+  const written = fs.readFileSync(path.join(buildDir, 'ai-assets-inline.js'), 'utf8');
+  for (const asset of assetSources) {
+    if (!written.includes(`const ${asset.key} = '`) || !written.includes(`${asset.key},`)) {
+      console.error(`FAIL  AI 内联模块缺少 ${asset.key}`);
+      process.exit(1);
+    }
+  }
+  console.log(`prepare[${platform}]: ai-assets-inline.js (${Object.entries(inlineValues).map(([k, v]) => `${k}=${(v / 1048576).toFixed(1)}MB`).join(', ')})`);
+}
 
 // 3. 页面改写
 let html = fs.readFileSync(path.join(clientSrc, 'index.html'), 'utf8');

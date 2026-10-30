@@ -18,8 +18,10 @@
   "dependencies": {
     "@esbuild/win32-x64": "0.28.2",
     "@moruteaven/identity-sdk": "0.3.4",
+    "@planby-tech/rmbg-webgpu": "0.2.1",
     "ag-psd": "^31.0.3",
     "fast-xml-parser": "^5.11.2",
-    "fflate": "^0.8.3"
+    "fflate": "^0.8.3",
+    "onnxruntime-web": "1.27.0"
   }
 }

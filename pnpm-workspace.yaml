@@ -14,3 +14,6 @@ allowBuilds:
   # 占位值会让 deps-status 检查以 ERR_PNPM_IGNORED_BUILDS 失败，
   # 导致 pnpm build 在构建脚本开始前就中断（报错指向代码，实际与代码无关）。
   esbuild: true
+  # onnxruntime-web 的依赖 protobufjs：其构建脚本只用于从 proto 重新生成代码，
+  # 发布包内已含预生成文件，运行时不需要；置 false 通过 deps-status 检查即可。
+  protobufjs: false

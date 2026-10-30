@@ -1946,6 +1946,19 @@ html, body {
   font-size: 12px;
 }
 
+/* ── AI 修图面板 ── */
+.ai-note {
+  padding: 2px 6px 4px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ai-note--muted {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
 .property-item {
   grid-column: span 6;
   display: flex;
