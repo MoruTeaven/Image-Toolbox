@@ -51,29 +51,46 @@ dist/web/
 
 ## 1. 部署布局
 
-设发布根为 `{base}`（例如 `https://cdn.example.com/img-toolbox/`）：
+**当前站点根就是 `dist/web/`**（`deploy-cf-pages.ps1` 直接 `wrangler pages deploy dist/web`），所以生产 URL 以 `/` 为根：
 
 ```text
-{base}/
-├── version.json                  # 版本清单（no-cache，唯一可变入口）
-├── v3.0.0/                       # 不可变版本目录
+https://image-toolbox.moruteaven.com/version.json
+https://image-toolbox.moruteaven.com/v3.0.0/app.js
+```
+
+但 `scripts/build.mjs` 每次构建都会 `rmSync(dist/web)` 清空输出，`dist/web/` **不能**用来长期保留历史版本。因此阶段 1 必须引入**发布暂存区**（建议 `dist/release/`）：
+
+> `{base}` 指部署根；当前 Cloudflare Pages 部署的站点根是 `/`。若将来部署在子路径，把下文的 `/v...`、`/version.json` 统一加该前缀。
+
+```text
+dist/web/                 # 构建输出（每次 build 清空，平铺文件）
+└── index.html / app.js / index.css / logo.png
+
+dist/release/             # 发布根（{base} = /），由打包步骤生成
+├── index.html            # 当前版本副本（站点首页，no-cache）
+├── app.js                # 当前版本副本（no-cache）
+├── index.css             # 当前版本副本（no-cache）
+├── logo.png
+├── version.json          # 版本清单（no-cache，唯一可变入口）
+├── v3.0.0/               # 不可变版本目录（iframe 用）
 │   ├── index.html
 │   ├── app.js
 │   ├── index.css
 │   └── logo.png
-├── v2.9.3/                       # 回滚保留的旧版本（示例）
-│   └── ...
-└── index.html                    # 可选：稳定兜底入口（no-cache，第一版可不实现）
+└── v2.9.3/               # 回滚保留的旧版本（从上次发布/对象存储合并）
+    └── ...
 ```
 
 规则：
 
 1. **版本目录只写一次**：`/v{version}/` 下的文件发布后**禁止覆盖、禁止删除后重建**。任何修改都必须发新版本号。
 2. `version.json` 是唯一的“当前版本指针”，通过原子替换更新（见 §5）。
-3. 至少保留最近 **3 个**版本目录，用于回滚与已打开页面的资源命中。
+3. 至少保留最近 **3 个**版本目录，用于回滚与已打开页面的资源命中；旧版本必须从持久位置（上次发布包/对象存储）合并进 `dist/release/`，不能指望 `dist/web/` 残留。
 4. 资源可以另外放 CDN 域名；此时 `version.json` 必须可跨域读取，资源 URL 用绝对 URL（见 §3.2）。
-5. 版本化目录与现有 `dist/web/` 一一对应：`index.html` 内的 `./app.js`、`./index.css` 是**相对引用**，直接拷进 `v{version}/` 即可工作，**不需要**改写构建产物。`logo.png` 同理。
-6. Service Worker 脚本（如 `sw.js`）和 SDK Loader 脚本属于**引导资源**，不放进版本目录、不列入 `assets`；它们用 `no-cache` 单独更新（见 §4.2）。
+5. 版本化目录与 `dist/web/` 一一对应：`index.html` 内的 `./app.js`、`./index.css` 是**相对引用**，直接拷进 `v{version}/` 即可工作，**不需要**改写构建产物。`logo.png` 同理。
+6. 站点根 `/` 必须继续可用：`dist/release/` 根部保留一份当前版本的 `index.html` + `app.js` + `index.css` 副本（或等价的稳定入口页），它们用 `no-cache`；版本目录内的同名文件用 `immutable`。
+7. Service Worker 脚本（如 `sw.js`）和 SDK Loader 脚本属于**引导资源**，不放进版本目录、不列入 `assets`；它们用 `no-cache` 单独更新（见 §4.2）。
+8. `scripts/verify-web-root-load.mjs` 当前硬编码 `dist/web/index.html` 为入口；阶段 1 需要把站点根/入口参数化，或对 `dist/release/` 再跑一次同样的首屏请求复算。
 
 ---
 
@@ -83,7 +100,7 @@ dist/web/
 - **禁止** build metadata（`+` 后缀）：`+` 在 URL 路径中需要转义，且不参与版本唯一性语义。需要区分构建时用预发布标识。
 - 版本字符串必须能安全放进 URL 路径：只允许 `[0-9A-Za-z.-]`。
 - **版本号发布后永不复用**：即使某个版本目录被清理，也不能用同一个版本号发布不同内容。
-- 项目约定（AGENTS.md §7.4）：`-dev` 为未发布开发版；公开 CDN 只发布正式版或显式指定的预发布版；`plugin.json` / `package.json` / `APP_VERSION` 必须在发版时同步，但 `version.json.version` 只取构建时的 `APP_VERSION`。
+- 项目约定（本地开发指南 AGENTS.md §7.4，该文件仅存在于本地工作区、不随 git 分发）：`-dev` 为未发布开发版；公开 CDN 只发布正式版或显式指定的预发布版；`plugin.json` / `package.json` / `APP_VERSION` 必须在发版时同步，但 `version.json.version` 只取构建时的 `APP_VERSION`。
 - 客户端**不得**用 SemVer 比较“谁更新”来决定加载哪个版本；一律以服务端返回的 `version.json` 为准（这样回滚才安全）。
 
 ---
@@ -122,10 +139,12 @@ dist/web/
 `url` 的路径规则（与 §2 的路径格式一致）：
 
 - 解析后必须落在 `{base}/v{version}/` 下，且 URL 相对该目录的部分等于 `assets` 的键。
-- 推荐写成根绝对路径：`/img-toolbox/v3.0.0/app.js`（部署在子路径时最直观）。
-- 跨 CDN 域名时使用绝对 URL：`https://cdn.example.com/img-toolbox/v3.0.0/app.js`（只接受 `https://`；本地调试用根绝对路径）。
+- **根绝对路径（以 `/` 开头）以 `version.json` 自身 URL 的 origin 为解析基准**（SDK Loader 就是从这个 URL 取到清单的）——iframe 入口 URL 也按此拼装（EMBED_PROTOCOL.md §2.1）。
+- 站点根部署时写 `/v3.0.0/app.js`；**子路径部署时必须带上子路径前缀**，如清单在 `https://cdn.example.com/img-toolbox/version.json`，则资源写 `/img-toolbox/v3.0.0/app.js`（裸写 `/v3.0.0/app.js` 会解析到站点根下、不满足本条）。
+- 跨 CDN 域名时使用绝对 URL：`https://cdn.example.com/v3.0.0/app.js`（只接受 `https://`；本地调试用根绝对路径）。
 - 键不得以 `/` 开头，不得包含 `.`、`..` 作为路径段；发布脚本必须拒绝（JSON Schema 只能挡住大部分）。
 - 不使用带版本参数的查询串（`app.js?v=3.0.0`）：query 不是缓存身份的一部分，且会被部分中间层丢弃，无法保证 `immutable` 语义（见 §4）。
+- asset 条目内的**未知字段，客户端必须忽略**（附录 A 的 `additionalProperties: false` 只约束 v1 发布产物的校验，不构成客户端拒绝未知字段的理由）。
 
 **必需资源集**（v1 固定）：
 
@@ -146,17 +165,17 @@ index.css    ← 样式
   "builtAt": "2026-10-29T13:40:00Z",
   "assets": {
     "index.html": {
-      "url": "/img-toolbox/v3.0.0/index.html",
+      "url": "/v3.0.0/index.html",
       "hash": "sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       "size": 5120
     },
     "app.js": {
-      "url": "/img-toolbox/v3.0.0/app.js",
+      "url": "/v3.0.0/app.js",
       "hash": "sha256-fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
       "size": 1155072
     },
     "index.css": {
-      "url": "/img-toolbox/v3.0.0/index.css",
+      "url": "/v3.0.0/index.css",
       "hash": "sha256-89abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567",
       "size": 40960
     }
@@ -171,7 +190,7 @@ index.css    ← 样式
 发布方（构建/部署脚本）必须：
 
 1. `version` 与构建产物的 `APP_VERSION` 一致，且与目标目录名一致；
-2. `assets` 恰好覆盖 `{base}/v{version}/` 下参与首屏加载的全部文件（至少三个必需项）；
+2. `assets` 恰好覆盖 `{base}/v{version}/` 下参与**首屏加载**的全部文件（至少三个必需项）；非首屏文件（如 `logo.png`，`index.html` 未引用它）允许留在版本目录里但不列入 `assets`；
 3. 逐文件计算 SHA-256 与 `size`，写入清单；
 4. 校验清单能被 JSON Schema（附录 A）接受；
 5. 校验 `index.html` 中的相对引用（`./app.js`、`./index.css`）在版本目录内都能解析到。
@@ -196,9 +215,9 @@ index.css    ← 样式
 示例：
 
 ```text
-https://cdn.example.com/img-toolbox/v3.0.0/index.html
-https://cdn.example.com/img-toolbox/v3.0.0/app.js
-https://cdn.example.com/img-toolbox/v3.0.0/index.css
+https://cdn.example.com/v3.0.0/index.html
+https://cdn.example.com/v3.0.0/app.js
+https://cdn.example.com/v3.0.0/index.css
 ```
 
 - `{version}` 原样使用 `version.json.version`，不加 `v` 以外的变形。
@@ -210,10 +229,10 @@ https://cdn.example.com/img-toolbox/v3.0.0/index.css
 
 | 路径 | `Cache-Control` | 其它响应头 | 说明 |
 |------|-----------------|------------|------|
-| `{base}/version.json` | `no-cache` | `Content-Type: application/json; charset=utf-8`、`ETag: "<version>"`、`Access-Control-Allow-Origin: *`、`X-Content-Type-Options: nosniff` | 允许缓存但每次必须回源校验；`ETag` 命中返回 304 |
+| `{base}/version.json` | `no-cache` | `Content-Type: application/json; charset=utf-8`、`ETag`（平台按内容生成）、`Access-Control-Allow-Origin: *`、`X-Content-Type-Options: nosniff` | 允许缓存但每次必须回源校验；ETag 命中返回 304 |
 | 动态灰度接口（若使用） | `no-store` 或 `private, no-cache` | `Vary: User-Agent, Cookie` | 每个请求可能不同，禁止 CDN 共享缓存（§7） |
 | `{base}/v{version}/**` | `public, max-age=31536000, immutable` | 正确的 `Content-Type`、`Access-Control-Allow-Origin: *`、`X-Content-Type-Options: nosniff` | 版本目录不可变，永久缓存 |
-| `{base}/index.html`（可选兜底入口） | `no-cache` | 同 HTML | 第一版可不实现；若实现，仅用于版本接口故障兜底 |
+| `{base}/index.html`、`{base}/app.js`、`{base}/index.css`（站点根当前版本副本） | `no-cache` | 同 HTML / JS / CSS | **必须发布**（§1 规则 6：保持站点根 `/` 直接访问可用）；是否兼作 §6.3 ③ 的版本接口故障降级目标由实现决定 |
 | `{base}/sw.js`（若有） | `no-cache` | `Service-Worker-Allowed: {base 路径}` | 引导脚本，必须能更新 |
 
 MIME 必须正确（`nosniff` 下错误 MIME 会直接阻断）：
@@ -229,7 +248,7 @@ MIME 必须正确（`nosniff` 下错误 MIME 会直接阻断）：
 
 说明：
 
-1. `version.json` 用 `no-cache`（而不是 `no-store`）：允许 CDN/浏览器存副本，但每次使用前必须用 `ETag` 回源确认。真正需要“绝不缓存”的动态灰度接口才用 `no-store`。
+1. `version.json` 用 `no-cache`（而不是 `no-store`）：允许 CDN/浏览器存副本，但每次使用前必须回源确认（平台生成的 ETag 命中则 304）。真正需要“绝不缓存”的动态灰度接口才用 `no-store`。
 2. 版本化资源一旦发布就不允许变化，因此可以放心 `immutable` + 一年 `max-age`。**不要**给 `version.json` 加 `immutable`。
 3. 静态资源允许跨域 GET（`Access-Control-Allow-Origin: *`）：SDK Loader 在宿主 origin 上读取 `version.json`，编辑器在 iframe 内读取资源；公开静态内容加 `*` 没有额外泄露面。
 4. 错误响应（404/5xx）**不得**带长缓存：至少 `Cache-Control: no-store`，避免 CDN 把一个 404 记一年。
@@ -252,12 +271,14 @@ MIME 必须正确（`nosniff` 下错误 MIME 会直接阻断）：
 
 ```text
 1. pnpm build                         # 产出 dist/web（index.html / app.js / index.css / logo.png）
-2. 创建 dist/web/v{APP_VERSION}/      # 拷贝上述产物（保持相对引用）
-3. 计算 hash / size，生成 dist/web/version.json
-4. 上传 v{version}/ 全部文件           # 先传不可变资源
-5. 校验线上资源 hash 与 version.json 一致
-6. 原子替换 version.json               # 最后一步
-7. 保留最近 3 个版本目录，其余按需清理
+2. 打包到 dist/release/               # 不要把版本目录写进 dist/web（每次构建会被清空）
+   ├─ 拷贝 dist/web 当前产物 → dist/release/v{APP_VERSION}/
+   └─ 同时把当前产物保留在 dist/release 根部（站点首页，no-cache）
+3. 合并历史版本                       # 从上次发布包/对象存储取回 v{旧版本}/，保留最近 3 个
+4. 计算 hash / size，生成 dist/release/version.json
+5. 部署 dist/release（先资源、后清单；Pages 整站部署天然原子）
+6. 校验线上资源 hash 与 version.json 一致
+7. 若对象存储分开发布：先传 v{version}/，再原子替换 version.json
 ```
 
 要求：
@@ -265,7 +286,8 @@ MIME 必须正确（`nosniff` 下错误 MIME 会直接阻断）：
 - **先资源、后清单**：任何时刻 `version.json` 指向的版本目录都必须是完整可用的。
 - 用 Cloudflare Pages / 对象存储的部署原子性保证 `version.json` 与资源同一批次；若分开发布，必须遵守“先资源后清单”。
 - **禁止**修改已发布版本目录中的任何文件；发现坏资源只能发新版本（补丁版本号）并重新指向。部署脚本发现线上已存在同名版本目录时必须**失败退出**，不能覆盖。
-- **Cloudflare Pages 是整站替换**：新部署的 `dist/web` 必须包含要保留的历史 `v{version}/` 目录，否则旧目录会随部署消失、回滚失效；若做不到，改用对象存储按目录独立上传。
+- **Cloudflare Pages 是整站替换**：新部署的 `dist/release` 必须包含要保留的历史 `v{version}/` 目录，否则旧目录会随部署消失、回滚失效；若做不到，改用对象存储按目录独立上传。
+- 站点根 `/` 的 `index.html` / `app.js` / `index.css` 是**可变副本**，用 `no-cache`；版本目录内的同名文件用 `immutable`。
 - `version.json` 更新后无需刷新版本化资源缓存；旧版本目录保留至少一个发布周期。
 
 ### 5.2 回滚
@@ -284,6 +306,7 @@ MIME 必须正确（`nosniff` 下错误 MIME 会直接阻断）：
 ### 5.3 版本保留
 
 - 至少保留 **3 个**历史版本目录：当前版本 + 最近两个，覆盖一次连续回滚。
+- 旧版本必须从持久位置（上次发布包 / 对象存储）合并进 `dist/release/`；`dist/web/` 每次构建都会被清空，不能作为历史版本来源。
 - 清理旧版本前确认：没有正在使用的 iframe（服务端无法精确感知，因此按“至少保留 3 个”保守处理）。
 - 删除目录后**不得**复用同名版本号。
 
@@ -369,7 +392,7 @@ MIME 必须正确（`nosniff` 下错误 MIME 会直接阻断）：
 `version.json` 由边缘函数/动态接口返回，按 Cookie、UA 或查询参数选择版本，返回的仍是 §3 的同一结构：
 
 ```text
-GET /img-toolbox/version.json
+GET /version.json
   → 200 {"schemaVersion":1,"version":"3.1.0","builtAt":"...","assets":{...}}
 ```
 
@@ -391,11 +414,11 @@ GET /img-toolbox/version.json
   "builtAt": "2026-10-29T13:40:00Z",
   "assets": { "...": "..." },
   "channels": {
-    "stable": "/img-toolbox/version.json",
-    "beta": "/img-toolbox/beta/version.json"
+    "stable": "/version.json",
+    "beta": "/beta/version.json"
   },
   "rollout": {
-    "manifestUrl": "/img-toolbox/v3.1.0-beta.1/version.json",
+    "manifestUrl": "/v3.1.0-beta.1/version.json",
     "percent": 10,
     "uaInclude": ["MicroMessenger"],
     "uaExclude": ["HeadlessChrome"],
@@ -407,6 +430,7 @@ GET /img-toolbox/version.json
 字段语义（冻结形状，求值逻辑未来实现）：
 
 > 下面的示例只展示扩展字段，`assets` 用省略写法；真实清单的 `assets` 仍必须满足 §3.2。
+> 注意：`rollout.manifestUrl` 指向「版本目录自带清单」是一种**未来布局**（若启用该方式，版本目录将额外包含自己的 `version.json`）；v1 的版本目录里**不产生**清单文件，`version.json` 仍是唯一指针（§1）。
 
 | 字段 | 说明 |
 |------|------|
@@ -438,14 +462,15 @@ GET /img-toolbox/version.json
 
 | # | 待办 | 落点建议 |
 |---|------|----------|
-| 1 | 构建输出 `dist/web/v{APP_VERSION}/` | `scripts/build.mjs`（web 平台） |
-| 2 | 生成 `version.json`（hash/size） | 新增脚本，纳入构建门禁；清单应可被附录 A Schema 校验 |
-| 3 | 部署脚本上传顺序：资源 → 清单 | `deploy-cf-pages.ps1` |
-| 4 | `_headers` 配置 `no-cache` / `immutable` | `dist/web/_headers`（Cloudflare Pages） |
-| 5 | 版本接口读取与降级 | 阶段 1 的 SDK Loader |
-| 6 | Swift/SW 缓存与 hash 校验 | 阶段 1 的 Service Worker（若采用形态 A，注册点在 iframe 内） |
+| 1 | 保持 `dist/web/` 为构建输出；新增打包步骤生成 `dist/release/v{APP_VERSION}/` 与根部当前版本副本 | 新增脚本（在 `pnpm build` 之后运行）；**不要**把版本目录写进 `dist/web`（`build.mjs` 每次 `rmSync`） |
+| 2 | 生成 `dist/release/version.json`（hash/size），合并保留的历史版本 | 新增脚本，纳入构建门禁；清单应可被附录 A Schema 校验 |
+| 3 | 部署根从 `dist/web` 改为 `dist/release`；部署顺序资源 → 清单 | `deploy-cf-pages.ps1` |
+| 4 | 首屏请求复算：当前脚本硬编码 `dist/web/index.html`，需参数化站点根/入口，或对 `dist/release` 另跑一次 | `scripts/verify-web-root-load.mjs` |
+| 5 | `_headers` 配置：根部副本 `no-cache`，`/v{version}/**` `immutable` | `dist/release/_headers`（Cloudflare Pages） |
+| 6 | 版本接口读取与降级 | 阶段 1 的 SDK Loader |
+| 7 | SW 缓存与 hash 校验 | 阶段 1 的 Service Worker（若采用形态 A，注册点在 iframe 内） |
 
-> `scripts/build.mjs` 的文档引用门禁（`verify-doc-refs.mjs`）会校验脚本存在性与文档提及；新增脚本时按 AGENTS.md §6.1 同步更新文档。
+> `scripts/build.mjs` 的文档引用门禁（`verify-doc-refs.mjs`）会校验脚本存在性与文档提及；新增脚本时按 AGENTS.md §6.1（本地开发指南，不随 git 分发）同步更新文档。
 
 ---
 
@@ -565,11 +590,11 @@ Schema 之外仍需人工/脚本校验的规则（JSON Schema 表达成本高）
 
 ```text
 [ ] pnpm build 通过，dist/web 产物齐全
-[ ] dist/web/v{version}/ 内三个必需文件存在
+[ ] dist/release/v{version}/ 内三个必需文件存在（根部另有当前版本副本）
 [ ] version.json 通过附录 A Schema 校验
 [ ] 每个 asset 的 sha256 与 size 与文件一致
 [ ] 线上 /v{version}/app.js 响应 Cache-Control: public, max-age=31536000, immutable
-[ ] 线上 /version.json 响应 Cache-Control: no-cache（且带 ETag）
+[ ] 线上 /version.json 响应 Cache-Control: no-cache；ETag/304 可复现（由平台生成，不要求固定值）
 [ ] 线上资源 Content-Type 正确（应用 nosniff）
 [ ] iframe 入口带 embed=1&hostOrigin=... 可正常 ready
 [ ] 回滚演练：把 version.json 指向上一版本，页面能加载旧版本
@@ -579,9 +604,9 @@ Schema 之外仍需人工/脚本校验的规则（JSON Schema 表达成本高）
 快速检查（curl）：
 
 ```bash
-curl -sI "https://cdn.example.com/img-toolbox/version.json" | grep -i cache-control
-curl -sI "https://cdn.example.com/img-toolbox/v3.0.0/app.js" | grep -i -E 'cache-control|content-type'
-curl -s "https://cdn.example.com/img-toolbox/version.json" | sha256sum   # 与发布记录比对
+curl -sI "https://cdn.example.com/version.json" | grep -i cache-control
+curl -sI "https://cdn.example.com/v3.0.0/app.js" | grep -i -E 'cache-control|content-type'
+curl -s "https://cdn.example.com/version.json" | sha256sum   # 与发布记录比对
 ```
 
 ---
@@ -590,7 +615,8 @@ curl -s "https://cdn.example.com/img-toolbox/version.json" | sha256sum   # 与�
 
 | 日期 | 方式 | 结论 | 处理 |
 |------|------|------|------|
-| 2026-10-29 | 评审：对照 `scripts/build.mjs` 的 Web 产物、`deploy-cf-pages.ps1` 的部署方式、`EMBED_PROTOCOL.md`，并按 DoD 五项检查 | 通过。JSON 结构 / JSON Schema / 缓存头 / 版本路径 / 可用性判定 / 灰度扩展齐全；无关键场景遗漏 | 已回填本文档 |
+| 2026-10-30 | 独立评审：对照 `scripts/build.mjs` 的 Web 产物、`deploy-cf-pages.ps1` 的部署方式、[EMBED_PROTOCOL.md](EMBED_PROTOCOL.md)，并按 DoD 五项检查 | 通过。JSON 结构 / JSON Schema / 缓存头 / 版本路径 / 可用性判定 / 灰度扩展齐全 | 已回填本文档 |
+| 2026-10-30 | 主会话复核：走查发布/回滚全流程，核对 §5.1 / §8 / 附录 B 与 §1 的一致性 | 复核发现发布根目录跨章节不一致，已统一为 `dist/release/` | 已回填本文档 |
 
 评审中确认并修正的点：
 
@@ -599,5 +625,7 @@ curl -s "https://cdn.example.com/img-toolbox/version.json" | sha256sum   # 与�
 - 补充部署脚本必须拒绝覆盖已存在的同名版本目录，强化“版本目录不可变”契约。
 - 明确 Service Worker 的注册边界：跨域 `sdk.js` 不能替 CDN origin 注册 SW；缓存归属按 §6.1 的两种形态处理。
 - 补充首次访问某版本必然走网络、缓存收益从第二次开始，避免把正常首访误判为缓存失效。
-- 修正 `sw.js` 的 `Service-Worker-Allowed` 示例写死 `/img-toolbox/` 的问题，改为 `{base 路径}`。
+- 修正 `sw.js` 的 `Service-Worker-Allowed` 示例写死 `/` 的问题，改为 `{base 路径}`。
 - 给灰度示例加注“assets 省略”，避免被误当成可直接发布的合法清单。
+- 复核修正：统一发布根为 `dist/release/`——§5.1 发布步骤、§8 衔接表与附录 B 检查清单原残留 `dist/web` 口径，照旧实现会让下一次构建 `rmSync(dist/web)` 清掉 `version.json` 与版本目录；已全部统一，并显式补「从持久位置合并历史 `v*/` 目录」步骤。
+- 复核修正：§4.2 站点根副本口径与 §1 规则 6 对齐（副本必发布，保持站点根 `/` 直接访问可用；是否兼作 §6.3 ③ 的降级目标由实现决定），`ETag` 措辞改为不承诺具体值。

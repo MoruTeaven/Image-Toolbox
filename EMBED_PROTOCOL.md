@@ -72,12 +72,12 @@
 ### 2.1 iframe URL
 
 ```text
-https://cdn.example.com/img-toolbox/v3.0.0/index.html?embed=1&hostOrigin=https%3A%2F%2Fapp.example.com
+https://image-toolbox.moruteaven.com/v3.0.0/index.html?embed=1&hostOrigin=https%3A%2F%2Fapp.example.com
 ```
 
 其中：
 
-- `https://cdn.example.com/img-toolbox/v3.0.0/index.html` 来自 version.json 的 `assets["index.html"].url`（见 [VERSION_SPEC.md](VERSION_SPEC.md)）。
+- `https://image-toolbox.moruteaven.com/v3.0.0/index.html` 来自 version.json 的 `assets["index.html"].url`（见 [VERSION_SPEC.md](VERSION_SPEC.md)）。
 - `hostOrigin` 的值必须是**宿主 origin 的 URL 编码结果**，即 `encodeURIComponent(location.origin)`。
 
 ### 2.2 启动参数
@@ -90,7 +90,7 @@ https://cdn.example.com/img-toolbox/v3.0.0/index.html?embed=1&hostOrigin=https%3
 
 规则：
 
-1. `hostOrigin` **必须**等于 `new URL(raw).origin` 的序列化结果（浏览器会把默认端口归一化）。带路径、查询串、末尾斜杠、`null`、`javascript:`、`file:` 一律视为非法，编辑器不进入嵌入模式并在控制台报错，**不发送 `editor:ready`**。
+1. `hostOrigin` **必须**等于 `new URL(raw).origin` 的序列化结果（浏览器会把默认端口归一化）。带路径、查询串、末尾斜杠、`null`、`javascript:`、`file:` 一律视为非法；此时编辑器**渲染明确的错误态并停止初始化，不发送 `editor:ready`**。**不得**回退为普通 Web 页面——回退会让一个可下载文件的完整编辑器跑在错误配置的 iframe 里，违背嵌入模式的全部约束。
 2. 同源嵌入（iframe origin === 宿主 origin）可以省略 `hostOrigin`；此时只接受同源消息，但 `targetOrigin` 仍**不得**使用 `'*'`。
 3. 嵌入模式下的 `?img=` 参数**忽略**：图片一律经 `load-image` 进入，避免两套入口行为不一致。
 4. 除上表参数外，编辑器不读取其它查询参数；宿主也不得依赖任何未文档化的参数。
@@ -100,10 +100,9 @@ https://cdn.example.com/img-toolbox/v3.0.0/index.html?embed=1&hostOrigin=https%3
 ```html
 <iframe
   id="img-toolbox"
-  src="https://cdn.example.com/img-toolbox/v3.0.0/index.html?embed=1&hostOrigin=https%3A%2F%2Fapp.example.com"
+  src="https://image-toolbox.moruteaven.com/v3.0.0/index.html?embed=1&hostOrigin=https%3A%2F%2Fapp.example.com"
   style="width:100%;height:640px;border:0"
   title="图片编辑器"
-  allow="clipboard-write"
 ></iframe>
 ```
 
@@ -119,8 +118,8 @@ https://cdn.example.com/img-toolbox/v3.0.0/index.html?embed=1&hostOrigin=https%3
 |------|------|
 | 布局 | 编辑器铺满 iframe，不出现页面级滚动条 |
 | 账号 | 隐藏账号/登录入口（第三方上下文登录不可靠，且会让宿主页面出现越权入口） |
-| 图片来源 | 只接受 `load-image`；隐藏“选择文件/拖入图片”入口，避免用户导入宿主不知道的图片 |
-| 导出 | **不触发浏览器下载**，改为发送 `editor:exported`（见 §5.2） |
+| 图片来源 | 只接受 `load-image`。必须禁用**全部**本地导入入口：文件选择框、欢迎页拖入图片、**粘贴截图**（document `paste` 导入）、**拖入 ORA/PSD 工程文件**——粘贴与工程文件拖入是源码中真实存在的旁路（`EditorShell` 的 `onPaste`/`onDrop`），漏掉任何一个，用户都能把宿主不知道的图片/工程带进编辑器 |
+| 导出 | **不触发浏览器下载，也不提供“复制到剪贴板”**（状态栏剪贴板导出按钮必须隐藏）；导出结果唯一出口是 `editor:exported`（见 §5.2），由宿主决定保存/上传/写剪贴板 |
 | 关闭 | 若提供用户可见的关闭入口，必须发送 `editor:cancelled`（`reason: "user"`） |
 | 偏好持久化 | 嵌入模式下主题、布局等偏好**不得**写入编辑器 origin 的 localStorage（多个宿主共享同一 CDN origin，会互相串味）；`set-options` 只对当前实例生效 |
 
@@ -160,7 +159,7 @@ https://cdn.example.com/img-toolbox/v3.0.0/index.html?embed=1&hostOrigin=https%3
 4. `channel`、`protocol` 匹配但 `type` 未知 → 静默忽略（向前兼容，新版本可能新增消息）。
 5. `type` 已知但 `payload` 结构不合法 → 编辑器发送 `editor:error`（`INVALID_MESSAGE`）；宿主侧对编辑器事件的非法载荷只记日志、不崩溃。
 6. 命令按到达顺序处理；`load-image` 采用**最新优先**（§4.1）。
-7. 单条消息建议 ≤ 32 MiB（postMessage 会复制数据）。编辑器对超过 **32 MiB** 的 `load-image.src` 直接返回 `LOAD_FAILED`，宿主应在上层先压缩/缩放图片。
+7. 单条消息建议 ≤ 32 MiB（postMessage 会复制数据）。32 MiB 的度量口径：**消息信封序列化后的 JSON 字符串 UTF-8 字节长度**（对 `load-image` 而言主要是 `src` 字符串；base64 传输下它比解码后的二进制大约 25%）。编辑器对超过 **32 MiB** 的 `load-image.src` 直接返回 `LOAD_FAILED`，宿主应在上层先压缩/缩放图片。
 
 ### 3.3 不受信任消息的处理
 
@@ -207,6 +206,8 @@ https://cdn.example.com/img-toolbox/v3.0.0/index.html?embed=1&hostOrigin=https%3
 | 同源相对路径 / 同源绝对 URL | ✅ | 以编辑器页面为基准解析 |
 | 跨源 `https://` | ✅ 有条件 | 图片服务器**必须**返回 CORS 头（编辑器以 `crossOrigin="anonymous"` 加载）。无 CORS 头 → `LOAD_FAILED`（不能因为画布被污染导致后续导出失败） |
 | `http://`、`file:`、`javascript:`、`data:` 非图片 | ❌ | `LOAD_FAILED` |
+
+> **跨域嵌入时 blob 实际不可用**：`blob:` URL 绑定创建方的 origin。跨域嵌入（主场景）下宿主创建的 blob URL 在编辑器 iframe 内**必然加载失败**——宿主拿到 `File`/`Blob` 后应先转成 data URL（`FileReader.readAsDataURL`）再传 `load-image`。表中保留 blob 条目只为同源自托管部署（形态 B，见 VERSION_SPEC.md §6.1）留口。
 
 行为约定：
 
@@ -280,15 +281,16 @@ https://cdn.example.com/img-toolbox/v3.0.0/index.html?embed=1&hostOrigin=https%3
 
 | 字段 | 类型 | 必需 | 取值 | 说明 |
 |------|------|------|------|------|
-| `theme` | string | 否 | `light` \| `dark` \| `system` | 缺省 `light`；`system` 跟随 `prefers-color-scheme` |
+| `theme` | string | 否 | `light` \| `dark` \| `system` | 初始为 `light`（启动参数 `theme` 优先，见 §2.2）；`system` 跟随 `prefers-color-scheme` |
 | `locale` | string | 否 | `zh-CN` | 缺省 `zh-CN`；v1 仅支持中文，其它值忽略并回报 `INVALID_MESSAGE` |
 
 行为约定：
 
 1. 逐字段应用；**未知字段忽略**（向前兼容）；已识别字段的非法值 → 忽略该字段并发送 `INVALID_MESSAGE`（`detail.field` 指出字段），其余字段照常生效。
-2. 配置只对当前 iframe 实例生效，**不写入 localStorage**（嵌入模式约束，见 §2.4）。
-3. 主题、语言变更立即生效，不需要重载 iframe。
-4. 命令幂等。
+2. payload 未提供的字段**保持当前值不变**（例如只发 `{"locale":"zh-CN"}` 不得把主题重置为 `light`）。表中“缺省/初始”描述的是编辑器初始嵌入状态：启动参数 `theme` 优先于该初始值，两者都未提供时才用 `light`（见 §2.2）。
+3. 配置只对当前 iframe 实例生效，**不写入 localStorage**（嵌入模式约束，见 §2.4）。
+4. 主题、语言变更立即生效，不需要重载 iframe。
+5. 命令幂等。
 
 **错误处理**：非法值 → `INVALID_MESSAGE`；不会导致编辑器不可用。
 
@@ -348,7 +350,7 @@ https://cdn.example.com/img-toolbox/v3.0.0/index.html?embed=1&hostOrigin=https%3
 1. 校验 `protocol` 是否在自身支持范围内（v1 SDK 支持 `1`）；不支持 → 移除 iframe 并按宿主自身错误 UI 处理（**不**通过本协议交互）。
 2. 记录 `version` 与 `tools`，用于日志、灰度与能力判断。
 3. 按“先配置、后加载”的顺序发送 `set-options` / `set-tools` / `load-image`。
-4. 若 ready 在 **10 秒**内未到达，视为加载失败（iframe 404、脚本异常、被杀进程），宿主销毁 iframe 并提示重试。
+4. ready 超时：从**创建 iframe 元素那一刻起算 10 秒**（不是 `onload` 之后才起算，避免慢网络下 `onload` 迟迟不到导致计时形同虚设）。超时视为加载失败（iframe 404、脚本异常、被杀进程），宿主销毁 iframe 并提示重试。
 
 > 注意：ready 在图片加载**之前**发送。不要用 ready 判断“图片已显示”。
 
@@ -382,10 +384,10 @@ https://cdn.example.com/img-toolbox/v3.0.0/index.html?embed=1&hostOrigin=https%3
 
 行为约定：
 
-1. **不下载文件**：嵌入模式下禁止触发 `<a download>` / 宿主保存对话框；唯一出口是本事件。
+1. **唯一出口是本事件**：嵌入模式下禁止触发 `<a download>` / 宿主保存对话框，也**禁止“复制到剪贴板”路径**（状态栏剪贴板导出按钮必须隐藏，见 §2.4）；宿主拿到 `editor:exported` 后自行决定保存、上传或写剪贴板。
 2. **v1 没有宿主触发导出的命令**：导出只能由编辑器内的用户操作触发；宿主不要试图用自定义消息让编辑器导出（后续若要支持，按 §9 以新增可选命令的方式演进）。
 3. **会话不结束**：导出后编辑器保持打开，用户可继续编辑或再次导出；由宿主决定何时发 `close`。
-4. 导出失败（画布过大、内存不足、画布被污染）→ `editor:error`（`EXPORT_FAILED`），不发送 `editor:exported`。
+4. 导出失败（画布过大、内存不足、画布被污染、**导出结果 data URL 超过 §3.2 第 7 条的 32 MiB 建议上限**）→ `editor:error`（`EXPORT_FAILED`），不发送 `editor:exported`。
 5. 宿主需要校验：`data` 前缀与 `format` 匹配、`size` 与 data URL 解码长度一致（容差 0）、`width/height` 为正整数；不合法按宿主自身错误处理，**不得**直接写入 DOM 或拼 HTML。
 6. 同一会话允许多次导出；宿主以最后一次为准或自行追加记录。
 
@@ -460,7 +462,7 @@ https://cdn.example.com/img-toolbox/v3.0.0/index.html?embed=1&hostOrigin=https%3
 |------|----------|--------------|----------|
 | `INVALID_MESSAGE` | 命令 `payload` 结构/取值非法：`tools` 为空或全为未知项、`theme/locale` 非法值等 | `false` | 修正参数后重发；不要自动无限重试 |
 | `LOAD_FAILED` | `load-image.src` 非法、超过 32 MiB、网络/CORS 失败、图片解码失败 | `false` | 展示错误、允许换图；保留 iframe |
-| `EXPORT_FAILED` | `canvas.toDataURL` 失败、内存不足、画布被跨域图片污染 | `false` | 提示降低分辨率或重试；保留 iframe |
+| `EXPORT_FAILED` | `canvas.toDataURL` 失败、内存不足、画布被跨域图片污染、导出结果 data URL 超过 32 MiB 上限 | `false` | 提示降低分辨率或重试；保留 iframe |
 | `INTERNAL_ERROR` | 未捕获异常、状态机损坏等兜底 | `true` | 上报宿主监控，移除 iframe，提示重试 |
 
 约定：
@@ -606,7 +608,7 @@ sequenceDiagram
 
 - SDK 支持的协议集合（v1：`{1}`）与 `ready.payload.protocol` 无交集 → 移除 iframe，展示升级提示。
 - 编辑器遇到不支持的 `protocol` 命令 → 忽略 + `console.warn`，不回报（见 §3.2）。
-- 未收到 ready → 10 秒超时，宿主销毁 iframe。
+- 未收到 ready → 从创建 iframe 起算 10 秒超时，宿主销毁 iframe（见 §5.1 第 4 条）。
 
 ### 9.3 与 version.json 的关系
 
@@ -619,7 +621,7 @@ sequenceDiagram
 
 | # | 场景 | 约定 |
 |---|------|------|
-| 1 | iframe 404 / 脚本加载失败 | 宿主 `onload` 后 ready 超时（10s）→ 销毁 + 重试入口；不通过协议交互 |
+| 1 | iframe 404 / 脚本加载失败 | 创建 iframe 起算 ready 超时（10s，见 §5.1）→ 销毁 + 重试入口；不通过协议交互 |
 | 2 | ready 前宿主发了命令 | 宿主必须排队，ready 后按序 flush；编辑器不保证收到 |
 | 3 | 连续两次 `load-image` | 最新优先；旧的完成/失败都不上报；只保留最后一次结果 |
 | 4 | `load-image` 进行中收到 `close` | 取消当前加载（标记 superseded），执行关闭，回 `cancelled(host)` |
@@ -643,7 +645,7 @@ sequenceDiagram
 | 能力 | 建议位置 | 备注 |
 |------|----------|------|
 | 解析 `embed` / `hostOrigin` / `theme` | `clients/web/src/index.js` 或新增 `clients/web/src/embedParams.js` | 纯函数，便于单测 |
-| postMessage 桥（收发、校验、队列） | `clients/web/src/embedBridge.js` | 留在 client 层；`core/` 不得直接使用 `window`（AGENTS.md §3） |
+| postMessage 桥（收发、校验、队列） | `clients/web/src/embedBridge.js` | 留在 client 层；`core/` 非 UI 层不得直接使用 `document`/`window`（仓库开发指南 AGENTS.md §3 的边界约定；该文件仅存在于本地工作区、不随 git 分发） |
 | 驱动 App 加载图片/应用配置/关闭 | 经 HostAdapter 能力域或 EventBus 内部事件 | 不要从桥接层直接调用 `App` 的私有方法 |
 | 导出拦截 | `ExportModule` 增加“嵌入模式导出”分支，或由 `WebHostAdapter` 提供 embed 能力 | 嵌入模式绝不走 `saveImage`/下载 |
 | `set-tools` 白名单 | `ToolManager` / `Toolbar` | 隐藏按钮 + 禁用快捷键 + 激活工具回退 |
@@ -665,24 +667,17 @@ sequenceDiagram
 ### 12.1 宿主侧
 
 ```js
-const ENTRY = 'https://cdn.example.com/img-toolbox/v3.0.0/index.html';
+const ENTRY = 'https://image-toolbox.moruteaven.com/v3.0.0/index.html';
 const HOST_ORIGIN = location.origin;
 const EDITOR_ORIGIN = new URL(ENTRY).origin;
 
 const iframe = document.createElement('iframe');
 iframe.title = '图片编辑器';
 
-let ready = false;
-const queue = [];
-
 function send(type, payload) {
   const message = { channel: 'img-toolbox', protocol: 1, type };
   if (payload !== undefined) message.payload = payload;
   iframe.contentWindow.postMessage(message, EDITOR_ORIGIN);
-}
-
-function whenReady(fn) {
-  ready ? fn() : queue.push(fn);
 }
 
 // 先挂监听，再设置 src：ready 可能在导航完成的第一时间发出。
@@ -692,23 +687,22 @@ window.addEventListener('message', (event) => {
 
   const msg = event.data;
   if (!msg || msg.channel !== 'img-toolbox' || msg.protocol !== 1) return;
+  const payload = msg.payload || {}; // 信封允许省略 payload，统一兜底避免抛异常
 
   switch (msg.type) {
     case 'editor:ready':
-      if (msg.payload.protocol !== 1) {
+      if (payload.protocol !== 1) {
         iframe.remove();
         // 提示 SDK/编辑器版本不兼容
         return;
       }
-      ready = true;
-      queue.splice(0).forEach(fn => fn());
       send('set-options', { theme: 'dark' });
       send('load-image', { src: myImageDataUrl, name: 'avatar.png' });
       break;
 
     case 'editor:exported':
       // 1) 校验 data 前缀与 format；2) 上传/保存；3) 关闭
-      saveExport(msg.payload);
+      saveExport(payload);
       send('close');
       break;
 
@@ -717,8 +711,8 @@ window.addEventListener('message', (event) => {
       break;
 
     case 'editor:error':
-      console.error('[img-toolbox]', msg.payload.code, msg.payload.message);
-      if (msg.payload.fatal) iframe.remove();
+      console.error('[img-toolbox]', payload.code, payload.message);
+      if (payload.fatal) iframe.remove();
       break;
 
     default:
@@ -751,6 +745,8 @@ function readHostOrigin() {
 if (embedded) {
   const hostOrigin = readHostOrigin();
   if (!hostOrigin) {
+    // 非法 hostOrigin：渲染明确的错误态并停止初始化（见 §2.2 规则 1），
+    // 不回退普通 Web 页面、不发送 editor:ready。
     console.error('[embed] 非法 hostOrigin，拒绝嵌入');
   } else {
     // 1) 初始化 App 后发送 ready
@@ -766,7 +762,9 @@ if (embedded) {
 
 | 日期 | 方式 | 结论 | 处理 |
 |------|------|------|------|
-| 2026-10-29 | 评审：对照 `clients/web`、`core/src/app/App.js`、`ExportModule.js`、`CanvasManager.js`、`ToolManager.js`、`theme.js` 逐项核对，并按 DoD 五项检查 | 通过。4 个命令 / 4 个事件、载荷、错误码、4 张时序图、双向 origin/source 校验齐全；无关键场景遗漏 | 已回填本文档 |
+| 2026-10-30 | 独立评审：对照 `clients/web`、`core/src/app/App.js`、`ExportModule.js`、`CanvasManager.js`、`ToolManager.js`、`theme.js` 逐项核对，并按 DoD 五项检查 | 通过。4 个命令 / 4 个事件、载荷、错误码、4 张时序图、双向 origin/source 校验齐全；无关键场景遗漏 | 已回填本文档 |
+| 2026-10-30 | 主会话复核：对照源码事实（`ToolManager` 注册工具、`EXPORT_FORMATS` 导出格式、`imageSourceGuard` 来源白名单、`build.mjs` 产物文件名、`APP_VERSION`）逐节核对，并与 [VERSION_SPEC.md](VERSION_SPEC.md) 交叉一致性检查 | 通过。DoD 五项逐项核对无关键遗漏；发现 2 处表述歧义并澄清；两份文档的域名、参数名、超时值、错误码引用互相一致 | 修正已回填本文档与 [VERSION_SPEC.md](VERSION_SPEC.md) |
+| 2026-10-30 | 独立评审代理第二轮：以「阶段 2 实现者」视角走查全部导入/导出旁路，深入核对 `EditorShell.js`（`onPaste`/`onDrop`）与 `StatusBar.js`（剪贴板导出按钮）源码，并完整走查发布/回滚流程 | 发现 3 条阻断（VERSION_SPEC 发布根目录跨章节矛盾、粘贴/工程文件导入旁路未约定、剪贴板导出旁路未约定）+ 12 条建议；**阻断与建议全部修复后 DoD 第 5 项转通过** | 修正已回填本文档与 [VERSION_SPEC.md](VERSION_SPEC.md) |
 
 评审中确认并修正的点：
 
@@ -776,3 +774,12 @@ if (embedded) {
 - 补充 iframe URL 携带 `hostOrigin` 的 Referer 泄露风险与 `referrerpolicy` 建议。
 - 补充编辑器页面 CSP 必须放行 `img-src data: blob: https:`，否则 `load-image` 的图片来源会被 CSP 拦掉。
 - 明确嵌入模式不得持久化偏好、不得接入账号，避免同一 CDN origin 下多宿主串味。
+- 全文示例域名统一为本项目真实站点 `image-toolbox.moruteaven.com`（与 VERSION_SPEC.md 附录 A Schema 的 `$id` 一致），避免实现者误抄 `cdn.example.com`。
+- 澄清 §4.3 `set-options` 的字段缺省语义：payload 未提供的字段**保持当前值不变**，“缺省/初始”仅描述编辑器初始嵌入状态，启动参数 `theme` 优先（修正“只发 `locale` 会把主题重置为 `light`”的歧义）。
+- [VERSION_SPEC.md](VERSION_SPEC.md) §1 部署布局对齐仓库现实：`scripts/build.mjs` 每次构建 `rmSync(dist/web)`，历史版本目录不能留在 `dist/web`，引入 `dist/release/` 发布暂存区（含站点根当前版本副本、`verify-web-root-load.mjs` 参数化等阶段 1 待办）；§3.2 补充 asset 条目未知字段客户端必须忽略，与本文档 §3.2 口径一致。
+- 评审确认的其余设计点（无需改动）：`set-tools` 空数组判非法（避免“空=全部”魔法值歧义，恢复全部 = 发送全部 9 个工具名）、`close` 单向 + 500ms 超时兜底、`editor:exported` 会话不结束（允许多次导出）、错误码 `INVALID_MESSAGE`（校验对象是整条消息，比企划书草稿的 `INVALID_PAYLOAD` 更准确）。
+- 第二轮评审修正：§2.4 补全嵌入模式必须禁用的导入入口清单——**粘贴截图**（document `paste`）与 **ORA/PSD 工程文件拖入**是源码中真实存在的旁路（`EditorShell.onPaste`/`onDrop`），只藏“选择文件/拖入图片”挡不住它们。
+- 第二轮评审修正：§2.4/§5.2 明确**剪贴板导出按钮必须隐藏**（`StatusBar` 的 `status-clipboard` 按钮 → `export:requested 'clipboard'` 不经下载也不发事件，会绕过宿主），导出唯一出口收敛为 `editor:exported`；§2.3 iframe 示例相应移除 `allow="clipboard-write"`。
+- 第二轮评审修正：ready 超时起算点统一为**创建 iframe 起算 10 秒**（§5.1/§9.2/§10，原“onload 后起算”在慢网络下形同虚设）；`hostOrigin` 非法时明确**渲染错误态**而非回退普通 Web 页（回退会让完整可下载编辑器跑在错误配置的 iframe 里）。
+- 第二轮评审修正：32 MiB 上限明确度量口径（信封 JSON 的 UTF-8 字节长度）；导出结果 data URL 超限纳入 `EXPORT_FAILED` 触发清单；§4.1 补跨域嵌入下 blob URL 必然失效、宿主应先转 data URL 的提示；§12.1 参考实现修正 `whenReady` 未使用与 `payload` 缺失防护，§12.2 同步错误态行为。
+- 第二轮评审修正（VERSION_SPEC）：发布根统一为 `dist/release/`（§5.1/§8/附录 B 曾残留 `dist/web` 口径）；§3.2 补根绝对路径以清单 URL origin 为解析基准、子路径部署必须带前缀；§4.2 站点根当前版本副本改“必须发布”（与 §1 规则 6 对齐）；§3.4 明确 `logo.png` 等非首屏文件不必列入 `assets`；§7.2 的 `rollout.manifestUrl` 加“未来布局，v1 版本目录不产生清单”注；AGENTS.md 引用统一加注“本地开发指南，不随 git 分发”。
