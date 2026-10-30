@@ -80,6 +80,7 @@ export const CHANGELOG = [
         { text: '调色新增暖阳、清冷、朦胧、Lomo、Sutro、Nashville、银盐、碳素滤镜预设', platforms: null }
       ],
       fixed: [
+        { text: '修复画布缩放或平移后，图层对齐与分布位置偏移的问题', platforms: null },
         { text: '修复选择滤镜后其它滤镜预览效果不准确的问题', platforms: null },
         { text: '修复裁剪后撤销无法正确恢复裁剪区域的问题', platforms: null },
         { text: '修复连续裁剪或切换工具后图层被裁掉的问题', platforms: null },
