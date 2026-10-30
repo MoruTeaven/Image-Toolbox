@@ -16,6 +16,7 @@
   --color-text-secondary: #637074;
   --color-border: #c8d0d4;
   --color-danger: #c84f46;
+  --color-warning: #b7822a;
   --color-accent: #2f7f86;
   --toolbar-width: 52px;
   --optionsbar-height: 50px;
@@ -39,6 +40,7 @@
   --color-text-secondary: #8e9aa1;
   --color-border: #3b454b;
   --color-danger: #e06a60;
+  --color-warning: #d9a13f;
   --color-accent: #46a0a6;
   --scrollbar-bg: #202529;
   --scrollbar-thumb: #4a555c;
@@ -641,6 +643,64 @@ html, body {
   border-color: rgba(200, 79, 70, 0.4);
   background: rgba(200, 79, 70, 0.1);
   color: var(--color-danger);
+}
+
+/* ── AI 配置页：输入控件、服务商快捷、校验提示 ── */
+.account-page__ai-input {
+  width: 100%;
+  margin-top: 12px;
+  padding: 9px 12px;
+  background: var(--bg-window);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.account-page__ai-input--area {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.account-page__ai-input:focus {
+  border-color: var(--color-accent);
+}
+
+.account-page__ai-input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+.account-page__ai-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.account-page__ai-error {
+  margin-top: 7px;
+  color: var(--color-danger);
+  font-size: 12px;
+}
+
+.account-page__ai-key-hint {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.account-page__ai-test-result {
+  align-self: center;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.account-card--ai-note p {
+  line-height: 1.7;
 }
 
 .account-about {
@@ -1982,6 +2042,62 @@ html, body {
 .ai-note--muted {
   font-size: 11px;
   opacity: 0.85;
+}
+
+.ai-note--warn {
+  color: var(--color-warning, #d9a13f);
+}
+
+/* AI 提示词输入区（属性面板内） */
+.ai-prompt-box {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  resize: vertical;
+  background: transparent;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1.5;
+  outline: none;
+}
+
+.ai-prompt-box:focus {
+  border-color: var(--color-accent);
+}
+
+/* 提示词属性项改为纵向排列（label 在上、输入区在下） */
+.property-item:has(.ai-prompt-box) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+/* 快捷提示词 chips */
+.ai-quick-row {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ai-quick-chip {
+  padding: 3px 10px;
+  background: var(--bg-card);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ai-quick-chip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
 }
 
 .property-item {

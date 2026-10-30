@@ -10,13 +10,15 @@
  *   id          能力标识（也是 EventBus 事件与执行路由的 key）
  *   label       工具面板里的展示名（用户可见文案）
  *   provider    执行该能力的 Provider id（见 AI_PROVIDER_IDS）
- *   model       LocalOnnxProvider 的模型预设键（rmbg-webgpu 的 MODEL_PRESETS）
+ *   entry       面板形态：'action' 一键执行按钮；'prompt' 提示词工程输入区
+ *   model       模型标识（local-onnx 为 rmbg-webgpu 预设键；openai-compat 取用户配置）
  *   description 一句话说明（面板提示文案）
  *   minSelection 是否要求先选中一个图片图层
  */
 
 export const AI_PROVIDER_IDS = {
-  LOCAL_ONNX: 'local-onnx'
+  LOCAL_ONNX: 'local-onnx',
+  OPENAI_COMPAT: 'openai-compat'
 };
 
 export const AI_CAPABILITIES = {
@@ -24,8 +26,18 @@ export const AI_CAPABILITIES = {
     id: 'removeBackground',
     label: '一键抠图',
     provider: AI_PROVIDER_IDS.LOCAL_ONNX,
+    entry: 'action',
     model: 'u2netp',
     description: '识别选中图层中的主体并抠除背景，结果生成为新图层。',
+    minSelection: true
+  },
+  promptEdit: {
+    id: 'promptEdit',
+    label: 'AI 指令编辑',
+    provider: AI_PROVIDER_IDS.OPENAI_COMPAT,
+    entry: 'prompt',
+    model: 'user-configured',
+    description: '用一句话描述想要的效果，AI 返回编辑指令并应用到当前图层。',
     minSelection: true
   }
 };

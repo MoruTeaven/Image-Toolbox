@@ -5,6 +5,8 @@ import { updateCategories, CHANGELOG, PLATFORMS, getAppVersion } from '@moruteav
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
 import IdentityClient from '../identity/IdentityClient.js';
 import { isLocalOnnxAvailable, disposeLocalOnnxProvider } from '../ai/LocalOnnxProvider.js';
+import { AI_CONFIG_FIELDS, AI_SERVICE_PRESETS, getAiConfig, setAiConfigField, validateAiConfig, matchPresetId, maskApiKey } from '../ai/AI_CONFIG.js';
+import { testConnection as testAiConnection } from '../ai/OpenAiCompatProvider.js';
 
 /**
  * 读取平台标识（全局变量嗅探的回退实现）。
@@ -31,7 +33,9 @@ function inferPlatformFromGlobals() {
  */
 function toPlatformTokens(value) {
   const text = String(value ?? '').trim().toLowerCase();
-  if (!text) return [];
+  if (!text) {
+    return [];
+  }
   return Array.from(new Set(text.split(/[^a-z0-9]+/).filter(Boolean)));
 }
 
@@ -42,11 +46,17 @@ function toPlatformTokens(value) {
  * @returns {boolean} 是否应显示
  */
 function shouldShowForCurrentPlatform(platforms, currentPlatform) {
-  if (platforms === null || platforms === undefined) return true;
-  if (!Array.isArray(platforms)) return true;
+  if (platforms === null || platforms === undefined) {
+    return true;
+  }
+  if (!Array.isArray(platforms)) {
+    return true;
+  }
 
   const current = currentPlatform || inferPlatformFromGlobals();
-  if (!current) return false;
+  if (!current) {
+    return false;
+  }
 
   const tokens = toPlatformTokens(current);
   return platforms.some((platform) => {
@@ -58,31 +68,31 @@ function shouldShowForCurrentPlatform(platforms, currentPlatform) {
 export const EDITOR_BARS_LAYOUT_KEY = 'image-toolbox-editor-bars-layout';
 export const EDITOR_BARS_LAYOUTS = {
   PRESETS_TOP: 'presets-top',
-  STATUS_TOP: 'status-top',
+  STATUS_TOP: 'status-top'
 };
 
 export const EDITOR_SIDE_PANEL_POSITION_KEY = 'image-toolbox-editor-side-panel-position';
 export const EDITOR_SIDE_PANEL_POSITIONS = {
   RIGHT: 'right',
-  LEFT: 'left',
+  LEFT: 'left'
 };
 
 export const TOOLBAR_LABELS_VISIBLE_KEY = 'image-toolbox-toolbar-labels-visible';
 export const TOOLBAR_LABELS_VISIBLE = {
   ON: 'on',
-  OFF: 'off',
+  OFF: 'off'
 };
 
 export const TOOLBAR_COLLAPSED_KEY = 'image-toolbox-toolbar-collapsed';
 export const TOOLBAR_COLLAPSED = {
   EXPANDED: 'expanded',
-  COLLAPSED: 'collapsed',
+  COLLAPSED: 'collapsed'
 };
 
 export const TOOLBAR_TOGGLE_VISIBLE_KEY = 'image-toolbox-toolbar-toggle-visible';
 export const TOOLBAR_TOGGLE_VISIBLE = {
   ON: 'on',
-  OFF: 'off',
+  OFF: 'off'
 };
 
 const VALID_EDITOR_BARS_LAYOUTS = new Set(Object.values(EDITOR_BARS_LAYOUTS));
@@ -145,7 +155,9 @@ class AccountPage {
   }
 
   _render() {
-    if (!this._el) return;
+    if (!this._el) {
+      return;
+    }
 
     const sectionTitle = this._getSectionTitle(this._activeSection);
     this._el.innerHTML = `
@@ -164,6 +176,7 @@ class AccountPage {
           <nav class="account-page__nav" aria-label="账户导航">
             ${this._renderNavItem('mine', '我的')}
             ${this._renderNavItem('settings', '设置')}
+            ${this._renderNavItem('ai', 'AI 配置')}
             ${this._renderNavItem('updates', '更新记录')}
             ${this._renderNavItem('about', '关于')}
           </nav>
@@ -192,7 +205,9 @@ class AccountPage {
   }
 
   _bindEvents() {
-    if (!this._el) return;
+    if (!this._el) {
+      return;
+    }
 
     this._eventBusUnsubscribers.push(
       eventBus.on('account:open', () => this.open())
@@ -275,9 +290,25 @@ class AccountPage {
       }
 
       // ── AI 配置 ──
+      const aiPreset = this._closest(e.target, '[data-ai-preset]')?.getAttribute('data-ai-preset');
+      if (aiPreset) {
+        const url = this._closest(e.target, '[data-ai-preset-url]')?.getAttribute('data-ai-preset-url') || '';
+        setAiConfigField('baseUrl', url);
+        this._render();
+        return;
+      }
+
       const aiAction = this._closest(e.target, '[data-ai-action]')?.getAttribute('data-ai-action');
       if (aiAction === 'release') {
         this._releaseAiSession();
+        return;
+      }
+      if (aiAction === 'test') {
+        this._testAiConnection();
+        return;
+      }
+      if (aiAction === 'clear') {
+        this._clearAiConfig();
         return;
       }
 
@@ -304,7 +335,9 @@ class AccountPage {
       }
       if (accountAction === 'save-nickname') {
         const input = this._el?.querySelector('[data-nickname-input]');
-        if (input) this._handleNicknameSave(input.value);
+        if (input) {
+          this._handleNicknameSave(input.value);
+        }
         return;
       }
       if (accountAction === 'upload-avatar') {
@@ -324,12 +357,16 @@ class AccountPage {
       }
       if (modalAction === 'send-magic-link') {
         const emailInput = document.getElementById('login-email-input');
-        if (emailInput) this._handleSendMagicLink(emailInput.value);
+        if (emailInput) {
+          this._handleSendMagicLink(emailInput.value);
+        }
         return;
       }
       if (modalAction === 'verify-magic-link') {
         const tokenInput = document.getElementById('login-token-input');
-        if (tokenInput) this._handleVerifyMagicLink(tokenInput.value);
+        if (tokenInput) {
+          this._handleVerifyMagicLink(tokenInput.value);
+        }
         return;
       }
     });
@@ -342,9 +379,22 @@ class AccountPage {
       }
     });
 
+    // AI 配置字段：随输随存（宿主/本机分层由 AI_CONFIG 决定）。
+    // 这里刻意不触发 _render()：重渲染会打断输入焦点，用户正在填的字段
+    // 会被自己的输入框"吞字"。校验提示在切页或点按钮（测试/清空）时刷新。
+    this._el.addEventListener('input', (e) => {
+      const field = e.target?.getAttribute?.('data-ai-field');
+      if (!field) {
+        return;
+      }
+      setAiConfigField(field, e.target.value);
+    });
+
     this._el.addEventListener('error', (e) => {
       const avatar = e.target.closest?.('.account-page__avatar-img');
-      if (!avatar) return;
+      if (!avatar) {
+        return;
+      }
       const fallback = document.createElement('div');
       fallback.className = avatar.className.replace('account-page__avatar-img', 'account-page__avatar-fallback');
       fallback.textContent = avatar.dataset.initial || 'U';
@@ -362,19 +412,32 @@ class AccountPage {
   }
 
   _closest(target, selector) {
-    if (!target) return null;
+    if (!target) {
+      return null;
+    }
     const match = typeof target.closest === 'function'
       ? target.closest(selector)
       : target.parentElement?.closest?.(selector) || null;
 
-    if (match && typeof this._el?.contains === 'function' && !this._el.contains(match)) return null;
+    if (match && typeof this._el?.contains === 'function' && !this._el.contains(match)) {
+      return null;
+    }
     return match;
   }
 
   _renderSection() {
-    if (this._activeSection === 'settings') return this._renderSettings();
-    if (this._activeSection === 'updates') return this._renderUpdates();
-    if (this._activeSection === 'about') return this._renderAbout();
+    if (this._activeSection === 'settings') {
+      return this._renderSettings();
+    }
+    if (this._activeSection === 'ai') {
+      return this._renderAiConfig();
+    }
+    if (this._activeSection === 'updates') {
+      return this._renderUpdates();
+    }
+    if (this._activeSection === 'about') {
+      return this._renderAbout();
+    }
     return this._renderMine();
   }
 
@@ -430,9 +493,9 @@ class AccountPage {
         <div class="account-card account-card--profile">
           <div class="account-card__avatar-wrap" data-action="upload-avatar" title="点击更换头像">
             ${avatar
-              ? `<img class="account-page__avatar account-page__avatar--large account-page__avatar-img" src="${this._escapeAttr(avatar)}" alt="${this._escapeAttr(nickname)}" data-initial="${this._escapeAttr(initial)}">`
-              : `<div class="account-page__avatar account-page__avatar--large account-page__avatar-fallback">${this._escapeHTML(initial)}</div>`
-            }
+    ? `<img class="account-page__avatar account-page__avatar--large account-page__avatar-img" src="${this._escapeAttr(avatar)}" alt="${this._escapeAttr(nickname)}" data-initial="${this._escapeAttr(initial)}">`
+    : `<div class="account-page__avatar account-page__avatar--large account-page__avatar-fallback">${this._escapeHTML(initial)}</div>`
+}
             <div class="account-page__avatar-edit-hint"><span>更换</span></div>
           </div>
           <div class="account-card__body">
@@ -458,7 +521,6 @@ class AccountPage {
     const toolbarLabels = this._getToolbarLabelsVisible();
     const toolbarCollapsed = this._getToolbarCollapsed();
     const toolbarToggleVisible = this._getToolbarToggleVisible();
-    const aiAvailable = isLocalOnnxAvailable();
     return `
       <div class="account-card">
         <div class="account-card__label">外观</div>
@@ -530,25 +592,93 @@ class AccountPage {
           <button class="account-page__theme-choice ${toolbarToggleVisible === TOOLBAR_TOGGLE_VISIBLE.OFF ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-toggle-visible="${TOOLBAR_TOGGLE_VISIBLE.OFF}">隐藏按钮</button>
         </div>
       </div>
+    `;
+  }
 
-      <div class="account-card">
+  /**
+   * AI 配置页（「设置」与「更新记录」之间的独立导航项）。
+   *
+   * 字段清单派生自 ai/AI_CONFIG.js 的 AI_CONFIG_FIELDS（唯一权威来源），
+   * 服务商地址从 AI_SERVICE_PRESETS 派生；本方法不维护任何字段列表。
+   * @returns {string}
+   */
+  _renderAiConfig() {
+    const config = getAiConfig();
+    const validation = validateAiConfig(config);
+    const ready = validation.ok;
+    const presetId = matchPresetId(config.baseUrl);
+    const localReady = isLocalOnnxAvailable();
+
+    const presetRow = (field) => {
+      if (field.key !== 'baseUrl') {
+        return '';
+      }
+      return `
+        <div class="account-page__ai-presets">
+          ${AI_SERVICE_PRESETS.map((preset) => `
+            <button class="account-page__theme-choice ${presetId === preset.id ? 'account-page__theme-choice--active' : ''}"
+                    type="button" data-ai-preset="${preset.id}" data-ai-preset-url="${this._escapeAttr(preset.baseUrl)}">${this._escapeHTML(preset.label)}</button>
+          `).join('')}
+        </div>
+      `;
+    };
+
+    const fields = Object.values(AI_CONFIG_FIELDS).filter((field) => field.key !== 'draft').map((field) => {
+      const value = config[field.key] || '';
+      const input = field.multiline
+        ? `<textarea class="account-page__ai-input account-page__ai-input--area" data-ai-field="${field.key}" maxlength="${field.maxlength}" placeholder="${this._escapeAttr(field.placeholder)}" rows="${field.key === 'systemPrompt' ? 7 : 3}">${this._escapeHTML(value)}</textarea>`
+        : `<input class="account-page__ai-input" type="${field.key === 'apiKey' ? 'password' : 'text'}" data-ai-field="${field.key}" maxlength="${field.maxlength}" placeholder="${this._escapeAttr(field.placeholder)}" value="${this._escapeAttr(value)}" autocomplete="off" spellcheck="false">`;
+      const error = validation.errors[field.key]
+        ? `<div class="account-page__ai-error">${this._escapeHTML(validation.errors[field.key])}</div>`
+        : '';
+      return `
+        <div class="account-card">
+          <div class="account-card__label">AI</div>
+          <div class="account-card__value">${this._escapeHTML(field.label)}</div>
+          <p>${this._escapeHTML(field.description)}</p>
+          ${presetRow(field)}
+          ${input}
+          ${error}
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="account-card account-card--ai-status">
         <div class="account-card__label">AI</div>
-        <div class="account-card__value">AI 修图</div>
-        <p>一键抠图在本地完成推理，图片不会上传到服务器。模型 u2netp（约 4.4 MB，Apache-2.0），推理引擎 onnxruntime-web（MIT），无需网络与密钥。</p>
+        <div class="account-card__value">配置状态</div>
+        <p>配置完成后，在编辑器左侧选「AI 修图」工具，于右侧栏直接写提示词即可让 AI 编辑当前图片。</p>
         <div class="account-page__theme-row">
-          <span class="account-page__ai-status ${aiAvailable ? 'account-page__ai-status--ready' : 'account-page__ai-status--unavailable'}">
-            ${aiAvailable ? '本地推理可用' : '模型资源不可用'}
+          <span class="account-page__ai-status ${ready ? 'account-page__ai-status--ready' : 'account-page__ai-status--unavailable'}">
+            ${ready ? '云端 AI 已就绪' : '云端 AI 未配置'}
           </span>
+          <span class="account-page__ai-status ${localReady ? 'account-page__ai-status--ready' : 'account-page__ai-status--unavailable'}">
+            本地一键抠图${localReady ? '可用' : '不可用'}
+          </span>
+          ${config.apiKey ? `<span class="account-page__ai-key-hint">Key 已保存：${this._escapeHTML(maskApiKey(config.apiKey))}</span>` : ''}
+        </div>
+        <div class="account-page__theme-row">
+          <button class="account-page__btn account-page__btn--primary" type="button" data-ai-action="test">测试连接</button>
+          <button class="account-page__btn" type="button" data-ai-action="clear">清空配置</button>
+          <span class="account-page__ai-test-result" data-ai-test-result></span>
         </div>
       </div>
 
+      ${fields}
+
       <div class="account-card">
         <div class="account-card__label">AI</div>
-        <div class="account-card__value">推理会话</div>
-        <p>推理会话常驻内存以加快重复抠图。释放后再次使用会重新加载模型（数秒）。</p>
+        <div class="account-card__value">本地推理会话</div>
+        <p>一键抠图在本地完成，图片不会上传。会话常驻内存以加快重复抠图；释放后再次使用会重新加载模型。</p>
         <div class="account-page__theme-row">
           <button class="account-page__theme-choice" type="button" data-ai-action="release">释放推理会话</button>
         </div>
+      </div>
+
+      <div class="account-card account-card--ai-note">
+        <div class="account-card__label">隐私</div>
+        <div class="account-card__value">数据去向</div>
+        <p>本地一键抠图全程在本机完成，不联网。云端 AI 只会把你填写的服务地址收到的一张 ≤777px 预览图与提示词发给该服务商；原图不会上传，API Key 只保存在本机、只发往你填写的地址。</p>
       </div>
     `;
   }
@@ -564,6 +694,43 @@ class AccountPage {
     } catch (e) {
       eventBus.emit('toast:show', { message: e?.message || '释放推理会话失败', type: 'error' });
     }
+  }
+
+  /**
+   * 清空 AI 配置（含本机 API Key）。
+   */
+  _clearAiConfig() {
+    // 字段清单由 AI_CONFIG_FIELDS 派生（唯一权威来源），只排除草稿：
+    // 提示词草稿不是凭据，一并清空会让用户误删自己刚写的内容。
+    Object.keys(AI_CONFIG_FIELDS)
+      .filter((fieldKey) => fieldKey !== 'draft')
+      .forEach((fieldKey) => {
+        setAiConfigField(fieldKey, '');
+      });
+    this._render();
+    eventBus.emit('toast:show', { message: 'AI 配置已清空（含本机保存的 API Key）', type: 'success' });
+  }
+
+  /**
+   * 测试 AI 服务商连通性（实现在 OpenAiCompatProvider，网络出口走 AIPort）。
+   * 结果不含 Key，只展示服务商状态与模型列表摘要。
+   */
+  async _testAiConnection() {
+    const resultEl = this._el?.querySelector('[data-ai-test-result]');
+    if (resultEl) {
+      resultEl.textContent = '正在测试…';
+    }
+    const result = await testAiConnection();
+    if (resultEl) {
+      resultEl.textContent = '';
+    }
+    if (result.ok) {
+      this._render();
+    }
+    eventBus.emit('toast:show', {
+      message: result.ok ? result.message : `连接失败：${result.message}`,
+      type: result.ok ? 'success' : 'error'
+    });
   }
 
   _renderAbout() {
@@ -654,21 +821,27 @@ class AccountPage {
     `;
   }
 
-   _renderChangeGroup(record, category) {
-     const items = record.changes?.[category.key] || [];
-     if (items.length === 0) return '';
+  _renderChangeGroup(record, category) {
+    const items = record.changes?.[category.key] || [];
+    if (items.length === 0) {
+      return '';
+    }
 
-     // 过滤出当前平台应显示的项目
-     const visibleItems = items.filter(item => {
-       // 兼容旧格式（字符串）
-       if (typeof item === 'string') return true;
-       // 新格式（对象）- 检查平台限制
-       return shouldShowForCurrentPlatform(item.platforms, this._getCurrentPlatform());
-     });
+    // 过滤出当前平台应显示的项目
+    const visibleItems = items.filter(item => {
+      // 兼容旧格式（字符串）
+      if (typeof item === 'string') {
+        return true;
+      }
+      // 新格式（对象）- 检查平台限制
+      return shouldShowForCurrentPlatform(item.platforms, this._getCurrentPlatform());
+    });
 
-     if (visibleItems.length === 0) return '';
+    if (visibleItems.length === 0) {
+      return '';
+    }
 
-     return `
+    return `
        <div class="update-record__group update-record__group--${category.key}">
          <div class="update-record__group-title">${this._escapeHTML(category.title)}</div>
          <ul>
@@ -676,21 +849,21 @@ class AccountPage {
          </ul>
        </div>
      `;
-   }
+  }
 
-   /**
+  /**
     * 渲染单个更新项（仅展示文本内容，不展示平台标签）
     */
-   _renderChangeItem(item) {
-     // 兼容旧格式（字符串）
-     if (typeof item === 'string') {
-       return `<li>${this._escapeHTML(item)}</li>`;
-     }
+  _renderChangeItem(item) {
+    // 兼容旧格式（字符串）
+    if (typeof item === 'string') {
+      return `<li>${this._escapeHTML(item)}</li>`;
+    }
 
-     // 新格式（对象）— 仅展示文本，平台过滤已在 _renderChangeGroup 中完成
-     const text = item.text || '';
-     return `<li>${this._escapeHTML(text)}</li>`;
-   }
+    // 新格式（对象）— 仅展示文本，平台过滤已在 _renderChangeGroup 中完成
+    const text = item.text || '';
+    return `<li>${this._escapeHTML(text)}</li>`;
+  }
 
   /**
    * 复制更新日志到剪贴板。
@@ -706,7 +879,7 @@ class AccountPage {
     const ok = await this._writeClipboardText(text);
     eventBus.emit('toast:show', {
       message: ok ? '更新日志已复制' : '复制失败，请手动选择文本复制',
-      type: ok ? 'success' : 'error',
+      type: ok ? 'success' : 'error'
     });
   }
 
@@ -723,13 +896,17 @@ class AccountPage {
         const visibleItems = items
           .map((item) => (typeof item === 'string' ? item : item?.text || ''))
           .filter((item) => {
-            if (typeof item === 'string') return true;
+            if (typeof item === 'string') {
+              return true;
+            }
             return shouldShowForCurrentPlatform(item.platforms, this._getCurrentPlatform());
           })
           .map((item) => String(item).trim())
           .filter(Boolean);
 
-        if (visibleItems.length === 0) return;
+        if (visibleItems.length === 0) {
+          return;
+        }
 
         lines.push(`【${category.title}】`);
         visibleItems.forEach((item) => lines.push(`- ${item}`));
@@ -747,7 +924,9 @@ class AccountPage {
   async _writeClipboardText(text) {
     try {
       const ok = await this._host?.clipboard?.writeText?.(text);
-      if (ok) return true;
+      if (ok) {
+        return true;
+      }
     } catch (e) {
       console.warn('[AccountPage] 宿主剪贴板写入失败:', e);
     }
@@ -770,7 +949,9 @@ class AccountPage {
    * @returns {boolean}
    */
   _writeClipboardTextFallback(text) {
-    if (typeof document === 'undefined') return false;
+    if (typeof document === 'undefined') {
+      return false;
+    }
 
     try {
       const textarea = document.createElement('textarea');
@@ -811,7 +992,7 @@ class AccountPage {
       name,
       avatar,
       initial: this._getInitial(name),
-      status: this._user ? `已连接 ${hostName} 用户信息` : `未获取到 ${hostName} 用户信息`,
+      status: this._user ? `已连接 ${hostName} 用户信息` : `未获取到 ${hostName} 用户信息`
     };
   }
 
@@ -819,8 +1000,9 @@ class AccountPage {
     const titles = {
       mine: '我的',
       settings: '设置',
+      ai: 'AI 配置',
       updates: '更新记录',
-      about: '关于',
+      about: '关于'
     };
     return titles[section] || titles.mine;
   }
@@ -842,7 +1024,9 @@ class AccountPage {
    */
   _getCurrentVersion() {
     const hostVersion = this._getHostPluginVersion();
-    if (hostVersion) return this._formatVersion(hostVersion);
+    if (hostVersion) {
+      return this._formatVersion(hostVersion);
+    }
 
     console.warn('[AccountPage] 未能从宿主读取插件版本，回退到 APP_VERSION');
     return this._formatVersion(getAppVersion());
@@ -855,7 +1039,9 @@ class AccountPage {
   _getHostPluginVersion() {
     try {
       const version = this._host?.platform?.appVersion;
-      if (version && String(version).trim()) return String(version).trim();
+      if (version && String(version).trim()) {
+        return String(version).trim();
+      }
     } catch (e) {
       console.warn('[AccountPage] 获取插件版本失败:', e);
     }
@@ -875,12 +1061,16 @@ class AccountPage {
 
   _formatVersion(version) {
     const text = String(version || '').trim();
-    if (!text) return '未知';
+    if (!text) {
+      return '未知';
+    }
     return /^v/i.test(text) ? text : `v${text}`;
   }
 
   _openExternalUrl(url) {
-    if (!url) return;
+    if (!url) {
+      return;
+    }
 
     try {
       if (this._host?.system?.openExternal?.(url) || this._host?.openHostExternal?.(url)) {
@@ -894,7 +1084,9 @@ class AccountPage {
   }
 
   _setSidePanelLayout(layout) {
-    if (!Object.values(SIDE_PANEL_LAYOUTS).includes(layout)) return;
+    if (!Object.values(SIDE_PANEL_LAYOUTS).includes(layout)) {
+      return;
+    }
 
     localStorage.setItem(SIDE_PANEL_LAYOUT_KEY, layout);
     this._sidePanelTabs?.applyLayout(layout, false);
@@ -902,35 +1094,45 @@ class AccountPage {
   }
 
   _setEditorBarsLayout(layout) {
-    if (!VALID_EDITOR_BARS_LAYOUTS.has(layout)) return;
+    if (!VALID_EDITOR_BARS_LAYOUTS.has(layout)) {
+      return;
+    }
 
     localStorage.setItem(EDITOR_BARS_LAYOUT_KEY, layout);
     eventBus.emit('editorBars:layoutChanged', layout);
   }
 
   _setEditorSidePanelPosition(position) {
-    if (!VALID_EDITOR_SIDE_PANEL_POSITIONS.has(position)) return;
+    if (!VALID_EDITOR_SIDE_PANEL_POSITIONS.has(position)) {
+      return;
+    }
 
     localStorage.setItem(EDITOR_SIDE_PANEL_POSITION_KEY, position);
     eventBus.emit('editorSidePanel:positionChanged', position);
   }
 
   _setToolbarLabelsVisible(value) {
-    if (!VALID_TOOLBAR_LABELS_VISIBLE.has(value)) return;
+    if (!VALID_TOOLBAR_LABELS_VISIBLE.has(value)) {
+      return;
+    }
 
     localStorage.setItem(TOOLBAR_LABELS_VISIBLE_KEY, value);
     eventBus.emit('toolbar:labelsVisibilityChanged', value);
   }
 
   _setToolbarCollapsed(value) {
-    if (!VALID_TOOLBAR_COLLAPSED.has(value)) return;
+    if (!VALID_TOOLBAR_COLLAPSED.has(value)) {
+      return;
+    }
 
     localStorage.setItem(TOOLBAR_COLLAPSED_KEY, value);
     eventBus.emit('toolbar:collapsedChanged', value);
   }
 
   _setToolbarToggleVisible(value) {
-    if (!VALID_TOOLBAR_TOGGLE_VISIBLE.has(value)) return;
+    if (!VALID_TOOLBAR_TOGGLE_VISIBLE.has(value)) {
+      return;
+    }
 
     localStorage.setItem(TOOLBAR_TOGGLE_VISIBLE_KEY, value);
     eventBus.emit('toolbar:toggleVisibleChanged', value);
@@ -993,9 +1195,13 @@ class AccountPage {
   _getCurrentPlatform() {
     try {
       const id = this._host?.platform?.id;
-      if (id) return String(id);
+      if (id) {
+        return String(id);
+      }
       const name = this._host?.platform?.name || this._host?.getHostName?.();
-      if (name) return String(name);
+      if (name) {
+        return String(name);
+      }
     } catch (e) {
       console.warn('[AccountPage] 获取平台标识失败:', e);
     }
@@ -1022,7 +1228,9 @@ class AccountPage {
    * @returns {object|null}
    */
   _getHostApi() {
-    if (typeof window === 'undefined') return null;
+    if (typeof window === 'undefined') {
+      return null;
+    }
 
     const bridged = window.__imageToolboxApi || null;
     if (bridged && typeof bridged.fetchUserServerTemporaryToken === 'function') {
@@ -1044,7 +1252,9 @@ class AccountPage {
   _getContactUrl() {
     try {
       const url = this._host?.getContactUrl?.();
-      if (url) return url;
+      if (url) {
+        return url;
+      }
     } catch (e) {
       console.warn('[AccountPage] 获取联系方式失败:', e);
     }
@@ -1057,9 +1267,13 @@ class AccountPage {
   }
 
   _formatTime(ts) {
-    if (!ts) return '—';
+    if (!ts) {
+      return '—';
+    }
     const d = new Date(typeof ts === 'number' ? ts : Date.parse(ts));
-    if (isNaN(d.getTime())) return '—';
+    if (isNaN(d.getTime())) {
+      return '—';
+    }
     return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   }
 
@@ -1191,12 +1405,16 @@ class AccountPage {
       }
       if (modalAction === 'send-magic-link') {
         const emailInput = document.getElementById('login-email-input');
-        if (emailInput) this._handleSendMagicLink(emailInput.value);
+        if (emailInput) {
+          this._handleSendMagicLink(emailInput.value);
+        }
         return;
       }
       if (modalAction === 'verify-magic-link') {
         const tokenInput = document.getElementById('login-token-input');
-        if (tokenInput) this._handleVerifyMagicLink(tokenInput.value);
+        if (tokenInput) {
+          this._handleVerifyMagicLink(tokenInput.value);
+        }
         return;
       }
     };
@@ -1217,7 +1435,9 @@ class AccountPage {
       return;
     }
     try {
-      if (btn) { btn.disabled = true; btn.textContent = '发送中…'; }
+      if (btn) {
+        btn.disabled = true; btn.textContent = '发送中…'; 
+      }
       this._magicLinkSending = true;
       this._magicLinkEmail = email;
       await this._identity.requestMagicLink(email);
@@ -1227,7 +1447,9 @@ class AccountPage {
     } catch (e) {
       eventBus.emit('toast:show', { message: e?.message || '发送失败', type: 'error' });
       this._magicLinkSending = false;
-      if (btn) { btn.disabled = false; btn.textContent = '发送登录链接'; }
+      if (btn) {
+        btn.disabled = false; btn.textContent = '发送登录链接'; 
+      }
     }
   }
 

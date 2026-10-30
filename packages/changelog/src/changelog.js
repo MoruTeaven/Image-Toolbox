@@ -68,10 +68,12 @@ export const APP_VERSION = '3.0.0-dev';
 export const CHANGELOG = [
   {
     version: '3.0.0-dev',
-    date: '2026-10-30',
+    date: '2026-10-31',
     changes: {
       added: [
         { text: '新增 AI 编辑工具，支持背景移除与智能抠图', platforms: null },
+        { text: '新增「AI 配置」页，可接入自己的 OpenAI 兼容服务商', platforms: null },
+        { text: '新增 AI 指令编辑，用一句话描述想要的效果即可自动调色', platforms: null },
         { text: '新增 PSD (Photoshop) 工程文件导入/导出，支持保留图层', platforms: null },
         { text: '调色新增中间调参数，可单独提亮或压暗画面中间层次', platforms: null },
         { text: '调色新增通透、浓郁、褪色、日落、青调、暗调、高反差、柔雾滤镜预设', platforms: null },
