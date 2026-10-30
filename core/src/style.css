@@ -1875,6 +1875,7 @@ html, body {
 .property-section-title,
 .property-empty,
 .property-actions,
+.ai-note,
 .filter-categories,
 .filter-presets {
   grid-column: 1 / -1;
