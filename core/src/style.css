@@ -243,6 +243,49 @@ html, body {
   height: 15px;
 }
 
+/* 完整模式（设置：撤销/重做布局=完整）：恢复为图标+文字的纵向大按钮 */
+.toolbar--history-stacked .toolbar__history {
+  flex-direction: column;
+}
+
+.toolbar--history-stacked .toolbar__history .toolbar__btn {
+  width: 44px;
+  height: 44px;
+  gap: 2px;
+}
+
+.toolbar--history-stacked .toolbar__history .toolbar__btn span {
+  display: inline;
+}
+
+.toolbar--history-stacked .toolbar__history .toolbar__btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.toolbar--history-stacked .toolbar__account {
+  width: 44px;
+  height: 44px;
+}
+
+.toolbar--history-stacked .toolbar__footer {
+  padding-top: 4px;
+}
+
+.toolbar--history-stacked:not(.toolbar--expanded) .toolbar__footer .toolbar__separator {
+  margin: 4px 0;
+}
+
+/* 「隐藏文字标签」开启时，完整模式下撤销/重做同样只留图标，并与其它按钮同尺寸 */
+.toolbar--labels-hidden.toolbar--history-stacked .toolbar__history .toolbar__btn {
+  width: 36px;
+  height: 36px;
+}
+
+.toolbar--labels-hidden.toolbar--history-stacked .toolbar__history .toolbar__btn span {
+  display: none;
+}
+
 .toolbar__separator {
   display: none;
 }

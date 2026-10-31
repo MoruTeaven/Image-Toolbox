@@ -1,6 +1,6 @@
 import { eventBus } from '../index.js';
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
-import { TOOLBAR_LABELS_VISIBLE_KEY, TOOLBAR_LABELS_VISIBLE, TOOLBAR_COLLAPSED_KEY, TOOLBAR_COLLAPSED, TOOLBAR_TOGGLE_VISIBLE_KEY, TOOLBAR_TOGGLE_VISIBLE } from './AccountPage.js';
+import { TOOLBAR_LABELS_VISIBLE_KEY, TOOLBAR_LABELS_VISIBLE, TOOLBAR_COLLAPSED_KEY, TOOLBAR_COLLAPSED, TOOLBAR_TOGGLE_VISIBLE_KEY, TOOLBAR_TOGGLE_VISIBLE, TOOLBAR_HISTORY_LAYOUT_KEY, TOOLBAR_HISTORY_LAYOUT } from './AccountPage.js';
 import IdentityClient from '../identity/IdentityClient.js';
 
 /**
@@ -48,6 +48,7 @@ class Toolbar {
     this._render();
     this._bindEvents();
     this._applyLabelsVisibility();
+    this._applyHistoryLayout();
     this._applyToolbarState();
     this._applyToggleVisible();
     this._loadProfileIfAuthenticated();
@@ -166,6 +167,9 @@ class Toolbar {
       eventBus.on('toolbar:labelsVisibilityChanged', (value) => {
         this._applyLabelsVisibility(value);
       }),
+      eventBus.on('toolbar:historyLayoutChanged', (value) => {
+        this._applyHistoryLayout(value);
+      }),
       eventBus.on('toolbar:collapsedChanged', (value) => {
         this._applyToolbarState(value);
       }),
@@ -188,6 +192,17 @@ class Toolbar {
     const resolved = value || this._getLabelsVisible();
     if (!this._el) return;
     this._el.classList.toggle('toolbar--labels-hidden', resolved === TOOLBAR_LABELS_VISIBLE.OFF);
+  }
+
+  _getHistoryLayout() {
+    const saved = localStorage.getItem(TOOLBAR_HISTORY_LAYOUT_KEY);
+    return saved === TOOLBAR_HISTORY_LAYOUT.STACKED ? TOOLBAR_HISTORY_LAYOUT.STACKED : TOOLBAR_HISTORY_LAYOUT.COMPACT;
+  }
+
+  _applyHistoryLayout(value) {
+    const resolved = value || this._getHistoryLayout();
+    if (!this._el) return;
+    this._el.classList.toggle('toolbar--history-stacked', resolved === TOOLBAR_HISTORY_LAYOUT.STACKED);
   }
 
   _getCollapsed() {

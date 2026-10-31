@@ -94,11 +94,18 @@ export const TOOLBAR_TOGGLE_VISIBLE = {
   OFF: 'off'
 };
 
+export const TOOLBAR_HISTORY_LAYOUT_KEY = 'image-toolbox-toolbar-history-layout';
+export const TOOLBAR_HISTORY_LAYOUT = {
+  COMPACT: 'compact',
+  STACKED: 'stacked'
+};
+
 const VALID_EDITOR_BARS_LAYOUTS = new Set(Object.values(EDITOR_BARS_LAYOUTS));
 const VALID_EDITOR_SIDE_PANEL_POSITIONS = new Set(Object.values(EDITOR_SIDE_PANEL_POSITIONS));
 const VALID_TOOLBAR_LABELS_VISIBLE = new Set(Object.values(TOOLBAR_LABELS_VISIBLE));
 const VALID_TOOLBAR_COLLAPSED = new Set(Object.values(TOOLBAR_COLLAPSED));
 const VALID_TOOLBAR_TOGGLE_VISIBLE = new Set(Object.values(TOOLBAR_TOGGLE_VISIBLE));
+const VALID_TOOLBAR_HISTORY_LAYOUT = new Set(Object.values(TOOLBAR_HISTORY_LAYOUT));
 
 /**
  * Account page UI component.
@@ -284,6 +291,13 @@ class AccountPage {
       const toolbarToggleVisible = this._closest(e.target, '[data-toolbar-toggle-visible]')?.getAttribute('data-toolbar-toggle-visible');
       if (toolbarToggleVisible) {
         this._setToolbarToggleVisible(toolbarToggleVisible);
+        this._render();
+        return;
+      }
+
+      const toolbarHistoryLayout = this._closest(e.target, '[data-toolbar-history-layout]')?.getAttribute('data-toolbar-history-layout');
+      if (toolbarHistoryLayout) {
+        this._setToolbarHistoryLayout(toolbarHistoryLayout);
         this._render();
         return;
       }
@@ -516,6 +530,7 @@ class AccountPage {
     const toolbarLabels = this._getToolbarLabelsVisible();
     const toolbarCollapsed = this._getToolbarCollapsed();
     const toolbarToggleVisible = this._getToolbarToggleVisible();
+    const toolbarHistoryLayout = this._getToolbarHistoryLayout();
     return `
       <div class="account-card">
         <div class="account-card__label">外观</div>
@@ -565,6 +580,16 @@ class AccountPage {
         <div class="account-page__theme-row">
           <button class="account-page__theme-choice ${toolbarLabels === TOOLBAR_LABELS_VISIBLE.ON ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-labels="${TOOLBAR_LABELS_VISIBLE.ON}">显示文字</button>
           <button class="account-page__theme-choice ${toolbarLabels === TOOLBAR_LABELS_VISIBLE.OFF ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-labels="${TOOLBAR_LABELS_VISIBLE.OFF}">仅图标</button>
+        </div>
+      </div>
+
+      <div class="account-card">
+        <div class="account-card__label">编辑器</div>
+        <div class="account-card__value">侧栏撤销/重做布局</div>
+        <p>选择侧栏底部撤销/重做按钮的排布方式。紧凑为两个图标按钮并排，完整为图标加文字的纵向大按钮。</p>
+        <div class="account-page__theme-row">
+          <button class="account-page__theme-choice ${toolbarHistoryLayout === TOOLBAR_HISTORY_LAYOUT.COMPACT ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-history-layout="${TOOLBAR_HISTORY_LAYOUT.COMPACT}">紧凑</button>
+          <button class="account-page__theme-choice ${toolbarHistoryLayout === TOOLBAR_HISTORY_LAYOUT.STACKED ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-history-layout="${TOOLBAR_HISTORY_LAYOUT.STACKED}">完整</button>
         </div>
       </div>
 
@@ -1107,6 +1132,15 @@ class AccountPage {
     eventBus.emit('toolbar:toggleVisibleChanged', value);
   }
 
+  _setToolbarHistoryLayout(value) {
+    if (!VALID_TOOLBAR_HISTORY_LAYOUT.has(value)) {
+      return;
+    }
+
+    localStorage.setItem(TOOLBAR_HISTORY_LAYOUT_KEY, value);
+    eventBus.emit('toolbar:historyLayoutChanged', value);
+  }
+
   _getSidePanelLayout() {
     const saved = localStorage.getItem(SIDE_PANEL_LAYOUT_KEY);
     return Object.values(SIDE_PANEL_LAYOUTS).includes(saved) ? saved : SIDE_PANEL_LAYOUTS.TABS;
@@ -1135,6 +1169,11 @@ class AccountPage {
   _getToolbarToggleVisible() {
     const saved = localStorage.getItem(TOOLBAR_TOGGLE_VISIBLE_KEY);
     return VALID_TOOLBAR_TOGGLE_VISIBLE.has(saved) ? saved : TOOLBAR_TOGGLE_VISIBLE.ON;
+  }
+
+  _getToolbarHistoryLayout() {
+    const saved = localStorage.getItem(TOOLBAR_HISTORY_LAYOUT_KEY);
+    return VALID_TOOLBAR_HISTORY_LAYOUT.has(saved) ? saved : TOOLBAR_HISTORY_LAYOUT.COMPACT;
   }
 
   _getHostUser() {
