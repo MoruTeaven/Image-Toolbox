@@ -4,7 +4,6 @@ import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../utils/theme.
 import { updateCategories, CHANGELOG, PLATFORMS, getAppVersion } from '@moruteaven/img-toolbox_changelog';
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
 import IdentityClient from '../identity/IdentityClient.js';
-import { isLocalOnnxAvailable, disposeLocalOnnxProvider } from '../ai/LocalOnnxProvider.js';
 import { AI_CONFIG_FIELDS, AI_SERVICE_PRESETS, getAiConfig, setAiConfigField, validateAiConfig, matchPresetId, maskApiKey } from '../ai/AI_CONFIG.js';
 import { testConnection as testAiConnection } from '../ai/OpenAiCompatProvider.js';
 
@@ -299,10 +298,6 @@ class AccountPage {
       }
 
       const aiAction = this._closest(e.target, '[data-ai-action]')?.getAttribute('data-ai-action');
-      if (aiAction === 'release') {
-        this._releaseAiSession();
-        return;
-      }
       if (aiAction === 'test') {
         this._testAiConnection();
         return;
@@ -607,7 +602,6 @@ class AccountPage {
     const validation = validateAiConfig(config);
     const ready = validation.ok;
     const presetId = matchPresetId(config.baseUrl);
-    const localReady = isLocalOnnxAvailable();
 
     const presetRow = (field) => {
       if (field.key !== 'baseUrl') {
@@ -652,9 +646,6 @@ class AccountPage {
           <span class="account-page__ai-status ${ready ? 'account-page__ai-status--ready' : 'account-page__ai-status--unavailable'}">
             ${ready ? '云端 AI 已就绪' : '云端 AI 未配置'}
           </span>
-          <span class="account-page__ai-status ${localReady ? 'account-page__ai-status--ready' : 'account-page__ai-status--unavailable'}">
-            本地一键抠图${localReady ? '可用' : '不可用'}
-          </span>
           ${config.apiKey ? `<span class="account-page__ai-key-hint">Key 已保存：${this._escapeHTML(maskApiKey(config.apiKey))}</span>` : ''}
         </div>
         <div class="account-page__theme-row">
@@ -666,34 +657,12 @@ class AccountPage {
 
       ${fields}
 
-      <div class="account-card">
-        <div class="account-card__label">AI</div>
-        <div class="account-card__value">本地推理会话</div>
-        <p>一键抠图在本地完成，图片不会上传。会话常驻内存以加快重复抠图；释放后再次使用会重新加载模型。</p>
-        <div class="account-page__theme-row">
-          <button class="account-page__theme-choice" type="button" data-ai-action="release">释放推理会话</button>
-        </div>
-      </div>
-
       <div class="account-card account-card--ai-note">
         <div class="account-card__label">隐私</div>
         <div class="account-card__value">数据去向</div>
-        <p>本地一键抠图全程在本机完成，不联网。云端 AI 只会把你填写的服务地址收到的一张 ≤777px 预览图与提示词发给该服务商；原图不会上传，API Key 只保存在本机、只发往你填写的地址。</p>
+        <p>云端 AI 只会把你填写的服务地址收到的一张 ≤777px 压缩预览图与提示词发给该服务商；原图不会上传，API Key 只保存在本机、只发往你填写的地址。</p>
       </div>
     `;
-  }
-
-  /**
-   * 释放常驻的本地推理会话（设置页「AI 修图」卡片）。
-   * 释放后下次抠图会重新加载模型，用于回收内存。
-   */
-  async _releaseAiSession() {
-    try {
-      await disposeLocalOnnxProvider();
-      eventBus.emit('toast:show', { message: '推理会话已释放，下次抠图将重新加载模型', type: 'success' });
-    } catch (e) {
-      eventBus.emit('toast:show', { message: e?.message || '释放推理会话失败', type: 'error' });
-    }
   }
 
   /**
