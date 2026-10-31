@@ -14,17 +14,25 @@
  *   HueRotation  色相旋转  rotation   属性 弧度（-π ~ π）
  *   ColorMatrix  色温      matrix     属性 4x5 数组（仅作色温载体，只平移 R/B 常数项，见表内说明）
  *   Invert       反色      invert     属性 布尔开关（预设专用，inUi:false）
+ *                （实际写入的是下面的 InvertIntensity：同一套反色管线，但带类型别名，
+ *                  不会与色温 / 棕褐 / 灰度共用的 ColorMatrix 类型串味）
  *   Blur         高斯模糊  blur       属性 0 ~ 1
  *   Noise        噪点      noise      属性 0 ~ 100（预设专用，inUi:false）
  *   Pixelate     像素化    blocksize  属性 1 ~ 30（预设专用，inUi:false）
  *
- * ⚠ Sepia / Grayscale / Invert 是「无强度属性」的滤镜，别把它们做成滑块：
- *   Sepia 是 ColorMatrix 派生的固定矩阵（mainParameter 为 false），
- *   Grayscale 只有 mode（average / lightness / luminosity），
- *   Invert 只有 invert 布尔开关。
- *   传进去的数值只会成为滤镜对象上的多余字段，画面强度恒定
- *   （棕褐恒为满强度、灰度恒为全灰、反色恒为全反）。所以这几项只当预设的
- *   整体开关用，inUi 一律为 false；改成真正可调强度的方案见看板卡 t-mumiz038-z392ul。
+ * ⚠ 棕褐 / 灰度用的是两份「矩阵插值」的自定义滤镜，不是 fabric 自带的 Sepia / Grayscale：
+ *   fabric 5.3.0 的 Sepia 是从 ColorMatrix 派生的固定矩阵（mainParameter 为 false），
+ *   Grayscale 只有 mode（average / lightness / luminosity），两者都没有强度属性——
+ *   传 { sepia: 0.55 } / { grayscale: 0.2 } 只是塞了个没人读的多余字段，
+ *   画面强度恒为满（看板卡 t-mumiz038-z392ul）。
+ *   现改为两个由 ColorMatrix 派生的自定义滤镜（类型名仍是 Sepia / Grayscale）：
+ *     - 矩阵按强度在「单位矩阵 ↔ 目标矩阵」之间线性插值，强度 0 即恒等（无变化）；
+ *     - 用 ColorMatrix 作为基类，WebGL 与 Canvas2D 走的是 fabric 自己的同一份实现，
+ *       两个后端表现一致；
+ *     - type 沿用 'Sepia' / 'Grayscale'，属性名沿用 sepia / grayscale 且是 mainParameter，
+ *       因此 fabric 的 BaseFilter.toObject 会把强度写进快照（撤销/重做、复制图层、
+ *       ORA 往返后都能读回），旧工程里存的 { type: 'Sepia' } 也能原样反序列化。
+ *   反色（Invert）仍是无强度属性的布尔开关，只当预设的整体开关用，inUi 为 false。
  *
  * 每个 fabric.Image 实例都有一个 filters 数组，滤镜按数组顺序依次应用。
  * 本模块约定：
@@ -183,6 +191,9 @@ export const FILTER_PARAMS = {
     },
   },
   sepia: {
+    // 棕褐：强度 0 ~ 100 对应「原色 → 满强度棕褐」的线性混合。
+    // 由 installIntensityFilters 装到 fabric.Image.filters.Sepia 的强度实现真正按强度插值矩阵，
+    // 不是 fabric 自带那个固定矩阵的 Sepia
     label: '棕褐',
     cls: 'Sepia',
     attr: 'sepia',
@@ -190,11 +201,14 @@ export const FILTER_PARAMS = {
     max: 100,
     step: 1,
     default: 0,
-    inUi: false,
+    inUi: true,
     toFilter: percentToFilter,
     toUi: filterToPercent,
   },
   grayscale: {
+    // 灰度：强度 0 ~ 100 对应「原色 → 全灰」的线性混合。
+    // 由 installIntensityFilters 装到 fabric.Image.filters.Grayscale 的强度实现按 mode 权重插值，
+    // mode 语义保留（average / lightness / luminosity，默认 luminosity）
     label: '灰度',
     cls: 'Grayscale',
     attr: 'grayscale',
@@ -202,18 +216,18 @@ export const FILTER_PARAMS = {
     max: 100,
     step: 1,
     default: 0,
-    inUi: false,
+    inUi: true,
     toFilter: percentToFilter,
     toUi: filterToPercent,
   },
   invert: {
     // 反色（底片）：fabric 5.3 的 Invert 是开关型（invert 为 true/false），
-    // 没有强度属性，别做成滑块——只当预设的整体开关用，与棕褐/灰度同理。
+    // 没有强度属性，别做成滑块——只当预设的整体开关用（棕褐/灰度已是可调强度，见文件头）。
     // UI 值 0 = 关（默认，不写滤镜），1 = 开（写入 invert:true）。
     // 应用顺序刻意排在灰度之后：先变灰再反转才是「底片」，反过来会得到
     // 彩色反转后再压灰的另一种效果。
     label: '反色',
-    cls: 'Invert',
+    cls: 'InvertIntensity',
     attr: 'invert',
     min: 0,
     max: 1,
@@ -262,6 +276,195 @@ export const FILTER_PARAMS = {
     toUi: value => Math.round(value || 0),
   },
 };
+
+// ── 强度型棕褐 / 灰度：ColorMatrix 矩阵插值 ──
+
+/** 4x5 单位矩阵（ColorMatrix.matrix 的格式与默认值） */
+const IDENTITY_MATRIX = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0];
+
+/** 满强度棕褐矩阵（与 CSS filter: sepia(1) 系数相同，即 fabric 自带 Sepia 的那份） */
+const SEPIA_MATRIX = [
+  0.393, 0.769, 0.189, 0, 0,
+  0.349, 0.686, 0.168, 0, 0,
+  0.272, 0.534, 0.131, 0, 0,
+  0, 0, 0, 1, 0,
+];
+
+/**
+ * 灰度权重：保留 fabric 自带 Grayscale 的 mode 语义
+ *
+ * fabric 的 Grayscale 用 mode 字符串区分三种灰度公式，这里保留同名配置，
+ * 只是把每种公式换成等价的矩阵。默认改取 luminosity（0.21/0.72/0.07）：
+ * 平均法与 lightness 法在本项目的历史画面上一直显得偏暗、偏亮，亮度权重最接近
+ * 「去掉颜色、保留明暗」的直觉。旧快照里若还带着 mode，反序列化时照常生效。
+ *
+ * 矩阵布局与 ColorMatrix 一致：下标 = 行 * 5 + 列，行序 R/G/B/A，
+ * 第 0/1/2 行各自的 [列0..列2] 就是「输出 R / G / B 各吃多少原色」。
+ */
+const GRAYSCALE_WEIGHTS = {
+  average: [1 / 3, 1 / 3, 1 / 3],
+  lightness: [0.5, 0.5, 0.5],
+  luminosity: [0.21, 0.72, 0.07],
+};
+
+/** 灰度公式名 → 等价的灰度矩阵 */
+function grayscaleMatrix(mode) {
+  const weights = GRAYSCALE_WEIGHTS[mode] || GRAYSCALE_WEIGHTS.luminosity;
+  return [
+    ...weights, 0, 0,
+    ...weights, 0, 0,
+    ...weights, 0, 0,
+    0, 0, 0, 1, 0,
+  ];
+}
+
+/** 强度（0~1 之外一律钳制）→ 插值后的 4x5 矩阵 */
+function mixMatrix(target, intensity) {
+  const t = clamp(Number(intensity) || 0, 0, 1);
+  return IDENTITY_MATRIX.map((base, i) => base + (target[i] - base) * t);
+}
+
+/** 滤镜实例上可被「按属性重建」的强度类参数 */
+const INTENSITY_FILTER_TYPES = ['sepia', 'grayscale'];
+
+/**
+ * 让强度类滤镜的矩阵始终跟着强度与 mode 走
+ * 实例属性直接被外部改写时（如 fabric 反序列化只 set 快照里的字段）也能自愈
+ */
+function syncIntensityMatrix(filter) {
+  if (filter.type === 'Sepia') {
+    filter.matrix = mixMatrix(SEPIA_MATRIX, filter.sepia);
+  } else if (filter.type === 'Grayscale') {
+    filter.matrix = mixMatrix(grayscaleMatrix(filter.mode), filter.grayscale);
+  }
+}
+
+/**
+ * 安装自定义滤镜到 fabric.Image.filters
+ *
+ * 两个强度滤镜都以 ColorMatrix 为基类：几何、着色器、2D 像素算法全部复用 fabric
+ * 自己的实现，因此 WebGL 与 Canvas2D 两种后端表现一致，也不需要本模块手写任何
+ * 逐像素算法。
+ *
+ *   Sepia      棕褐：单位矩阵 ↔ 标准棕褐矩阵按强度线性混合（type 沿用 'Sepia'）
+ *   Grayscale  灰度：单位矩阵 ↔ 灰度矩阵按 mode 权重混合（type 沿用 'Grayscale'）
+ *
+ * type 刻意沿用 fabric 原生同名滤镜：fabric 的 enlivenObjects 按 json.type 取类
+ * （见 BaseFilter.fromObject），旧工程 / 旧历史栈里的 { type: 'Sepia' } 能被新类
+ * 原样读回；同时 BaseFilter.toObject 只输出 { type, [mainParameter] }，把
+ * sepia / grayscale 设为 mainParameter 就能让强度进快照，不必改写序列化链路。
+ *
+ * 色温也用 ColorMatrix 类，但两者靠 type 区分，互不干扰。
+ */
+function installIntensityFilters() {
+  const ns = (typeof fabric !== 'undefined' && fabric && fabric.Image) ? fabric.Image.filters : null;
+  if (!ns) {
+    return;
+  }
+
+  // 反色实现只依赖 fabric.Invert 那套管线，先单独处理：ColorMatrix 缺失时
+  // 棕褐/灰度装不上，但反色仍要能装（否则底片预设的复制图层会整条链失败）
+  installInvertAlias(ns);
+
+  const BaseFilter = ns.BaseFilter;
+  if (!ns.ColorMatrix || !BaseFilter || !fabric.util || typeof fabric.util.createClass !== 'function') {
+    return;
+  }
+
+  /** 反序列化入口：fabric 按 json.type 从这里取构造器 */
+  const attachFromObject = (Cls) => {
+    Cls.fromObject = BaseFilter.fromObject;
+    return Cls;
+  };
+
+  if (!ns.Sepia || ns.Sepia.__intensityImpl !== true) {
+    const Sepia = fabric.util.createClass(ns.ColorMatrix, {
+      type: 'Sepia',
+      sepia: 0,
+      mainParameter: 'sepia',
+      colorsOnly: true,
+
+      /**
+       * @param {object} [options]
+       * @param {number} [options.sepia] 棕褐强度 0 ~ 1
+       */
+      initialize(options = {}) {
+        // fabric.createClass 会把 this.callSuper 指向父原型方法，
+        // 这里务必写成常量方法名（this.callSuper('initialize', ...)）
+        this.callSuper('initialize', options);
+        syncIntensityMatrix(this);
+      },
+
+      /** 强度 0 等同未套滤镜；给出 delta 供 fabric 的缓存机制判断是否跳过 */
+      isNeutralState(delta = 0) {
+        return (Number(this.sepia) || 0) <= delta;
+      }
+    });
+    Sepia.__intensityImpl = true;
+    ns.Sepia = attachFromObject(Sepia);
+  }
+
+  if (!ns.Grayscale || ns.Grayscale.__intensityImpl !== true) {
+    const Grayscale = fabric.util.createClass(ns.ColorMatrix, {
+      type: 'Grayscale',
+      grayscale: 0,
+      mode: 'luminosity',
+      mainParameter: 'grayscale',
+      colorsOnly: true,
+
+      /**
+       * @param {object} [options]
+       * @param {number} [options.grayscale] 灰度强度 0 ~ 1
+       * @param {string} [options.mode] average | lightness | luminosity
+       */
+      initialize(options = {}) {
+        this.callSuper('initialize', options);
+        syncIntensityMatrix(this);
+      },
+
+      isNeutralState(delta = 0) {
+        return (Number(this.grayscale) || 0) <= delta;
+      }
+    });
+    Grayscale.__intensityImpl = true;
+    ns.Grayscale = attachFromObject(Grayscale);
+  }
+}
+
+/**
+ * 反色：补一个类型固定的别名实现
+ *
+ * fabric 自带的 Invert 会把「关」编码成 type 'Invert'、把「开」编码成 type
+ * 'InvertIntensity'（按主参数决定），而 getKlass('InvertIntensity') 找不到类会抛错——
+ * 底片预设复制图层 / ORA 往返就此整条链失败。别名实现沿用同一套管线，toObject
+ * 恒输出 'InvertIntensity'，往返稳定；旧的 'Invert' 类型仍由 fabric 自带类处理。
+ *
+ * @param {object} ns fabric.Image.filters 命名空间
+ */
+function installInvertAlias(ns) {
+  if (!ns || (ns.InvertIntensity && ns.InvertIntensity.__intensityImpl === true)) {
+    return;
+  }
+  if (!ns.Invert || !ns.BaseFilter || !fabric.util || typeof fabric.util.createClass !== 'function') {
+    return;
+  }
+
+  const InvertIntensity = fabric.util.createClass(ns.Invert, {
+    type: 'InvertIntensity',
+    invert: true,
+
+    initialize(options = {}) {
+      this.callSuper('initialize', { ...options, invert: true });
+    }
+  });
+  InvertIntensity.__intensityImpl = true;
+  InvertIntensity.fromObject = ns.BaseFilter.fromObject;
+  ns.InvertIntensity = InvertIntensity;
+}
+
+// 模块加载即安装（filters.js 只被真实运行时入口引用，此时 fabric 已就位），
+// 下面每个入口再调一次，兼容桩件里「先读模块、后挂 fabric」的测试顺序。
+installIntensityFilters();
 
 /** 全部调色类型，键序即滤镜应用顺序 */
 const ALL_FILTER_TYPES = Object.keys(FILTER_PARAMS);
@@ -399,7 +602,69 @@ export function getFilterUiValue(image, type) {
   if (!filter) return fallback;
 
   const attr = FILTER_ATTR_NAME[type];
+  if (INTENSITY_FILTER_TYPES.includes(type)) {
+    // 强度类：属性可能缺失（旧快照 / 旧版本写进去的多余字段），此时按矩阵反推，
+    // 让「设过 55% 但快照没存」的历史状态也能显示出真实强度而不是 0
+    return filterToUiValue(type, resolveIntensity(filter, type));
+  }
   return filterToUiValue(type, filter[attr]);
+}
+
+/**
+ * 强度类滤镜的强度：属性优先，缺失时从矩阵反推（与 toFilter 互逆）
+ *
+ * 注意「缺失」不能只看 Number(值) 是否有限：旧快照经过 fromObject 后，
+ * 缺失的属性会落到原型上的同名默认值 0（fabric 的滤镜类把默认值写在原型上），
+ * 那个 0 与「真的设过 0%」无法区分，但矩阵是可信的——矩阵非恒等就说明
+ * 快照里带着强度（哪怕属性没写出来），此时按矩阵反推才不会把效果读丢。
+ */
+function resolveIntensity(filter, type) {
+  const rawOwn = filter[FILTER_ATTR_NAME[type]];
+  const matrix = Array.isArray(filter.matrix) ? filter.matrix : null;
+  if (!matrix) {
+    const numeric = Number(rawOwn);
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+
+  const fromMatrix = intensityFromMatrix(matrix, filter.mode, type);
+  // 快照里没写强度（undefined / null）或写了个非数值：一律信矩阵
+  if (rawOwn === null || rawOwn === undefined || !Number.isFinite(Number(rawOwn))) {
+    return fromMatrix;
+  }
+  // 属性是 0 但矩阵不是恒等矩阵：说明属性不是这一遍写进去的（旧快照 / 只留矩阵的镜像），
+  // 仍按矩阵还原，否则会读到 0 并误把仍在生效的滤镜剔除
+  if (Number(rawOwn) === 0 && fromMatrix > 0) {
+    return fromMatrix;
+  }
+  return Number(rawOwn);
+}
+
+/**
+ * 由矩阵反推强度（0 ~ 1）
+ * @param {number[]} matrix 4x5 矩阵
+ * @param {string} [mode] 灰度公式名
+ * @param {'sepia'|'grayscale'} type
+ */
+function intensityFromMatrix(matrix, mode, type) {
+  if (type === 'sepia') {
+    // 首行 = [1 - 0.607t, 0.769t, 0.189t]
+    const base = IDENTITY_MATRIX[0];
+    const target = SEPIA_MATRIX[0];
+    const delta = target - base;
+    if (Math.abs(delta) < 1e-9) {
+      return 0;
+    }
+    return clamp((matrix[0] - base) / delta, 0, 1);
+  }
+  // 灰度每行 = identity 与 [wr·t, wg·t, wb·t] 的混合：GB 列在恒等矩阵里是 0，
+  // 所以矩阵里的 GB 列除以对应权重就是 t（取两者中信号更大的那个）
+  const weights = GRAYSCALE_WEIGHTS[mode] || GRAYSCALE_WEIGHTS.luminosity;
+  const candidates = [matrix[1] / weights[1], matrix[2] / weights[2]]
+    .filter(v => Number.isFinite(v));
+  if (candidates.length === 0) {
+    return 0;
+  }
+  return clamp(Math.max(...candidates), 0, 1);
 }
 
 /**
@@ -412,33 +677,51 @@ export function getFilterUiValue(image, type) {
  *   调用方需在批量结束后自行触发一次重算
  */
 export function setFilter(image, type, uiValue, skipApply = false) {
-  if (!image) return;
+  if (!image) {
+    return;
+  }
+
+  installIntensityFilters();
 
   if (!Array.isArray(image.filters)) {
     image.filters = [];
   }
 
   const param = FILTER_PARAMS[type];
-  if (!param) return;
+  if (!param) {
+    return;
+  }
 
   const FilterClass = getFilterClass(type);
-  if (!FilterClass) return;
+  if (!FilterClass) {
+    return;
+  }
 
   // 移除同类型旧滤镜
   image.filters = image.filters.filter(f => !(f && f.type === param.cls));
 
   // 默认值不写入（避免无效滤镜堆积）
   if (uiValue === getDefaultUiValue(type)) {
-    if (!skipApply) applyFilters(image);
+    if (!skipApply) {
+      applyFilters(image);
+    }
     return;
   }
 
   const filterValue = uiToFilterValue(type, uiValue);
   const filter = new FilterClass({ [param.attr]: filterValue });
+  if (INTENSITY_FILTER_TYPES.includes(type)) {
+    // 显式回写强度后重建矩阵：构造器已按 options 插值过一次，这里再兜一次，
+    // 防止将来有人给强度类滤镜加别的构造分支时矩阵与属性不同步
+    filter[param.attr] = filterValue;
+    syncIntensityMatrix(filter);
+  }
   image.filters.push(filter);
   sortFilters(image);
 
-  if (!skipApply) applyFilters(image);
+  if (!skipApply) {
+    applyFilters(image);
+  }
 }
 
 /**
@@ -519,6 +802,8 @@ export function applyFilterPreset(image, presetName) {
   const preset = FILTER_PRESETS.find(p => p.preset === presetName);
   if (!preset) return false;
 
+  installIntensityFilters();
+
   // 重置全部为默认值，再应用预设覆盖
   // 批量设置时跳过逐次 applyFilters，循环结束后统一应用一次，避免重复重算
   ALL_FILTER_TYPES.forEach(type => {
@@ -527,6 +812,11 @@ export function applyFilterPreset(image, presetName) {
   applyFilters(image);
   return true;
 }
+
+// 撤销/重做、复制图层、ORA 往返后重建图片对象时，fabric 从快照里取滤镜类构造实例。
+// 入口在这里补一次安装，保证「先挂 fabric、后读模块」与「先读模块、后挂 fabric」
+// 两种顺序下自定义滤镜都已就位（fabric 桩件可能读模块时还不存在）。
+export { installIntensityFilters };
 
 /**
  * 计算某个预设应用到图片后的滤镜参数列表（供预览缩略图使用）
@@ -540,6 +830,8 @@ export function applyFilterPreset(image, presetName) {
  */
 export function getPresetFilterValues(preset) {
   if (!preset || !preset.filters) return [];
+
+  installIntensityFilters();
 
   return ALL_FILTER_TYPES.map(type => {
     const uiValue = getPresetParamValue(preset, type);
