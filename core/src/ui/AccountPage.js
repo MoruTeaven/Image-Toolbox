@@ -586,10 +586,10 @@ class AccountPage {
       <div class="account-card">
         <div class="account-card__label">编辑器</div>
         <div class="account-card__value">侧栏撤销/重做布局</div>
-        <p>选择侧栏底部撤销/重做按钮的排布方式。紧凑为两个图标按钮并排，完整为图标加文字的纵向大按钮。</p>
+        <p>选择侧栏底部撤销/重做按钮的排布方式。完整为图标加文字的纵向大按钮，紧凑为两个图标按钮并排。</p>
         <div class="account-page__theme-row">
-          <button class="account-page__theme-choice ${toolbarHistoryLayout === TOOLBAR_HISTORY_LAYOUT.COMPACT ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-history-layout="${TOOLBAR_HISTORY_LAYOUT.COMPACT}">紧凑</button>
           <button class="account-page__theme-choice ${toolbarHistoryLayout === TOOLBAR_HISTORY_LAYOUT.STACKED ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-history-layout="${TOOLBAR_HISTORY_LAYOUT.STACKED}">完整</button>
+          <button class="account-page__theme-choice ${toolbarHistoryLayout === TOOLBAR_HISTORY_LAYOUT.COMPACT ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-history-layout="${TOOLBAR_HISTORY_LAYOUT.COMPACT}">紧凑</button>
         </div>
       </div>
 
@@ -1173,7 +1173,7 @@ class AccountPage {
 
   _getToolbarHistoryLayout() {
     const saved = localStorage.getItem(TOOLBAR_HISTORY_LAYOUT_KEY);
-    return VALID_TOOLBAR_HISTORY_LAYOUT.has(saved) ? saved : TOOLBAR_HISTORY_LAYOUT.COMPACT;
+    return VALID_TOOLBAR_HISTORY_LAYOUT.has(saved) ? saved : TOOLBAR_HISTORY_LAYOUT.STACKED;
   }
 
   _getHostUser() {

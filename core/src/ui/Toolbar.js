@@ -196,13 +196,13 @@ class Toolbar {
 
   _getHistoryLayout() {
     const saved = localStorage.getItem(TOOLBAR_HISTORY_LAYOUT_KEY);
-    return saved === TOOLBAR_HISTORY_LAYOUT.STACKED ? TOOLBAR_HISTORY_LAYOUT.STACKED : TOOLBAR_HISTORY_LAYOUT.COMPACT;
+    return saved === TOOLBAR_HISTORY_LAYOUT.COMPACT ? TOOLBAR_HISTORY_LAYOUT.COMPACT : TOOLBAR_HISTORY_LAYOUT.STACKED;
   }
 
   _applyHistoryLayout(value) {
     const resolved = value || this._getHistoryLayout();
     if (!this._el) return;
-    this._el.classList.toggle('toolbar--history-stacked', resolved === TOOLBAR_HISTORY_LAYOUT.STACKED);
+    this._el.classList.toggle('toolbar--history-compact', resolved === TOOLBAR_HISTORY_LAYOUT.COMPACT);
   }
 
   _getCollapsed() {
