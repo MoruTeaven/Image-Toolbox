@@ -2100,6 +2100,32 @@ html, body {
   color: var(--color-text);
 }
 
+/* 顶部预设栏的提示词预设（平铺，横向溢出由 .optionsbar 滚动承担） */
+.ai-preset-label {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ai-preset-chip {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  background: var(--bg-card);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.ai-preset-chip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
 .property-item {
   grid-column: span 6;
   display: flex;

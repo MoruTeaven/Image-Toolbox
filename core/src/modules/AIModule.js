@@ -1,6 +1,6 @@
 import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
-import { listAiCapabilities, getAiCapability, AI_PROVIDER_IDS } from '../ai/AI_PROVIDERS.js';
+import { listAiCapabilities, getAiCapability, AI_PROVIDER_IDS, AI_PROMPT_PRESETS, getAiPromptPreset } from '../ai/AI_PROVIDERS.js';
 import { runCapability } from '../ai/LocalOnnxProvider.js';
 import { requestInstruction } from '../ai/OpenAiCompatProvider.js';
 import { getAiConfig, isAiConfigReady, setAiConfigField, AI_CONFIG_LIMITS } from '../ai/AI_CONFIG.js';
@@ -74,6 +74,39 @@ class AIModule extends BaseModule {
   }
 
   /**
+   * 顶部预设栏：一批预设提示词（AI_PROMPT_PRESETS 表派生）。
+   * 点击经 OptionsBar 的 [data-preset] 委托路由到 applyPreset——
+   * 只填入右侧栏提示词框、不自动发起请求：预设是"起手式"，
+   * 用户通常还要改几个字；自动执行会让每次误触都变成一次计费请求。
+   * 横向溢出由 .optionsbar 自身的 overflow-x 滚动承担，无需内部容器。
+   * @returns {string}
+   */
+  getOptionsBarHTML() {
+    const chips = AI_PROMPT_PRESETS.map((preset) => `
+      <button type="button" class="ai-preset-chip" data-preset="${preset.id}"
+              title="${this._escapeHtml(preset.prompt)}">${this._escapeHtml(preset.label)}</button>
+    `).join('');
+    return `
+      <span class="ai-preset-label">提示词预设</span>
+      ${chips}
+    `;
+  }
+
+  /**
+   * 顶部预设点击：把预设提示词填入右侧栏草稿并刷新面板。
+   * 面板刷新由 OptionsBar 在本方法返回后统一触发（tool:propertiesChanged）。
+   * @param {string} presetId AI_PROMPT_PRESETS 的 id
+   */
+  applyPreset(presetId) {
+    const preset = getAiPromptPreset(presetId);
+    if (!preset) {
+      return;
+    }
+    setAiConfigField('draft', preset.prompt);
+    eventBus.emit('toast:show', { message: `已填入「${preset.label}」，可在右侧栏修改后执行`, type: 'info' });
+  }
+
+  /**
    * 渲染单个能力区块（按表的 entry 形态派生：action 或 prompt）
    * @param {object} capability AI_CAPABILITIES 表项
    * @returns {string}
@@ -132,8 +165,8 @@ class AIModule extends BaseModule {
       ? '<div class="ai-note ai-note--warn">尚未配置服务商：请到「头像 → AI 配置」填写服务地址、Key 与模型。</div>'
       : `<div class="ai-note ai-note--muted">服务商：${this._escapeHtml(config.model || '')}（仅发送压缩预览图，原图不上传）</div>`;
 
-    const quickPrompt = (label, text) => (
-      `<button type="button" class="ai-quick-chip" data-module-action="${capability.id}:fill:${this._escapeHtml(text)}">${label}</button>`
+    const quickPrompt = (preset) => (
+      `<button type="button" class="ai-quick-chip" data-module-action="${capability.id}:fill:${this._escapeHtml(preset.prompt)}">${this._escapeHtml(preset.label)}</button>`
     );
 
     return `
@@ -147,10 +180,7 @@ class AIModule extends BaseModule {
                   placeholder="例如：整体偏冷一点，提高对比度并压暗高光，主体更突出">${this._escapeHtml(draft)}</textarea>
       </div>
       <div class="ai-quick-row">
-        ${quickPrompt('提亮', '把画面整体提亮，保持自然肤色')}
-        ${quickPrompt('冷色', '整体偏冷色调，降低色温')}
-        ${quickPrompt('黑白', '转换为黑白风格，保留层次感')}
-        ${quickPrompt('去背景', '抠除背景，输出透明底')}
+        ${AI_PROMPT_PRESETS.map((preset) => quickPrompt(preset)).join('')}
       </div>
       ${!target ? '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>' : `
       <div class="ai-note">当前图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>

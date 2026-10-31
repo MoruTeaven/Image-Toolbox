@@ -55,3 +55,30 @@ export function getAiCapability(id) {
 export function listAiCapabilities() {
   return Object.values(AI_CAPABILITIES);
 }
+
+/**
+ * AI_PROMPT_PRESETS — 预设提示词表（唯一权威来源）
+ *
+ * 顶部预设栏与右侧栏快捷 chips 全部由本表派生，新增一条预设 = 在表里
+ * 加一项，不得在 AIModule/OptionsBar 里二次维护提示词清单。
+ *
+ * 字段约定：
+ *   id     预设标识（data-preset 路由用）
+ *   label  按钮短文案
+ *   prompt 填入提示词框的完整文案（须与 AI_INSTRUCTION 的白名单能力匹配，
+ *          否则模型会返回「无可执行指令」）
+ */
+export const AI_PROMPT_PRESETS = [
+  { id: 'brighten', label: '提亮', prompt: '把画面整体提亮，保持自然肤色' },
+  { id: 'cool', label: '冷色', prompt: '整体偏冷色调，降低色温' },
+  { id: 'warm', label: '暖色', prompt: '整体偏暖，提升色温与饱和度' },
+  { id: 'vivid', label: '鲜艳', prompt: '提高饱和度与对比度，色彩更鲜艳' },
+  { id: 'soft', label: '柔雾', prompt: '加一点柔光雾感，降低对比度' },
+  { id: 'mono', label: '黑白', prompt: '转换为黑白风格，保留层次感' },
+  { id: 'cutout', label: '去背景', prompt: '抠除背景，输出透明底' }
+];
+
+/** 按预设 id 取定义；未知 id 返回 null。 */
+export function getAiPromptPreset(id) {
+  return AI_PROMPT_PRESETS.find((preset) => preset.id === id) || null;
+}
