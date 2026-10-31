@@ -92,7 +92,8 @@ export const CHANGELOG = [
         { text: '修复 uTools 启动时控制台反复输出报错信息的问题', platforms: null }
       ],
       improved: [
-        { text: '暖色、鲜艳等滤镜预设改用自然饱和度，颜色更自然', platforms: null }
+        { text: '暖色、鲜艳等滤镜预设改用自然饱和度，颜色更自然', platforms: null },
+        { text: '优化侧栏底部撤销/重做与头像的布局，更紧凑省空间', platforms: null }
       ],
       adjusted: [],
       removed: []

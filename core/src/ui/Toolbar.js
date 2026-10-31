@@ -86,17 +86,19 @@ class Toolbar {
       }
     }
 
-    // 撤销 / 重做
+    // 撤销 / 重做（并排一行紧凑布局，展开态由 CSS 还原为纵向）
     const footerHtml = `
       <div class="toolbar__separator"></div>
-      <button class="toolbar__btn" data-tool="undo" title="返回上一步 (Ctrl+Z)">
-        ${this._icons.undo}
-        <span>返回上一步</span>
-      </button>
-      <button class="toolbar__btn" data-tool="redo" title="撤销返回上一步 (Ctrl+Y)">
-        ${this._icons.redo}
-        <span>撤销返回</span>
-      </button>
+      <div class="toolbar__history">
+        <button class="toolbar__btn" data-tool="undo" title="返回上一步 (Ctrl+Z)">
+          ${this._icons.undo}
+          <span>返回上一步</span>
+        </button>
+        <button class="toolbar__btn" data-tool="redo" title="撤销返回 (Ctrl+Y)">
+          ${this._icons.redo}
+          <span>撤销返回</span>
+        </button>
+      </div>
       ${this._renderAccount()}
     `;
 

@@ -163,7 +163,7 @@ html, body {
 
 .toolbar__footer {
   flex-shrink: 0;
-  padding-top: 4px;
+  padding-top: 2px;
 }
 
 .toolbar__btn {
@@ -218,6 +218,31 @@ html, body {
   width: 28px;
 }
 
+/* 撤销/重做：收起态并排一行、图标化，压缩底部占用（需位于 labels-hidden 规则之后以保证覆盖） */
+.toolbar__history {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.toolbar__history .toolbar__btn {
+  width: 24px;
+  height: 28px;
+  padding: 0;
+  gap: 0;
+}
+
+.toolbar__history .toolbar__btn span {
+  display: none;
+}
+
+.toolbar__history .toolbar__btn svg {
+  width: 15px;
+  height: 15px;
+}
+
 .toolbar__separator {
   display: none;
 }
@@ -227,7 +252,7 @@ html, body {
   width: 36px;
   height: 1px;
   background: var(--color-border);
-  margin: 4px 0;
+  margin: 2px 0;
   flex-shrink: 0;
 }
 
@@ -236,8 +261,8 @@ html, body {
 }
 
 .toolbar__account {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -351,6 +376,29 @@ html, body {
 .toolbar--expanded .toolbar__separator {
   width: auto;
   margin: 4px 8px;
+}
+
+/* 展开态：撤销/重做恢复为纵向图标+文字列表 */
+.toolbar--expanded .toolbar__history {
+  flex-direction: column;
+}
+
+.toolbar--expanded .toolbar__history .toolbar__btn {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.toolbar--expanded .toolbar__history .toolbar__btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.toolbar--expanded .toolbar__history .toolbar__btn span {
+  display: inline;
+  font-size: 12px;
 }
 
 .toolbar--expanded .toolbar__account {
