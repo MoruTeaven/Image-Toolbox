@@ -1,6 +1,7 @@
 import eventBus from './EventBus.js';
 import { CANVAS_DEFAULTS } from './utils/constants.js';
 import { getDomPort } from './ports/DomPort.js';
+import { installIntensityFilters } from './utils/filters.js';
 
 /**
  * 画布管理器 — 封装 Fabric.js 画布的创建、配置和基础操作
@@ -407,6 +408,11 @@ class CanvasManager {
         reject(new Error('画布未初始化'));
         return;
       }
+
+      // 快照里的滤镜由 fabric 按 type 取构造器重建：棕褐/灰度是自定义强度滤镜，
+      // 必须在 loadFromJSON 之前装好，否则历史/工程里的 Sepia / Grayscale
+      // 会被反序列化成没有强度属性的原生滤镜
+      installIntensityFilters();
 
       // Fabric 原生已把 json.clipPath 序列化进快照，loadFromJSON 会自行恢复并
       // delete 掉它。这里只处理一种情况：两个来源都没有裁剪信息（原生 json.clipPath
