@@ -91,7 +91,7 @@ export const FILTER_PARAMS = {
     default: 0,
     inUi: true,
     toFilter: percentToFilter,
-    toUi: filterToPercent,
+    toUi: filterToPercent
   },
   gamma: {
     // Gamma 的属性是 [r, g, b] 数组，这里用单滑块等量控制三个通道：
@@ -112,8 +112,9 @@ export const FILTER_PARAMS = {
     // 属性可能是数组：取首个通道即可还原滑块值（三通道由单滑块等量写入）
     toUi: value => {
       const g = Array.isArray(value) ? value[0] : value;
-      return Math.round(((g == null ? 1 : g) - 1) * 100);
-    },
+      // 属性缺失（null / undefined）时回落到中性值 1；这里显式判空，不用 == null
+      return Math.round(((g === null || g === undefined ? 1 : g) - 1) * 100);
+    }
   },
   contrast: {
     label: '对比',
@@ -125,7 +126,7 @@ export const FILTER_PARAMS = {
     default: 0,
     inUi: true,
     toFilter: percentToFilter,
-    toUi: filterToPercent,
+    toUi: filterToPercent
   },
   saturation: {
     label: '饱和',
@@ -137,7 +138,7 @@ export const FILTER_PARAMS = {
     default: 0,
     inUi: true,
     toFilter: percentToFilter,
-    toUi: filterToPercent,
+    toUi: filterToPercent
   },
   vibrance: {
     // 与「饱和」同向但算法不同：只抬低饱和的区域，肤色与天空不容易调过头。
@@ -151,7 +152,7 @@ export const FILTER_PARAMS = {
     default: 0,
     inUi: true,
     toFilter: value => clamp(value, -VIBRANCE_FULL_SCALE, VIBRANCE_FULL_SCALE) / VIBRANCE_FULL_SCALE,
-    toUi: value => Math.round((value || 0) * VIBRANCE_FULL_SCALE),
+    toUi: value => Math.round((value || 0) * VIBRANCE_FULL_SCALE)
   },
   hue: {
     label: '色相',
@@ -163,7 +164,7 @@ export const FILTER_PARAMS = {
     default: 0,
     inUi: true,
     toFilter: value => clamp(value, -180, 180) * Math.PI / 180,
-    toUi: value => Math.round((value || 0) * 180 / Math.PI),
+    toUi: value => Math.round((value || 0) * 180 / Math.PI)
   },
   temperature: {
     // 色温：暖（正）整体偏红黄，冷（负）整体偏蓝青。复用现成 ColorMatrix 滤镜：
@@ -187,8 +188,9 @@ export const FILTER_PARAMS = {
     // 属性是 4x5 矩阵：从 R 通道常数项（index 4）反算滑块值
     toUi: value => {
       const t = Array.isArray(value) ? value[4] : value;
-      return Math.round((t == null ? 0 : t) * 100);
-    },
+      // 属性缺失时回落到中性值 0（-0 与 0 等价，Math.round 后都是 0）
+      return Math.round((t === null || t === undefined ? 0 : t) * 100);
+    }
   },
   sepia: {
     // 棕褐：强度 0 ~ 100 对应「原色 → 满强度棕褐」的线性混合。
@@ -203,7 +205,7 @@ export const FILTER_PARAMS = {
     default: 0,
     inUi: true,
     toFilter: percentToFilter,
-    toUi: filterToPercent,
+    toUi: filterToPercent
   },
   grayscale: {
     // 灰度：强度 0 ~ 100 对应「原色 → 全灰」的线性混合。
@@ -218,7 +220,7 @@ export const FILTER_PARAMS = {
     default: 0,
     inUi: true,
     toFilter: percentToFilter,
-    toUi: filterToPercent,
+    toUi: filterToPercent
   },
   invert: {
     // 反色（底片）：fabric 5.3 的 Invert 是开关型（invert 为 true/false），
@@ -235,7 +237,7 @@ export const FILTER_PARAMS = {
     default: 0,
     inUi: false,
     toFilter: value => value > 0,
-    toUi: value => (value ? 1 : 0),
+    toUi: value => (value ? 1 : 0)
   },
   blur: {
     label: '模糊',
@@ -247,7 +249,7 @@ export const FILTER_PARAMS = {
     default: 0,
     inUi: true,
     toFilter: value => clamp(value, 0, 100) / 100,
-    toUi: value => Math.round((value || 0) * 100),
+    toUi: value => Math.round((value || 0) * 100)
   },
   noise: {
     // 胶片颗粒质感：随机像素扰动，0 无噪点，100 满强度。预设专用。
@@ -260,7 +262,7 @@ export const FILTER_PARAMS = {
     default: 0,
     inUi: false,
     toFilter: value => Math.round(clamp(value, 0, 100)),
-    toUi: value => Math.round(value || 0),
+    toUi: value => Math.round(value || 0)
   },
   pixelate: {
     // 像素化/马赛克：blocksize=1 原尺寸，越大越粗。预设专用。
@@ -273,8 +275,8 @@ export const FILTER_PARAMS = {
     default: 0,
     inUi: false,
     toFilter: value => Math.max(1, Math.round(clamp(value, 0, 30))),
-    toUi: value => Math.round(value || 0),
-  },
+    toUi: value => Math.round(value || 0)
+  }
 };
 
 // ── 强度型棕褐 / 灰度：ColorMatrix 矩阵插值 ──
@@ -287,7 +289,7 @@ const SEPIA_MATRIX = [
   0.393, 0.769, 0.189, 0, 0,
   0.349, 0.686, 0.168, 0, 0,
   0.272, 0.534, 0.131, 0, 0,
-  0, 0, 0, 1, 0,
+  0, 0, 0, 1, 0
 ];
 
 /**
@@ -304,7 +306,7 @@ const SEPIA_MATRIX = [
 const GRAYSCALE_WEIGHTS = {
   average: [1 / 3, 1 / 3, 1 / 3],
   lightness: [0.5, 0.5, 0.5],
-  luminosity: [0.21, 0.72, 0.07],
+  luminosity: [0.21, 0.72, 0.07]
 };
 
 /** 灰度公式名 → 等价的灰度矩阵 */
@@ -314,7 +316,7 @@ function grayscaleMatrix(mode) {
     ...weights, 0, 0,
     ...weights, 0, 0,
     ...weights, 0, 0,
-    0, 0, 0, 1, 0,
+    0, 0, 0, 1, 0
   ];
 }
 
@@ -493,7 +495,9 @@ ALL_FILTER_TYPES.forEach(type => {
  */
 export const FILTER_RANGES = {};
 ALL_FILTER_TYPES.forEach(type => {
-  if (!FILTER_PARAMS[type].inUi) return;
+  if (!FILTER_PARAMS[type].inUi) {
+    return;
+  }
   const param = FILTER_PARAMS[type];
   FILTER_RANGES[type] = { min: param.min, max: param.max, step: param.step, default: param.default };
 });
@@ -511,7 +515,7 @@ export function getUiFilterItems() {
       min: FILTER_PARAMS[type].min,
       max: FILTER_PARAMS[type].max,
       step: FILTER_PARAMS[type].step,
-      default: FILTER_PARAMS[type].default,
+      default: FILTER_PARAMS[type].default
     }));
 }
 
@@ -530,8 +534,10 @@ function getDefaultUiValue(type) {
  * @returns {number}
  */
 function getPresetParamValue(preset, type) {
-  if (preset && preset.filters && preset.filters[type] != null) {
-    return preset.filters[type];
+  const declared = preset && preset.filters ? preset.filters[type] : undefined;
+  // 预设里显式写了 0 也算声明过（不能因为 0 为假值就回落默认值，两者语义相同但要走声明分支）
+  if (declared !== null && declared !== undefined) {
+    return declared;
   }
   return getDefaultUiValue(type);
 }
@@ -544,7 +550,9 @@ function getPresetParamValue(preset, type) {
  */
 export function uiToFilterValue(type, uiValue) {
   const param = FILTER_PARAMS[type];
-  if (!param) return uiValue;
+  if (!param) {
+    return uiValue;
+  }
   return param.toFilter(uiValue);
 }
 
@@ -556,13 +564,17 @@ export function uiToFilterValue(type, uiValue) {
  */
 export function filterToUiValue(type, filterValue) {
   const param = FILTER_PARAMS[type];
-  if (!param) return Math.round(filterValue || 0);
+  if (!param) {
+    return Math.round(filterValue || 0);
+  }
   return param.toUi(filterValue);
 }
 
 function getFilterClass(type) {
   const className = FILTER_CLASS_NAME[type];
-  if (!className) return null;
+  if (!className) {
+    return null;
+  }
   return (typeof fabric !== 'undefined' && fabric.Image && fabric.Image.filters)
     ? fabric.Image.filters[className]
     : null;
@@ -593,13 +605,19 @@ function sortFilters(image) {
  */
 export function getFilterUiValue(image, type) {
   const fallback = getDefaultUiValue(type);
-  if (!image || !Array.isArray(image.filters)) return fallback;
+  if (!image || !Array.isArray(image.filters)) {
+    return fallback;
+  }
 
   const className = FILTER_CLASS_NAME[type];
-  if (!className) return fallback;
+  if (!className) {
+    return fallback;
+  }
 
   const filter = image.filters.find(f => f && f.type === className);
-  if (!filter) return fallback;
+  if (!filter) {
+    return fallback;
+  }
 
   const attr = FILTER_ATTR_NAME[type];
   if (INTENSITY_FILTER_TYPES.includes(type)) {
@@ -729,7 +747,9 @@ export function setFilter(image, type, uiValue, skipApply = false) {
  * @param {fabric.Image} image
  */
 export function clearFilters(image) {
-  if (!image) return;
+  if (!image) {
+    return;
+  }
   image.filters = [];
   applyFilters(image);
 }
@@ -750,7 +770,9 @@ function applyFilters(image) {
  * @returns {boolean}
  */
 export function hasNoFilters(image) {
-  if (!image || !Array.isArray(image.filters)) return true;
+  if (!image || !Array.isArray(image.filters)) {
+    return true;
+  }
   return image.filters.length === 0;
 }
 
@@ -789,7 +811,7 @@ export const FILTER_PRESETS = [
   { preset: 'filter-bw', label: '黑白', category: '黑白', filters: { grayscale: 100, contrast: 8, gamma: -6 } },
   { preset: 'filter-ink', label: '高反差', category: '黑白', filters: { grayscale: 100, contrast: 26, gamma: -10 } },
   { preset: 'filter-inkwell', label: 'Inkwell', category: '黑白', filters: { grayscale: 100, contrast: 22, gamma: -6 } },
-  { preset: 'filter-negative', label: '底片', category: '黑白', filters: { grayscale: 100, invert: 1 } },
+  { preset: 'filter-negative', label: '底片', category: '黑白', filters: { grayscale: 100, invert: 1 } }
 ];
 
 /**
@@ -798,9 +820,13 @@ export const FILTER_PRESETS = [
  * @param {string} presetName
  */
 export function applyFilterPreset(image, presetName) {
-  if (!image) return false;
+  if (!image) {
+    return false;
+  }
   const preset = FILTER_PRESETS.find(p => p.preset === presetName);
-  if (!preset) return false;
+  if (!preset) {
+    return false;
+  }
 
   installIntensityFilters();
 
@@ -829,18 +855,22 @@ export { installIntensityFilters };
  * @returns {Array<{type: string, attr: string, value: number}>}
  */
 export function getPresetFilterValues(preset) {
-  if (!preset || !preset.filters) return [];
+  if (!preset || !preset.filters) {
+    return [];
+  }
 
   installIntensityFilters();
 
   return ALL_FILTER_TYPES.map(type => {
     const uiValue = getPresetParamValue(preset, type);
-    if (uiValue === getDefaultUiValue(type)) return null;
+    if (uiValue === getDefaultUiValue(type)) {
+      return null;
+    }
 
     return {
       type: FILTER_CLASS_NAME[type],
       attr: FILTER_ATTR_NAME[type],
-      value: uiToFilterValue(type, uiValue),
+      value: uiToFilterValue(type, uiValue)
     };
   }).filter(item => item && item.type && item.attr);
 }
@@ -852,9 +882,13 @@ export function getPresetFilterValues(preset) {
  * @returns {boolean}
  */
 export function isPresetActive(image, presetName) {
-  if (!image) return false;
+  if (!image) {
+    return false;
+  }
   const preset = FILTER_PRESETS.find(p => p.preset === presetName);
-  if (!preset) return false;
+  if (!preset) {
+    return false;
+  }
 
   return ALL_FILTER_TYPES.every(type => {
     const expected = getPresetParamValue(preset, type);
