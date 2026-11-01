@@ -23,6 +23,17 @@ const OUTPUT_BACKGROUND = {
 };
 
 /**
+ * 应用方式映射：面板取值 → 行为。
+ *   new-layer  先把当前图层复制一份（独立像素与滤镜副本），指令只作用于副本，
+ *              原始图层保持不动 —— 默认值，与「AI 结果一律新图层」的既有纪律一致；
+ *   in-place   直接修改当前选中的图层，不改动其它图层。
+ */
+const APPLY_MODES = {
+  newLayer: 'new-layer',
+  inPlace: 'in-place'
+};
+
+/**
  * AI 修图模块 — 左侧工具栏「AI」工具
  *
  * 面板由 AI_PROVIDERS 注册表派生：能力清单、描述、执行路由全部来自表，
@@ -168,6 +179,14 @@ class AIModule extends BaseModule {
     // 提示词预设只出现在顶部预设栏（getOptionsBarHTML）。属性面板
     // 不再重复渲染同一批 chips —— 同一批快捷入口放两处，点哪一处都要
     // 重新决策，且会挤占文本输入区的垂直空间。
+    const applyMode = this._getApplyMode(capability.id);
+    const applyModeOptions = [
+      { value: APPLY_MODES.newLayer, label: '新建图层' },
+      { value: APPLY_MODES.inPlace, label: '编辑当前图层' }
+    ].map((item) => (
+      `<option value="${item.value}" ${item.value === applyMode ? 'selected' : ''}>${item.label}</option>`
+    )).join('');
+
     return `
       <div class="property-section-title">${capability.label}</div>
       <div class="ai-note ai-note--muted">${capability.description}</div>
@@ -177,6 +196,12 @@ class AIModule extends BaseModule {
         <textarea class="ai-prompt-box" rows="4"
                   data-module-prop="${capability.id}:draft"
                   placeholder="例如：整体偏冷一点，提高对比度并压暗高光，主体更突出">${this._escapeHtml(draft)}</textarea>
+      </div>
+      <div class="property-item">
+        <label>应用方式</label>
+        <select class="property-select" data-module-prop="${capability.id}:applyMode">
+          ${applyModeOptions}
+        </select>
       </div>
       ${!target ? '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>' : `
       <div class="ai-note">当前图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>
@@ -204,6 +229,11 @@ class AIModule extends BaseModule {
     }
     if (key === 'outputMode') {
       this.options[`${capabilityId}:outputMode`] = OUTPUT_BACKGROUND[value] !== undefined ? value : 'transparent';
+      return true;
+    }
+    if (key === 'applyMode') {
+      const valid = Object.values(APPLY_MODES);
+      this.options[`${capabilityId}:applyMode`] = valid.includes(value) ? value : APPLY_MODES.newLayer;
       return true;
     }
     // 提示词草稿：随输随存（AI_CONFIG 决定分层存储）。刻意不刷新面板，
@@ -313,9 +343,15 @@ class AIModule extends BaseModule {
       const background = instruction.actions.find((item) => item.type === 'background');
       const rest = instruction.actions.filter((item) => item.type !== 'background');
 
+      const applyMode = this._getApplyMode(capability.id);
       let appliedTo = source;
       if (background) {
+        // 抠图本身就产新图层，不再额外复制
         appliedTo = await this._runCutoutToLayer(source, background.mode);
+      } else if (applyMode === APPLY_MODES.newLayer) {
+        // 复制副本只在指令确认可执行之后才创建：请求失败或全被拒绝时
+        // 不会在画布上留下一个没有改动的幽灵副本。
+        appliedTo = this._cloneAsNewLayer(source);
       }
 
       let count = rest.length;
@@ -335,8 +371,11 @@ class AIModule extends BaseModule {
       const rejectedNote = instruction.rejected.length
         ? `（${instruction.rejected.length} 条超出可用能力已忽略）`
         : '';
+      const targetNote = appliedTo !== source
+        ? '，已生成为新图层'
+        : (applyMode === APPLY_MODES.inPlace && !background ? '，已修改当前图层' : '');
       eventBus.emit('toast:show', {
-        message: `${describeActions(instruction.actions)}${rejectedNote}`,
+        message: `${describeActions(instruction.actions)}${rejectedNote}${targetNote}`,
         type: 'success'
       });
       eventBus.emit('ai:taskFinished', {
@@ -462,6 +501,64 @@ class AIModule extends BaseModule {
   }
 
   /**
+   * 把源图层复制成独立的新图层（应用方式 = 新建图层）。
+   *
+   * 为什么复制像素而不是共享 element：fabric.Image 应用调色滤镜时会替换
+   * 自己的 element，两个对象共享同一个 HTMLImageElement 会让滤镜互相污染。
+   * 这里把源 element 画到独立画布上作为副本像素，并把滤镜配置深拷贝过来
+   * 重新应用，副本的观感与源图层一致但完全独立。
+   *
+   * @param {fabric.Image} source 源图层
+   * @returns {fabric.Image} 新图层（已加入画布，未入历史，由调用方统一 saveState）
+   */
+  _cloneAsNewLayer(source) {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) {
+      throw new Error('画布不可用，无法新建图层');
+    }
+
+    const element = source.getElement ? source.getElement() : source._element;
+    const width = element ? (element.naturalWidth || element.width) : 0;
+    const height = element ? (element.naturalHeight || element.height) : 0;
+    if (!width || !height) {
+      throw new Error('图层不含可处理的像素');
+    }
+
+    const surface = createCanvas2D(width, height);
+    if (!surface) {
+      throw new Error('当前环境不支持画布处理');
+    }
+    surface.ctx.drawImage(element, 0, 0);
+
+    const layer = new fabric.Image(surface.canvas, {
+      left: source.left,
+      top: source.top,
+      scaleX: source.scaleX,
+      scaleY: source.scaleY,
+      angle: source.angle || 0,
+      flipX: !!source.flipX,
+      flipY: !!source.flipY,
+      originX: source.originX,
+      originY: source.originY,
+      opacity: source.opacity
+    });
+
+    // 滤镜配置随副本一起带走：副本像素取自原始 element，不重新应用滤镜
+    // 会丢掉源图层已有效果（用户会看到扣了滤镜的副本）。
+    const filters = source.get ? source.get('filters') : source.filters;
+    if (Array.isArray(filters) && filters.length > 0) {
+      layer.filters = filters.map((filter) => fabric.util.object.clone(filter));
+      layer.applyFilters?.();
+    }
+
+    const sourceName = this._getObjectDisplayName(source);
+    layer.set({ _layerName: `${sourceName} 副本`, _layerNameAuto: false });
+
+    this.canvasManager.addObject(layer);
+    return layer;
+  }
+
+  /**
    * 提示词链路的抠图：静默生成新图层并返回，供后续指令继续叠加。
    * @param {fabric.Image} source 源图层
    * @param {string} outputMode 'transparent' | 'white'
@@ -550,6 +647,16 @@ class AIModule extends BaseModule {
    */
   _getOutputMode(capabilityId) {
     return this.options[`${capabilityId}:outputMode`] || 'transparent';
+  }
+
+  /**
+   * 读取指令应用方式（默认新建图层）。
+   * @param {string} capabilityId
+   * @returns {string} APPLY_MODES 的取值
+   */
+  _getApplyMode(capabilityId) {
+    const value = this.options[`${capabilityId}:applyMode`];
+    return Object.values(APPLY_MODES).includes(value) ? value : APPLY_MODES.newLayer;
   }
 
   /**

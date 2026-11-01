@@ -54,7 +54,9 @@ class ToolManager {
     this._host = host;
     // 向所有模块广播，使需要宿主能力的模块（贴纸、导出等）拿到最新 host
     Object.values(this._modules).forEach(m => {
-      if (m && typeof m.setHost === 'function') m.setHost(host);
+      if (m && typeof m.setHost === 'function') {
+        m.setHost(host);
+      }
     });
   }
 
@@ -68,7 +70,7 @@ class ToolManager {
       icon: 'select',
       group: 'edit',
       shortcut: 'V',
-      module: SelectModule,
+      module: SelectModule
     });
 
     this.registerTool({
@@ -78,7 +80,7 @@ class ToolManager {
       group: 'redact',
       shortcut: 'M',
       module: MosaicModule,
-      defaultOptions: { mode: 'mosaic', drawMode: 'rect', mosaicSize: 12, blurRadius: 8, brushSize: 20 },
+      defaultOptions: { mode: 'mosaic', drawMode: 'rect', mosaicSize: 12, blurRadius: 8, brushSize: 20 }
     });
 
     this.registerTool({
@@ -87,7 +89,7 @@ class ToolManager {
       icon: 'crop',
       group: 'edit',
       shortcut: 'C',
-      module: CropModule,
+      module: CropModule
     });
 
     this.registerTool({
@@ -97,7 +99,7 @@ class ToolManager {
       group: 'adjust',
       shortcut: 'A',
       module: ColorModule,
-      defaultOptions: { filterScope: 'all' },
+      defaultOptions: { filterScope: 'all' }
     });
 
     this.registerTool({
@@ -107,7 +109,7 @@ class ToolManager {
       group: 'annotate',
       shortcut: 'B',
       module: BrushModule,
-      defaultOptions: { color: '#d83b31', width: 6 },
+      defaultOptions: { color: '#d83b31', width: 6 }
     });
 
     this.registerTool({
@@ -117,7 +119,7 @@ class ToolManager {
       group: 'annotate',
       shortcut: 'E',
       module: EraserModule,
-      defaultOptions: { width: 20 },
+      defaultOptions: { width: 20 }
     });
 
     this.registerTool({
@@ -126,7 +128,7 @@ class ToolManager {
       icon: 'text',
       group: 'annotate',
       shortcut: 'T',
-      module: TextModule,
+      module: TextModule
     });
 
     this.registerTool({
@@ -136,7 +138,7 @@ class ToolManager {
       group: 'annotate',
       shortcut: 'S',
       module: ShapeModule,
-      defaultOptions: { shapeType: 'rect', fill: 'transparent', stroke: 'rgba(216, 59, 49, 1)', strokeWidth: 2 },
+      defaultOptions: { shapeType: 'rect', fill: 'transparent', stroke: 'rgba(216, 59, 49, 1)', strokeWidth: 2 }
     });
 
     // 贴纸：作为左侧工具栏的一次性动作按钮，点击/按 P 直接选图加图层，添加后自动切回移动/框选
@@ -146,7 +148,7 @@ class ToolManager {
       icon: 'sticker',
       group: 'annotate',
       shortcut: 'P',
-      module: StickerModule,
+      module: StickerModule
     });
 
     // AI 修图：面板由 AI_PROVIDERS 注册表派生（P0：本地一键抠图），无快捷键
@@ -156,7 +158,7 @@ class ToolManager {
       icon: 'ai',
       group: 'adjust',
       module: AIModule,
-      defaultOptions: { 'removeBackground:outputMode': 'transparent' },
+      defaultOptions: { 'removeBackground:outputMode': 'transparent', 'promptEdit:applyMode': 'new-layer' }
     });
   }
 
@@ -242,7 +244,9 @@ class ToolManager {
    */
   async export(action = 'file') {
     const exportModule = this._modules['export'];
-    if (!exportModule) return;
+    if (!exportModule) {
+      return;
+    }
 
     if (action === 'clipboard') {
       await exportModule.exportToClipboard();
@@ -259,12 +263,16 @@ class ToolManager {
       // 逐个模块 try/catch：单个模块清理抛异常不得阻断其余模块的 deactivate/destroy，
       // 否则后续模块的 eventBus 解绑会被整条跳过，造成订阅泄漏。
       try {
-        if (m.deactivate) m.deactivate();
+        if (m.deactivate) {
+          m.deactivate();
+        }
       } catch (err) {
         console.error('[ToolManager] 模块 deactivate 失败:', err);
       }
       try {
-        if (m.destroy) m.destroy();
+        if (m.destroy) {
+          m.destroy();
+        }
       } catch (err) {
         console.error('[ToolManager] 模块 destroy 失败:', err);
       }
