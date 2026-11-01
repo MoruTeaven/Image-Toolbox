@@ -2242,30 +2242,6 @@ html, body {
   gap: 4px;
 }
 
-/* 快捷提示词 chips */
-.ai-quick-row {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.ai-quick-chip {
-  padding: 3px 10px;
-  background: var(--bg-card);
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.ai-quick-chip:hover {
-  border-color: var(--color-accent);
-  color: var(--color-text);
-}
-
 /* 顶部预设栏的提示词预设（平铺，横向溢出由 .optionsbar 滚动承担） */
 .ai-preset-label {
   flex-shrink: 0;

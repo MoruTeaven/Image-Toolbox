@@ -165,10 +165,9 @@ class AIModule extends BaseModule {
       ? '<div class="ai-note ai-note--warn">尚未配置服务商：请到「头像 → AI 配置」填写服务地址、Key 与模型。</div>'
       : `<div class="ai-note ai-note--muted">服务商：${this._escapeHtml(config.model || '')}（仅发送压缩预览图，原图不上传）</div>`;
 
-    const quickPrompt = (preset) => (
-      `<button type="button" class="ai-quick-chip" data-module-action="${capability.id}:fill:${this._escapeHtml(preset.prompt)}">${this._escapeHtml(preset.label)}</button>`
-    );
-
+    // 提示词预设只出现在顶部预设栏（getOptionsBarHTML）。属性面板
+    // 不再重复渲染同一批 chips —— 同一批快捷入口放两处，点哪一处都要
+    // 重新决策，且会挤占文本输入区的垂直空间。
     return `
       <div class="property-section-title">${capability.label}</div>
       <div class="ai-note ai-note--muted">${capability.description}</div>
@@ -178,9 +177,6 @@ class AIModule extends BaseModule {
         <textarea class="ai-prompt-box" rows="4"
                   data-module-prop="${capability.id}:draft"
                   placeholder="例如：整体偏冷一点，提高对比度并压暗高光，主体更突出">${this._escapeHtml(draft)}</textarea>
-      </div>
-      <div class="ai-quick-row">
-        ${AI_PROMPT_PRESETS.map((preset) => quickPrompt(preset)).join('')}
       </div>
       ${!target ? '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>' : `
       <div class="ai-note">当前图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>
@@ -239,14 +235,8 @@ class AIModule extends BaseModule {
       return;
     }
 
-    // 快捷提示词：把文案填进提示词框（不直接执行，让用户可继续编辑）
-    if (verb === 'fill') {
-      const text = parts.slice(2).join(':');
-      setAiConfigField('draft', text);
-      this._refreshPanel();
-      return;
-    }
-
+    // 提示词填入口径已经收敛到顶部预设栏（OptionsBar 的 [data-preset]
+    // → applyPreset），属性面板不再派发 fill 动作。
     if (verb !== 'run') {
       return;
     }
