@@ -698,6 +698,95 @@ html, body {
   color: #ffffff !important;
 }
 
+/* ── 设置页：分组 + 行式布局 ──
+   每个分组一张卡片，组内设置项为一行（标题+说明在左，分段控件在右），
+   行间以分隔线区分，替代旧版每项一张大卡片的堆叠。 */
+.settings-group {
+  background: var(--bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 2px 18px 6px;
+  box-shadow: 0 8px 24px rgba(25, 42, 46, 0.06);
+}
+
+.settings-group + .settings-group {
+  margin-top: 14px;
+}
+
+.settings-group__title {
+  padding: 12px 0 2px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 24px;
+  padding: 12px 0;
+}
+
+.settings-row + .settings-row {
+  border-top: 1px solid var(--color-border);
+}
+
+.settings-row__info {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.settings-row__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-row__desc {
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.settings-row__control {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* 分段选择控件：圆角容器内并排选项，选中项高亮，点选即生效 */
+.settings-segment {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-window);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.settings-segment__option {
+  border: none;
+  background: transparent;
+  padding: 5px 12px;
+  border-radius: 7px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-segment__option:hover {
+  background: var(--bg-hover);
+  color: var(--color-text);
+}
+
+.settings-segment__option--active {
+  background: var(--bg-active);
+  color: #ffffff;
+}
+
 /* ── 设置页 AI 配置状态徽标 ── */
 .account-page__ai-status {
   display: inline-flex;

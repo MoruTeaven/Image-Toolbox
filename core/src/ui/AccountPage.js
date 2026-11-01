@@ -246,58 +246,14 @@ class AccountPage {
         return;
       }
 
-      const theme = this._closest(e.target, '[data-theme-choice]')?.getAttribute('data-theme-choice');
-      if (theme) {
-        this._setTheme(theme);
-        this._render();
-        return;
-      }
-
-      const panelLayout = this._closest(e.target, '[data-side-panel-layout]')?.getAttribute('data-side-panel-layout');
-      if (panelLayout) {
-        this._setSidePanelLayout(panelLayout);
-        this._render();
-        return;
-      }
-
-      const editorBarsLayout = this._closest(e.target, '[data-editor-bars-layout]')?.getAttribute('data-editor-bars-layout');
-      if (editorBarsLayout) {
-        this._setEditorBarsLayout(editorBarsLayout);
-        this._render();
-        return;
-      }
-
-      const editorSidePanelPosition = this._closest(e.target, '[data-editor-side-panel-position]')?.getAttribute('data-editor-side-panel-position');
-      if (editorSidePanelPosition) {
-        this._setEditorSidePanelPosition(editorSidePanelPosition);
-        this._render();
-        return;
-      }
-
-      const toolbarLabels = this._closest(e.target, '[data-toolbar-labels]')?.getAttribute('data-toolbar-labels');
-      if (toolbarLabels) {
-        this._setToolbarLabelsVisible(toolbarLabels);
-        this._render();
-        return;
-      }
-
-      const toolbarCollapsed = this._closest(e.target, '[data-toolbar-collapsed]')?.getAttribute('data-toolbar-collapsed');
-      if (toolbarCollapsed) {
-        this._setToolbarCollapsed(toolbarCollapsed);
-        this._render();
-        return;
-      }
-
-      const toolbarToggleVisible = this._closest(e.target, '[data-toolbar-toggle-visible]')?.getAttribute('data-toolbar-toggle-visible');
-      if (toolbarToggleVisible) {
-        this._setToolbarToggleVisible(toolbarToggleVisible);
-        this._render();
-        return;
-      }
-
-      const toolbarHistoryLayout = this._closest(e.target, '[data-toolbar-history-layout]')?.getAttribute('data-toolbar-history-layout');
-      if (toolbarHistoryLayout) {
-        this._setToolbarHistoryLayout(toolbarHistoryLayout);
+      // ── 设置项：统一分段选择控件（分组行式布局） ──
+      // 全部设置项共用一个 data-setting-choice 入口，
+      // 由 _applySetting 的映射表分发到对应 setter，避免逐项维护分支。
+      const settingChoice = this._closest(e.target, '[data-setting-choice]');
+      if (settingChoice) {
+        const setting = settingChoice.getAttribute('data-setting-choice');
+        const value = settingChoice.getAttribute('data-value');
+        this._applySetting(setting, value);
         this._render();
         return;
       }
@@ -522,97 +478,171 @@ class AccountPage {
     return identityCard;
   }
 
+  /**
+   * 设置页：分组 + 行式布局。
+   *
+   * 设置项按「外观 / 画板布局 / 侧栏」三个分组组织，每个分组一张卡片，
+   * 组内每个设置项渲染为一行（标题 + 说明在左，分段选择控件在右）。
+   * 行清单集中在本方法内声明，控件渲染与点击分发分别由
+   * _renderSettingRow / _applySetting 承担。
+   * @returns {string}
+   */
   _renderSettings() {
-    const theme = getThemeChoice();
-    const sidePanelLayout = this._getSidePanelLayout();
-    const editorBarsLayout = this._getEditorBarsLayout();
-    const editorSidePanelPosition = this._getEditorSidePanelPosition();
-    const toolbarLabels = this._getToolbarLabelsVisible();
-    const toolbarCollapsed = this._getToolbarCollapsed();
-    const toolbarToggleVisible = this._getToolbarToggleVisible();
-    const toolbarHistoryLayout = this._getToolbarHistoryLayout();
+    const groups = [
+      {
+        title: '外观',
+        rows: [
+          {
+            setting: 'theme',
+            title: '主题',
+            desc: '选择适合当前图片处理环境的界面主题。',
+            current: getThemeChoice(),
+            options: [
+              { label: '跟随系统', value: THEME_CHOICES.SYSTEM },
+              { label: '浅色', value: THEME_CHOICES.LIGHT },
+              { label: '深色', value: THEME_CHOICES.DARK }
+            ]
+          }
+        ]
+      },
+      {
+        title: '画板布局',
+        rows: [
+          {
+            setting: 'sidePanelLayout',
+            title: '属性/图层面板排列',
+            desc: 'Tab 切换更节省空间，上下布局可以同时查看两块内容。',
+            current: this._getSidePanelLayout(),
+            options: [
+              { label: 'Tab 切换', value: SIDE_PANEL_LAYOUTS.TABS },
+              { label: '上下布局', value: SIDE_PANEL_LAYOUTS.SPLIT }
+            ]
+          },
+          {
+            setting: 'editorSidePanelPosition',
+            title: '属性/图层面板位置',
+            desc: '将属性和图层侧栏放在画板右侧，或移到左侧工具栏与画板之间。',
+            current: this._getEditorSidePanelPosition(),
+            options: [
+              { label: '画板右侧', value: EDITOR_SIDE_PANEL_POSITIONS.RIGHT },
+              { label: '工具栏右侧', value: EDITOR_SIDE_PANEL_POSITIONS.LEFT }
+            ]
+          },
+          {
+            setting: 'editorBarsLayout',
+            title: '预设栏/状态栏位置',
+            desc: '切换预设栏和状态栏在编辑器顶部、底部的相对位置。',
+            current: this._getEditorBarsLayout(),
+            options: [
+              { label: '预设栏在顶部', value: EDITOR_BARS_LAYOUTS.PRESETS_TOP },
+              { label: '状态栏在顶部', value: EDITOR_BARS_LAYOUTS.STATUS_TOP }
+            ]
+          }
+        ]
+      },
+      {
+        title: '侧栏',
+        rows: [
+          {
+            setting: 'toolbarLabels',
+            title: '图标文字',
+            desc: '在工具图标下方显示文字标签，关闭后仅显示图标，更节省空间。',
+            current: this._getToolbarLabelsVisible(),
+            options: [
+              { label: '显示文字', value: TOOLBAR_LABELS_VISIBLE.ON },
+              { label: '仅图标', value: TOOLBAR_LABELS_VISIBLE.OFF }
+            ]
+          },
+          {
+            setting: 'toolbarHistoryLayout',
+            title: '撤销/重做按钮',
+            desc: '完整为图标加文字的纵向大按钮，紧凑为两个图标按钮并排。',
+            current: this._getToolbarHistoryLayout(),
+            options: [
+              { label: '完整', value: TOOLBAR_HISTORY_LAYOUT.STACKED },
+              { label: '紧凑', value: TOOLBAR_HISTORY_LAYOUT.COMPACT }
+            ]
+          },
+          {
+            setting: 'toolbarCollapsed',
+            title: '展开/收起',
+            desc: '展开后侧栏图标和文字并排显示，收起后更节省空间。',
+            current: this._getToolbarCollapsed(),
+            options: [
+              { label: '展开', value: TOOLBAR_COLLAPSED.EXPANDED },
+              { label: '收起', value: TOOLBAR_COLLAPSED.COLLAPSED }
+            ]
+          },
+          {
+            setting: 'toolbarToggleVisible',
+            title: '展开/收起切换按钮',
+            desc: '是否在侧栏顶部显示切换按钮，关闭后仍可在设置中切换侧栏状态。',
+            current: this._getToolbarToggleVisible(),
+            options: [
+              { label: '显示', value: TOOLBAR_TOGGLE_VISIBLE.ON },
+              { label: '隐藏', value: TOOLBAR_TOGGLE_VISIBLE.OFF }
+            ]
+          }
+        ]
+      }
+    ];
+
+    return groups.map((group) => `
+      <section class="settings-group">
+        <div class="settings-group__title">${this._escapeHTML(group.title)}</div>
+        ${group.rows.map((row) => this._renderSettingRow(row)).join('')}
+      </section>
+    `).join('');
+  }
+
+  /**
+   * 渲染单个设置项行：左侧标题与说明，右侧分段选择控件。
+   * @param {{setting: string, title: string, desc: string, current: string, options: {label: string, value: string}[]}} row
+   * @returns {string}
+   */
+  _renderSettingRow(row) {
+    const options = row.options.map((opt) => `
+      <button class="settings-segment__option ${opt.value === row.current ? 'settings-segment__option--active' : ''}"
+              type="button"
+              data-setting-choice="${this._escapeAttr(row.setting)}"
+              data-value="${this._escapeAttr(opt.value)}"
+              aria-pressed="${opt.value === row.current ? 'true' : 'false'}">${this._escapeHTML(opt.label)}</button>
+    `).join('');
+
     return `
-      <div class="account-card">
-        <div class="account-card__label">外观</div>
-        <div class="account-card__value">主题设置</div>
-        <p>选择适合当前图片处理环境的界面主题。</p>
-        <div class="account-page__theme-row">
-          <button class="account-page__theme-choice ${theme === THEME_CHOICES.SYSTEM ? 'account-page__theme-choice--active' : ''}" type="button" data-theme-choice="${THEME_CHOICES.SYSTEM}">跟随系统</button>
-          <button class="account-page__theme-choice ${theme === THEME_CHOICES.LIGHT ? 'account-page__theme-choice--active' : ''}" type="button" data-theme-choice="${THEME_CHOICES.LIGHT}">浅色</button>
-          <button class="account-page__theme-choice ${theme === THEME_CHOICES.DARK ? 'account-page__theme-choice--active' : ''}" type="button" data-theme-choice="${THEME_CHOICES.DARK}">深色</button>
+      <div class="settings-row">
+        <div class="settings-row__info">
+          <div class="settings-row__title">${this._escapeHTML(row.title)}</div>
+          <div class="settings-row__desc">${this._escapeHTML(row.desc)}</div>
         </div>
-      </div>
-
-      <div class="account-card">
-        <div class="account-card__label">编辑器</div>
-        <div class="account-card__value">属性/图层面板布局</div>
-        <p>选择属性和图层的展示方式。Tab 布局更节省空间，上下布局可以同时查看两块内容。</p>
-        <div class="account-page__theme-row">
-          <button class="account-page__theme-choice ${sidePanelLayout === SIDE_PANEL_LAYOUTS.TABS ? 'account-page__theme-choice--active' : ''}" type="button" data-side-panel-layout="${SIDE_PANEL_LAYOUTS.TABS}">Tab 切换</button>
-          <button class="account-page__theme-choice ${sidePanelLayout === SIDE_PANEL_LAYOUTS.SPLIT ? 'account-page__theme-choice--active' : ''}" type="button" data-side-panel-layout="${SIDE_PANEL_LAYOUTS.SPLIT}">上下布局</button>
-        </div>
-      </div>
-
-      <div class="account-card">
-        <div class="account-card__label">编辑器</div>
-        <div class="account-card__value">属性/图层面板位置</div>
-        <p>将属性和图层侧栏放在画板右侧，或移到左侧工具栏与画板之间。</p>
-        <div class="account-page__theme-row">
-          <button class="account-page__theme-choice ${editorSidePanelPosition === EDITOR_SIDE_PANEL_POSITIONS.RIGHT ? 'account-page__theme-choice--active' : ''}" type="button" data-editor-side-panel-position="${EDITOR_SIDE_PANEL_POSITIONS.RIGHT}">画板右侧</button>
-          <button class="account-page__theme-choice ${editorSidePanelPosition === EDITOR_SIDE_PANEL_POSITIONS.LEFT ? 'account-page__theme-choice--active' : ''}" type="button" data-editor-side-panel-position="${EDITOR_SIDE_PANEL_POSITIONS.LEFT}">工具栏右侧</button>
-        </div>
-      </div>
-
-      <div class="account-card">
-        <div class="account-card__label">编辑器</div>
-        <div class="account-card__value">顶部/底部栏位置</div>
-        <p>切换预设栏和状态栏在编辑器顶部、底部的相对位置。</p>
-        <div class="account-page__theme-row">
-          <button class="account-page__theme-choice ${editorBarsLayout === EDITOR_BARS_LAYOUTS.PRESETS_TOP ? 'account-page__theme-choice--active' : ''}" type="button" data-editor-bars-layout="${EDITOR_BARS_LAYOUTS.PRESETS_TOP}">预设栏在顶部</button>
-          <button class="account-page__theme-choice ${editorBarsLayout === EDITOR_BARS_LAYOUTS.STATUS_TOP ? 'account-page__theme-choice--active' : ''}" type="button" data-editor-bars-layout="${EDITOR_BARS_LAYOUTS.STATUS_TOP}">状态栏在顶部</button>
-        </div>
-      </div>
-
-      <div class="account-card">
-        <div class="account-card__label">编辑器</div>
-        <div class="account-card__value">侧栏图标文字</div>
-        <p>选择是否在侧栏工具图标下方显示文字标签。关闭后仅显示图标，更节省空间。</p>
-        <div class="account-page__theme-row">
-          <button class="account-page__theme-choice ${toolbarLabels === TOOLBAR_LABELS_VISIBLE.ON ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-labels="${TOOLBAR_LABELS_VISIBLE.ON}">显示文字</button>
-          <button class="account-page__theme-choice ${toolbarLabels === TOOLBAR_LABELS_VISIBLE.OFF ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-labels="${TOOLBAR_LABELS_VISIBLE.OFF}">仅图标</button>
-        </div>
-      </div>
-
-      <div class="account-card">
-        <div class="account-card__label">编辑器</div>
-        <div class="account-card__value">侧栏撤销/重做布局</div>
-        <p>选择侧栏底部撤销/重做按钮的排布方式。完整为图标加文字的纵向大按钮，紧凑为两个图标按钮并排。</p>
-        <div class="account-page__theme-row">
-          <button class="account-page__theme-choice ${toolbarHistoryLayout === TOOLBAR_HISTORY_LAYOUT.STACKED ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-history-layout="${TOOLBAR_HISTORY_LAYOUT.STACKED}">完整</button>
-          <button class="account-page__theme-choice ${toolbarHistoryLayout === TOOLBAR_HISTORY_LAYOUT.COMPACT ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-history-layout="${TOOLBAR_HISTORY_LAYOUT.COMPACT}">紧凑</button>
-        </div>
-      </div>
-
-      <div class="account-card">
-        <div class="account-card__label">编辑器</div>
-        <div class="account-card__value">侧栏展开/收起</div>
-        <p>展开后侧栏图标和文字并排显示，并在头像旁展示昵称；收起后仅显示图标和简短文字，更节省空间。</p>
-        <div class="account-page__theme-row">
-          <button class="account-page__theme-choice ${toolbarCollapsed === TOOLBAR_COLLAPSED.EXPANDED ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-collapsed="${TOOLBAR_COLLAPSED.EXPANDED}">展开</button>
-          <button class="account-page__theme-choice ${toolbarCollapsed === TOOLBAR_COLLAPSED.COLLAPSED ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-collapsed="${TOOLBAR_COLLAPSED.COLLAPSED}">收起</button>
-        </div>
-      </div>
-
-      <div class="account-card">
-        <div class="account-card__label">编辑器</div>
-        <div class="account-card__value">侧栏展开/收起按钮</div>
-        <p>选择是否在侧栏顶部显示展开/收起切换按钮。关闭后仍可在设置中切换侧栏状态。</p>
-        <div class="account-page__theme-row">
-          <button class="account-page__theme-choice ${toolbarToggleVisible === TOOLBAR_TOGGLE_VISIBLE.ON ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-toggle-visible="${TOOLBAR_TOGGLE_VISIBLE.ON}">显示按钮</button>
-          <button class="account-page__theme-choice ${toolbarToggleVisible === TOOLBAR_TOGGLE_VISIBLE.OFF ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-toggle-visible="${TOOLBAR_TOGGLE_VISIBLE.OFF}">隐藏按钮</button>
-        </div>
+        <div class="settings-row__control settings-segment" role="group" aria-label="${this._escapeAttr(row.title)}">${options}</div>
       </div>
     `;
+  }
+
+  /**
+   * 应用一个设置项变更（设置页统一入口）。
+   * 键名与 _renderSettings 中各行的 setting 字段一一对应，
+   * 取值合法性由各 setter 自行校验。
+   * @param {string} setting - 设置项标识
+   * @param {string} value - 新取值
+   */
+  _applySetting(setting, value) {
+    const setters = {
+      theme: this._setTheme,
+      sidePanelLayout: this._setSidePanelLayout,
+      editorSidePanelPosition: this._setEditorSidePanelPosition,
+      editorBarsLayout: this._setEditorBarsLayout,
+      toolbarLabels: this._setToolbarLabelsVisible,
+      toolbarHistoryLayout: this._setToolbarHistoryLayout,
+      toolbarCollapsed: this._setToolbarCollapsed,
+      toolbarToggleVisible: this._setToolbarToggleVisible
+    };
+
+    const setter = setters[setting];
+    if (setter) {
+      setter.call(this, value);
+    }
   }
 
   /**
