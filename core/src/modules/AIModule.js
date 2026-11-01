@@ -195,7 +195,6 @@ class AIModule extends BaseModule {
 
     return `
       <div class="property-section-title">${capability.label}</div>
-      <div class="ai-note ai-note--muted">${capability.description}</div>
       ${statusLine}
       <div class="property-item property-item--wide">
         <label>应用方式</label>
