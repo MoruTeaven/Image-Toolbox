@@ -1,6 +1,6 @@
 import { eventBus } from '../index.js';
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
-import { TOOLBAR_LABELS_VISIBLE_KEY, TOOLBAR_LABELS_VISIBLE, TOOLBAR_COLLAPSED_KEY, TOOLBAR_COLLAPSED, TOOLBAR_TOGGLE_VISIBLE_KEY, TOOLBAR_TOGGLE_VISIBLE } from './AccountPage.js';
+import { TOOLBAR_LABELS_VISIBLE_KEY, TOOLBAR_LABELS_VISIBLE, TOOLBAR_COLLAPSED_KEY, TOOLBAR_COLLAPSED, TOOLBAR_TOGGLE_VISIBLE_KEY, TOOLBAR_TOGGLE_VISIBLE, TOOLBAR_HISTORY_LAYOUT_KEY, TOOLBAR_HISTORY_LAYOUT } from './AccountPage.js';
 import IdentityClient from '../identity/IdentityClient.js';
 
 /**
@@ -38,6 +38,7 @@ class Toolbar {
       text: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>`,
       shape: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8"/><circle cx="16" cy="7" r="4"/><polygon points="3,16 8,12 12,16"/><circle cx="16" cy="18" r="3"/></svg>`,
       sticker: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="10" r="1.1" fill="currentColor"/><circle cx="15" cy="10" r="1.1" fill="currentColor"/><path d="M8.5 14.5c1 1.1 2.2 1.8 3.5 1.8s2.5-.7 3.5-1.8"/></svg>`,
+      ai: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/></svg>`,
       undo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>`,
       redo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>`,
       collapse: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>`,
@@ -47,6 +48,7 @@ class Toolbar {
     this._render();
     this._bindEvents();
     this._applyLabelsVisibility();
+    this._applyHistoryLayout();
     this._applyToolbarState();
     this._applyToggleVisible();
     this._loadProfileIfAuthenticated();
@@ -85,17 +87,19 @@ class Toolbar {
       }
     }
 
-    // 撤销 / 重做
+    // 撤销 / 重做（并排一行紧凑布局，展开态由 CSS 还原为纵向）
     const footerHtml = `
       <div class="toolbar__separator"></div>
-      <button class="toolbar__btn" data-tool="undo" title="返回上一步 (Ctrl+Z)">
-        ${this._icons.undo}
-        <span>返回上一步</span>
-      </button>
-      <button class="toolbar__btn" data-tool="redo" title="撤销返回上一步 (Ctrl+Y)">
-        ${this._icons.redo}
-        <span>撤销返回</span>
-      </button>
+      <div class="toolbar__history">
+        <button class="toolbar__btn" data-tool="undo" title="返回上一步 (Ctrl+Z)">
+          ${this._icons.undo}
+          <span>返回上一步</span>
+        </button>
+        <button class="toolbar__btn" data-tool="redo" title="撤销返回 (Ctrl+Y)">
+          ${this._icons.redo}
+          <span>撤销返回</span>
+        </button>
+      </div>
       ${this._renderAccount()}
     `;
 
@@ -163,6 +167,9 @@ class Toolbar {
       eventBus.on('toolbar:labelsVisibilityChanged', (value) => {
         this._applyLabelsVisibility(value);
       }),
+      eventBus.on('toolbar:historyLayoutChanged', (value) => {
+        this._applyHistoryLayout(value);
+      }),
       eventBus.on('toolbar:collapsedChanged', (value) => {
         this._applyToolbarState(value);
       }),
@@ -185,6 +192,17 @@ class Toolbar {
     const resolved = value || this._getLabelsVisible();
     if (!this._el) return;
     this._el.classList.toggle('toolbar--labels-hidden', resolved === TOOLBAR_LABELS_VISIBLE.OFF);
+  }
+
+  _getHistoryLayout() {
+    const saved = localStorage.getItem(TOOLBAR_HISTORY_LAYOUT_KEY);
+    return saved === TOOLBAR_HISTORY_LAYOUT.COMPACT ? TOOLBAR_HISTORY_LAYOUT.COMPACT : TOOLBAR_HISTORY_LAYOUT.STACKED;
+  }
+
+  _applyHistoryLayout(value) {
+    const resolved = value || this._getHistoryLayout();
+    if (!this._el) return;
+    this._el.classList.toggle('toolbar--history-compact', resolved === TOOLBAR_HISTORY_LAYOUT.COMPACT);
   }
 
   _getCollapsed() {

@@ -43,11 +43,13 @@ class OptionsBar {
       'canvas:objectModified',
       'canvas:restored',
       'image:loaded',
-      'tool:propertiesChanged',
+      'tool:propertiesChanged'
     ].forEach(eventName => {
       this._eventBusUnsubscribers.push(
         eventBus.on(eventName, () => {
-          if (this._currentTool) this._updateControls();
+          if (this._currentTool) {
+            this._updateControls();
+          }
         })
       );
     });
@@ -60,9 +62,13 @@ class OptionsBar {
     // 鼠标悬停在横向滑动的预设区（图形配色 / 调色预设）时，滚轮转为横向滚动
     this._el.addEventListener('wheel', (e) => {
       const scrollEl = e.target.closest('.shape-style-scroll, .filter-preset-scroll');
-      if (!scrollEl) return;
+      if (!scrollEl) {
+        return;
+      }
       // 仅在纵向滚轮占主导时接管（触控板原生横向滚动不拦截）
-      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) {
+        return;
+      }
       e.preventDefault();
       scrollEl.scrollLeft += e.deltaY;
     }, { passive: false });
@@ -72,7 +78,9 @@ class OptionsBar {
     this._closeShapePicker();
 
     const controlsEl = this._el.querySelector('#optionsbar-controls');
-    if (!controlsEl) return;
+    if (!controlsEl) {
+      return;
+    }
 
     const module = this._tm.getCurrentModule();
     if (module && typeof module.getOptionsBarHTML === 'function') {
@@ -103,7 +111,9 @@ class OptionsBar {
     }
 
     const scrollEl = container.querySelector('.filter-preset-scroll');
-    if (!scrollEl) return;
+    if (!scrollEl) {
+      return;
+    }
     scrollEl.classList.toggle('is-scrollable', scrollEl.scrollWidth > scrollEl.clientWidth + 1);
   }
 
@@ -117,9 +127,13 @@ class OptionsBar {
    */
   _scrollActivePresetIntoView(container, scrollSelector, activeSelector) {
     const scrollEl = container.querySelector(scrollSelector);
-    if (!scrollEl) return;
+    if (!scrollEl) {
+      return;
+    }
     const activeBtn = scrollEl.querySelector(activeSelector);
-    if (!activeBtn) return;
+    if (!activeBtn) {
+      return;
+    }
 
     const scrollRect = scrollEl.getBoundingClientRect();
     const btnRect = activeBtn.getBoundingClientRect();
@@ -157,12 +171,18 @@ class OptionsBar {
     }
 
     const target = e.target.closest('[data-preset]');
-    if (!target) return;
+    if (!target) {
+      return;
+    }
 
     const module = this._tm.getCurrentModule();
-    if (!module) return;
+    if (!module) {
+      return;
+    }
 
-    if (module.applyPreset) module.applyPreset(target.dataset.preset);
+    if (module.applyPreset) {
+      module.applyPreset(target.dataset.preset);
+    }
     this._updateControls();
     eventBus.emit('tool:propertiesChanged');
   }
@@ -180,10 +200,14 @@ class OptionsBar {
     pickerEl.innerHTML = module.getShapePickerHTML();
     pickerEl.addEventListener('click', (e) => {
       const target = e.target.closest('[data-preset]');
-      if (!target) return;
+      if (!target) {
+        return;
+      }
 
       const currentModule = this._tm.getCurrentModule();
-      if (currentModule && currentModule.applyPreset) currentModule.applyPreset(target.dataset.preset);
+      if (currentModule && currentModule.applyPreset) {
+        currentModule.applyPreset(target.dataset.preset);
+      }
       this._closeShapePicker();
       this._updateControls();
       eventBus.emit('tool:propertiesChanged');
@@ -201,7 +225,9 @@ class OptionsBar {
   }
 
   _positionShapePicker() {
-    if (!this._shapePickerEl || !this._shapePickerAnchor) return;
+    if (!this._shapePickerEl || !this._shapePickerAnchor) {
+      return;
+    }
 
     const anchorRect = this._shapePickerAnchor.getBoundingClientRect();
     const pickerRect = this._shapePickerEl.getBoundingClientRect();
@@ -220,17 +246,25 @@ class OptionsBar {
   }
 
   _handleDocumentClick(e) {
-    if (!this._shapePickerEl) return;
-    if (this._shapePickerEl.contains(e.target) || this._shapePickerAnchor?.contains(e.target)) return;
+    if (!this._shapePickerEl) {
+      return;
+    }
+    if (this._shapePickerEl.contains(e.target) || this._shapePickerAnchor?.contains(e.target)) {
+      return;
+    }
     this._closeShapePicker();
   }
 
   _handleKeyDown(e) {
-    if (e.key === 'Escape') this._closeShapePicker();
+    if (e.key === 'Escape') {
+      this._closeShapePicker();
+    }
   }
 
   _closeShapePicker() {
-    if (!this._shapePickerEl) return;
+    if (!this._shapePickerEl) {
+      return;
+    }
 
     this._shapePickerEl.remove();
     this._shapePickerEl = null;

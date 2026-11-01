@@ -128,6 +128,13 @@ pnpm build
 > 漏改任何一处，第 10 项门禁会直接让构建失败并指名道姓。
 
 > 构建脚本是 Node 而非 PowerShell：整条工具链本来就是 Node，PowerShell 层只会带来第二套编码规则——正是那套规则在历史上把 BOM 凭空写进产物（详见 `scripts/bom-report.ps1` 头部说明）。
+>
+> 另一个原因来自 PowerShell 5.1 的流语义：native 命令写到 stderr 的**任何**一行都会被包成
+> ErrorRecord，遇到 `$ErrorActionPreference = "Stop"` 就升级为终止错误。原 `build.ps1`
+> 因此在 uTools 端把一条「preload API 未注册」的告警当成构建失败（产物其实已经齐全），
+> 只能在每个 `node` 调用点临时放宽偏好来绕开。改由 Node 编排后，这类「构建成功却报失败」
+> 不再可能发生；**不要把构建入口再引回 PowerShell 层**（`scripts/verify-web-deploy.ps1`
+> 里对 Edge 的临时放宽是脚本内的局部处理，不是构建入口）。
 
 #### 全新 worktree 首次构建前必读
 

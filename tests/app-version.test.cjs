@@ -15,7 +15,7 @@
  *
  * 运行：node tests/app-version.test.cjs [项目根目录]
  * 依赖：仅 Node 内置模块（无需安装依赖）。
- * 前置：先执行 .\build.ps1（测试读取构建产物，与 tests/ 下其他测试一致）。
+ * 前置：先执行 pnpm build（测试读取构建产物，与 tests/ 下其他测试一致）。
  */
 
 const fs = require('fs');

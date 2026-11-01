@@ -1748,37 +1748,10 @@ const readPluginVersionFromManifest = () => {
   }
 };
 
-const getHostVersion = () => getHostAppVersion();
-
-const getHostAppInfo = () => {
-  const hostTools = getHostTools();
-  if (!hostTools) return { name: _getHostName(), version: 'unknown', platform: process.platform };
-  try {
-    if (typeof hostTools.getAppVersion === 'function') return { name: _getHostName(), version: hostTools.getAppVersion(), platform: process.platform };
-    if (typeof hostTools.getVersion === 'function') return { name: _getHostName(), version: hostTools.getVersion(), platform: process.platform };
-  } catch (e) {
-    console.warn('[preload] 获取宿主信息失败:', e);
-  }
-  return { name: _getHostName(), version: 'unknown', platform: process.platform };
-};
-
-const _getHostName = () => {
-  const hostTools = getHostTools();
-  try {
-    if (hostTools && typeof hostTools.getAppName === 'function') {
-      const name = hostTools.getAppName();
-      if (name) return String(name);
-    }
-  } catch (e) {
-    console.warn('[preload] 获取宿主名称失败:', e);
-  }
-  return '宿主';
-};
-
 /**
  * 创建平台 preload 配置（减少 preload.js 之间的重复代码）
  * @param {object} opts - { name, apiKeys, userFnName, contactUrl }
- * @returns {object} platform 配置对象 + getHostTools + getHostAppVersion
+ * @returns {object} platform 配置对象 + getHostTools + getHostAppVersion + getHostAppInfo
  */
 const createPlatformConfig = (opts) => {
   const { name, apiKeys, userFnName, contactUrl } = opts;
@@ -1803,6 +1776,16 @@ const createPlatformConfig = (opts) => {
     if (api && typeof api.getPluginVersion === 'function') return api.getPluginVersion();
     return 'unknown';
   };
+
+  // 宿主应用信息聚合：名称 / 宿主程序版本 / 平台三者一次取全。
+  // 语义与 getHostAppVersion 一致（version 是宿主程序版本，不是插件版本），
+  // 名称取本平台配置的 name（uTools / ZTools），不走宿主对象的 getAppName 探测——
+  // 后者在宿主未提供该方法时只能退化成「宿主」，页面侧无法区分平台。
+  const getHostAppInfo = () => ({
+    name,
+    version: getHostAppVersion(),
+    platform: typeof process !== 'undefined' && process.platform ? process.platform : 'unknown'
+  });
 
   const platform = {
     getName: () => name,
@@ -1837,7 +1820,7 @@ const createPlatformConfig = (opts) => {
     },
   };
 
-  return { platform, getHostTools, getHostAppVersion };
+  return { platform, getHostTools, getHostAppVersion, getHostAppInfo };
 };
 
 /**
@@ -1846,13 +1829,22 @@ const createPlatformConfig = (opts) => {
  */
 const initPlatformPreload = (opts) => {
   const { name, userFnName } = opts;
-  const { platform, getHostTools, getHostAppVersion } = createPlatformConfig(opts);
+  const { platform, getHostTools, getHostAppVersion, getHostAppInfo } = createPlatformConfig(opts);
 
   initPreload(platform);
 
   // 注册平台特定 API
   window.getHostAppVersion = getHostAppVersion;
   window.getHostName = () => name;
+
+  // getHostVersion / getHostAppInfo 与上面的 getHostAppVersion 同属「宿主信息」一族，
+  // 且都在 PAGE_API_NAMES 白名单内。历史版本只注册了 getHostAppVersion，
+  // 导致每次启动都在桥接结束时告警「getHostVersion, getHostAppInfo 未注册、未桥接」
+  // （缺陷卡 t-mut8xm7s-pqbipb）。这里补上，语义：
+  //   getHostVersion   —— 宿主程序版本（uTools / ZTools 自身版本），与 getHostAppVersion 同源；
+  //   getHostAppInfo   —— { name, version, platform } 宿主信息聚合，供页面诊断/展示。
+  window.getHostVersion = getHostAppVersion;
+  window.getHostAppInfo = getHostAppInfo;
 
   // 本插件版本号：优先读 plugin.json（发布版本的权威来源），
   // 读不到时退回宿主 API 暴露的插件版本；都取不到返回空字符串，
@@ -1914,7 +1906,8 @@ const initPlatformPreload = (opts) => {
   }
 
   // 平台相关 API 注册完毕，重新执行一次桥接，把 getHostName /
-  // getHostAppVersion / getPluginVersion 及用户 API 一并送进页面主世界。
+  // getHostAppVersion / getHostVersion / getHostAppInfo / getPluginVersion
+  // 及用户 API 一并送进页面主世界。
   // 平台 API 已注册完毕，此后缺失告警才可信（见 _exposeApisToPage 内注释）
   _markBridgingComplete();
   _exposeApisToPage([...PAGE_API_NAMES, userFnName], name);
@@ -1936,9 +1929,6 @@ module.exports = {
   getHostTools,
   getHostPath,
   getHostAppVersion,
-  getHostVersion,
-  getHostAppInfo,
   readPluginVersionFromManifest,
   findPluginRoot,
-  _getHostName,
 };

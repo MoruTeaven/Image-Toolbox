@@ -16,6 +16,7 @@
   --color-text-secondary: #637074;
   --color-border: #c8d0d4;
   --color-danger: #c84f46;
+  --color-warning: #b7822a;
   --color-accent: #2f7f86;
   --toolbar-width: 52px;
   --optionsbar-height: 50px;
@@ -39,6 +40,7 @@
   --color-text-secondary: #8e9aa1;
   --color-border: #3b454b;
   --color-danger: #e06a60;
+  --color-warning: #d9a13f;
   --color-accent: #46a0a6;
   --scrollbar-bg: #202529;
   --scrollbar-thumb: #4a555c;
@@ -216,6 +218,50 @@ html, body {
   width: 28px;
 }
 
+/* 撤销/重做容器：默认「完整」= 图标+文字的纵向大按钮（沿用工具按钮同款尺寸） */
+.toolbar__history {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+/* 紧凑模式（设置：撤销/重做布局=紧凑）：收起态并排一行、仅图标，压缩底部占用 */
+.toolbar--history-compact:not(.toolbar--expanded) .toolbar__history {
+  flex-direction: row;
+  gap: 2px;
+}
+
+.toolbar--history-compact:not(.toolbar--expanded) .toolbar__history .toolbar__btn {
+  width: 24px;
+  height: 28px;
+  padding: 0;
+  gap: 0;
+}
+
+.toolbar--history-compact:not(.toolbar--expanded) .toolbar__history .toolbar__btn span {
+  display: none;
+}
+
+.toolbar--history-compact:not(.toolbar--expanded) .toolbar__history .toolbar__btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.toolbar--history-compact:not(.toolbar--expanded) .toolbar__account {
+  width: 36px;
+  height: 36px;
+}
+
+.toolbar--history-compact:not(.toolbar--expanded) .toolbar__footer {
+  padding-top: 2px;
+}
+
+.toolbar--history-compact:not(.toolbar--expanded) .toolbar__footer .toolbar__separator {
+  margin: 2px 0;
+}
+
 .toolbar__separator {
   display: none;
 }
@@ -349,6 +395,39 @@ html, body {
 .toolbar--expanded .toolbar__separator {
   width: auto;
   margin: 4px 8px;
+}
+
+/* 「仅图标」标签时，完整模式下的撤销/重做同样只留图标，并与其它按钮同尺寸 */
+.toolbar--labels-hidden:not(.toolbar--history-compact):not(.toolbar--expanded) .toolbar__history .toolbar__btn {
+  width: 36px;
+  height: 36px;
+}
+
+.toolbar--labels-hidden:not(.toolbar--history-compact):not(.toolbar--expanded) .toolbar__history .toolbar__btn span {
+  display: none;
+}
+
+/* 展开态：撤销/重做恢复为纵向图标+文字列表 */
+.toolbar--expanded .toolbar__history {
+  flex-direction: column;
+}
+
+.toolbar--expanded .toolbar__history .toolbar__btn {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.toolbar--expanded .toolbar__history .toolbar__btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.toolbar--expanded .toolbar__history .toolbar__btn span {
+  display: inline;
+  font-size: 12px;
 }
 
 .toolbar--expanded .toolbar__account {
@@ -617,6 +696,177 @@ html, body {
   background: var(--bg-active) !important;
   border-color: var(--bg-active) !important;
   color: #ffffff !important;
+}
+
+/* ── 设置页：分组 + 行式布局 ──
+   每个分组一张卡片，组内设置项为一行（标题+说明在左，分段控件在右），
+   行间以分隔线区分，替代旧版每项一张大卡片的堆叠。 */
+.settings-group {
+  background: var(--bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 2px 18px 6px;
+  box-shadow: 0 8px 24px rgba(25, 42, 46, 0.06);
+}
+
+.settings-group + .settings-group {
+  margin-top: 14px;
+}
+
+.settings-group__title {
+  padding: 12px 0 2px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 24px;
+  padding: 12px 0;
+}
+
+.settings-row + .settings-row {
+  border-top: 1px solid var(--color-border);
+}
+
+.settings-row__info {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.settings-row__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-row__desc {
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.settings-row__control {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* 分段选择控件：圆角容器内并排选项，选中项高亮，点选即生效 */
+.settings-segment {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-window);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.settings-segment__option {
+  border: none;
+  background: transparent;
+  padding: 5px 12px;
+  border-radius: 7px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-segment__option:hover {
+  background: var(--bg-hover);
+  color: var(--color-text);
+}
+
+.settings-segment__option--active {
+  background: var(--bg-active);
+  color: #ffffff;
+}
+
+/* ── 设置页 AI 配置状态徽标 ── */
+.account-page__ai-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.account-page__ai-status--ready {
+  border-color: rgba(47, 127, 134, 0.35);
+  background: rgba(47, 127, 134, 0.12);
+  color: var(--bg-active);
+}
+
+.account-page__ai-status--unavailable {
+  border-color: rgba(200, 79, 70, 0.4);
+  background: rgba(200, 79, 70, 0.1);
+  color: var(--color-danger);
+}
+
+/* ── AI 配置页：输入控件、服务商快捷、校验提示 ── */
+.account-page__ai-input {
+  width: 100%;
+  margin-top: 12px;
+  padding: 9px 12px;
+  background: var(--bg-window);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.account-page__ai-input--area {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.account-page__ai-input:focus {
+  border-color: var(--color-accent);
+}
+
+.account-page__ai-input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+.account-page__ai-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.account-page__ai-error {
+  margin-top: 7px;
+  color: var(--color-danger);
+  font-size: 12px;
+}
+
+.account-page__ai-key-hint {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.account-page__ai-test-result {
+  align-self: center;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.account-card--ai-note p {
+  line-height: 1.7;
 }
 
 .account-about {
@@ -1875,6 +2125,7 @@ html, body {
 .property-section-title,
 .property-empty,
 .property-actions,
+.ai-note,
 .filter-categories,
 .filter-presets {
   grid-column: 1 / -1;
@@ -1944,6 +2195,77 @@ html, body {
   text-align: center;
   color: var(--color-text-secondary);
   font-size: 12px;
+}
+
+/* ── AI 修图面板 ── */
+.ai-note {
+  padding: 2px 6px 4px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ai-note--muted {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.ai-note--warn {
+  color: var(--color-warning, #d9a13f);
+}
+
+/* AI 提示词输入区（属性面板内） */
+.ai-prompt-box {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  resize: vertical;
+  background: transparent;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1.5;
+  outline: none;
+}
+
+.ai-prompt-box:focus {
+  border-color: var(--color-accent);
+}
+
+/* 提示词属性项改为纵向排列（label 在上、输入区在下） */
+.property-item:has(.ai-prompt-box) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+/* 顶部预设栏的提示词预设（平铺，横向溢出由 .optionsbar 滚动承担） */
+.ai-preset-label {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ai-preset-chip {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  background: var(--bg-card);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.ai-preset-chip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
 }
 
 .property-item {

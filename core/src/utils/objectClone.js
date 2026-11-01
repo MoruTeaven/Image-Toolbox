@@ -9,6 +9,8 @@
  * （如 _originalImage 标记由 LayerManager 自行维护），克隆后需按需补写。
  */
 
+import { installIntensityFilters } from './filters.js';
+
 // 克隆时需要保留的属性白名单（与 CanvasManager.toJSON 的自定义属性集保持一致）
 const CLONE_PROPS = [
   'selectable',
@@ -82,6 +84,9 @@ export function deserializeFabricObject(jsonObj) {
     }, 5000);
 
     try {
+      // 棕褐/灰度是自定义强度滤镜，enliven 前先保证 fabric.Image.filters 上已装好，
+      // 否则复制出来的图层会丢掉可调强度
+      installIntensityFilters();
       fabric.util.enlivenObjects([jsonObj], (enlivened) => {
         done(enlivened && enlivened.length > 0 ? enlivened[0] : null);
       });

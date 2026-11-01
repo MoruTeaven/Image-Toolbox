@@ -13,7 +13,7 @@
  *
  * 运行：node tests/save-failure-notification.test.cjs [项目根目录]
  * 依赖：仅 Node 内置模块（无需安装依赖）。
- * 前置：先执行 .\build.ps1（测试读取构建产物，与 tests/ztools-platform.test.cjs 一致）。
+ * 前置：先执行 pnpm build（测试读取构建产物，与 tests/ztools-platform.test.cjs 一致）。
  */
 
 const fs = require('fs');

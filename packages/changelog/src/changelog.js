@@ -11,7 +11,8 @@
  *   package.json                   ← 仓库发布版本（与 plugin.json 同源）
  *   README.md / agents.md          ← 文档中的「当前版本」
  *
- * 构建脚本 build.ps1 的 Test-AppVersion 会逐项比对并在不一致时直接构建失败。
+ * 构建脚本 scripts/build.mjs 会调用 scripts/version-check.mjs 逐项比对，
+ * 任一处不一致都会直接构建失败。
  *
  * 本文件取代了历史上的 core/src/updateRecords.js：
  *   - 记录数组从 updateRecords 改名为 CHANGELOG，专门表示「更新记录」，
@@ -35,7 +36,7 @@
  *   2. 在 CHANGELOG 顶部插入同版本号的记录条目
  *   3. 同步两个 plugin.json 的 version 与 package.json 的 version
  *   4. 同步 README.md / agents.md 中的「当前版本」
- *   5. 执行 .\build.ps1，构建期校验通过才算发版完成
+ *   5. 执行 pnpm build，构建期校验通过才算发版完成
  *
  * ═══ 文案规范 ═══
  *
@@ -68,16 +69,22 @@ export const APP_VERSION = '3.0.0-dev';
 export const CHANGELOG = [
   {
     version: '3.0.0-dev',
-    date: '2026-10-30',
+    date: '2026-11-01',
     changes: {
       added: [
         { text: '新增 AI 编辑工具，支持背景移除与智能抠图', platforms: null },
+        { text: '新增「AI 配置」页，可接入自己的 OpenAI 兼容服务商', platforms: null },
+        { text: '新增 AI 指令编辑，用一句话描述想要的效果即可自动调色', platforms: null },
         { text: '新增 PSD (Photoshop) 工程文件导入/导出，支持保留图层', platforms: null },
         { text: '调色新增中间调参数，可单独提亮或压暗画面中间层次', platforms: null },
         { text: '调色新增通透、浓郁、褪色、日落、青调、暗调、高反差、柔雾滤镜预设', platforms: null },
         { text: '滤镜预设新增分类（基础/复古/黑白），可按类别切换', platforms: null },
         { text: '新增 Clarendon、Gingham、Valencia、1977、Inkwell 等 Instagram 风格滤镜预设', platforms: null },
-        { text: '调色新增暖阳、清冷、朦胧、Lomo、Sutro、Nashville、银盐、碳素滤镜预设', platforms: null }
+        { text: '调色新增暖阳、清冷、朦胧、Lomo、Sutro、Nashville、银盐、碳素滤镜预设', platforms: null },
+        { text: '调色新增色温参数，可整体调暖或调冷画面', platforms: null },
+        { text: '滤镜预设新增底片效果', platforms: null },
+        { text: '调色新增棕褐与灰度强度，可自行控制复古、黑白效果的程度', platforms: null },
+        { text: '新增侧栏底部撤销/重做布局设置，可在紧凑与完整两种样式间切换', platforms: null }
       ],
       fixed: [
         { text: '修复画布缩放或平移后，图层对齐与分布位置偏移的问题', platforms: null },
@@ -88,7 +95,8 @@ export const CHANGELOG = [
         { text: '修复 uTools 启动时控制台反复输出报错信息的问题', platforms: null }
       ],
       improved: [
-        { text: '暖色、鲜艳等滤镜预设改用自然饱和度，颜色更自然', platforms: null }
+        { text: '暖色、鲜艳等滤镜预设改用自然饱和度，颜色更自然', platforms: null },
+        { text: '设置页重新分类：设置项按外观、画板布局、侧栏分组，改为紧凑的行式布局', platforms: null }
       ],
       adjusted: [],
       removed: []
@@ -162,7 +170,7 @@ export const CHANGELOG = [
         { text: '新增 ORA (OpenRaster) 工程文件导入/导出功能，可保存含图层的完整编辑状态', platforms: null }
       ],
       fixed: [
-        { text: '修复使用马赛克、橡皮擦等工具后，鼠标变成移动状态，绘制第二个选区时会移动图层的问题', platforms: null },
+        { text: '修复使用马赛克、橡皮擦等工具后，鼠标变成移动状态，绘制第二个选区时会移动图层的问题', platforms: null }
       ],
       improved: [
         { text: '底部状态栏新增「打开」按钮，支持选择 ORA 工程文件和 WebP / JPG / PNG 等常见图片格式', platforms: null },
@@ -432,7 +440,7 @@ export const PLATFORMS = {
   ALL: null,           // 所有平台
   UTOOLS: 'utools',    // uTools 专用
   ZTOOLS: 'ztools',    // ZTools 专用
-  LOCAL: 'local',      // 本地环境
+  LOCAL: 'local'       // 本地环境
 };
 
 /**

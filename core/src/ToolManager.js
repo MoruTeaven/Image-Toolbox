@@ -9,6 +9,7 @@ import TextModule from './modules/TextModule.js';
 import ShapeModule from './modules/ShapeModule.js';
 import StickerModule from './modules/StickerModule.js';
 import ExportModule from './modules/ExportModule.js';
+import AIModule from './modules/AIModule.js';
 
 /**
  * 工具管理器 — 管理工具栏状态和工具切换
@@ -146,6 +147,16 @@ class ToolManager {
       group: 'annotate',
       shortcut: 'P',
       module: StickerModule,
+    });
+
+    // AI 修图：面板由 AI_PROVIDERS 注册表派生（P0：本地一键抠图），无快捷键
+    this.registerTool({
+      name: 'ai',
+      label: 'AI 修图',
+      icon: 'ai',
+      group: 'adjust',
+      module: AIModule,
+      defaultOptions: { 'removeBackground:outputMode': 'transparent' },
     });
   }
 

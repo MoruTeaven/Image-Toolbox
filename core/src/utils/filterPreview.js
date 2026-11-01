@@ -8,6 +8,7 @@
  */
 
 import { createCanvas as createOffscreenCanvas } from '../ports/CanvasPort.js';
+import { installIntensityFilters } from './filters.js';
 
 /**
  * 预览缩略图的渲染高度（CSS 像素）
@@ -210,6 +211,9 @@ export function createFilterPreviewDataURL(image, filters) {
   if (!entry) return null;
 
   const { canvas, sourceImage } = entry;
+
+  // 缩略图与画面必须用同一套滤镜类：棕褐/灰度是自定义强度滤镜，这里同样要装好
+  installIntensityFilters();
 
   sourceImage.filters = filters.map(({ type, attr, value }) => {
     const FilterClass = fabric.Image.filters[type];
