@@ -1,16 +1,17 @@
+# pnpm workspace 成员：core（共享核心）+ packages/*（可独立发布的子包）。
+# clients/* 是各端构建入口，没有 package.json，不参与依赖解析；apps/* 为后续平台迁移预留，当前尚未创建。
 packages:
   - core
   - packages/*
   - apps/*
 
-onlyBuiltDependencies:
-  - esbuild
-
-minimumReleaseAge: 0
-
+# pnpm 11 起构建脚本放行以 allowBuilds 为准（onlyBuiltDependencies 是 pnpm 10 的写法）。
+# 旧键已移除，避免同一条放行事实由两处各自维护；若降级到 pnpm 10，需在该版本改回 onlyBuiltDependencies。
+# esbuild 的 postinstall 负责校验平台二进制（node install.js），必须为确定的 true：
+# 占位值会让 deps-status 检查以 ERR_PNPM_IGNORED_BUILDS 失败，
+# 导致 pnpm build 在构建脚本开始前就中断（报错指向代码，实际与代码无关）。
 allowBuilds:
-  # esbuild 的 postinstall 负责校验平台二进制（node install.js）。
-  # 必须为 true：pnpm 11 起 onlyBuiltDependencies 已被移除、由 allowBuilds 接管；
-  # 占位值会让 deps-status 检查以 ERR_PNPM_IGNORED_BUILDS 失败，
-  # 导致 pnpm build 在构建脚本开始前就中断（报错指向代码，实际与代码无关）。
   esbuild: true
+
+# 不限制最小发布时长：内部私有源（@moruteaven）的包常常刚发布就要安装
+minimumReleaseAge: 0
