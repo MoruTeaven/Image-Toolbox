@@ -179,12 +179,15 @@ class AIModule extends BaseModule {
     // 提示词预设只出现在顶部预设栏（getOptionsBarHTML）。属性面板
     // 不再重复渲染同一批 chips —— 同一批快捷入口放两处，点哪一处都要
     // 重新决策，且会挤占文本输入区的垂直空间。
+    // 应用方式放在提示词框上方、用按钮式单选：这是执行前必须先确定的
+    // 口径（改原图还是产副本），放在输入框下面容易被忽略而误改原图。
     const applyMode = this._getApplyMode(capability.id);
-    const applyModeOptions = [
+    const applyModeButtons = [
       { value: APPLY_MODES.newLayer, label: '新建图层' },
       { value: APPLY_MODES.inPlace, label: '编辑当前图层' }
     ].map((item) => (
-      `<option value="${item.value}" ${item.value === applyMode ? 'selected' : ''}>${item.label}</option>`
+      `<button type="button" class="ai-mode-btn ${item.value === applyMode ? 'ai-mode-btn--active' : ''}"
+               data-module-action="${capability.id}:applyMode:${item.value}">${item.label}</button>`
     )).join('');
 
     return `
@@ -192,16 +195,14 @@ class AIModule extends BaseModule {
       <div class="ai-note ai-note--muted">${capability.description}</div>
       ${statusLine}
       <div class="property-item property-item--wide">
+        <label>应用方式</label>
+        <div class="ai-mode-row">${applyModeButtons}</div>
+      </div>
+      <div class="property-item property-item--wide">
         <label>提示词</label>
         <textarea class="ai-prompt-box" rows="4"
                   data-module-prop="${capability.id}:draft"
                   placeholder="例如：整体偏冷一点，提高对比度并压暗高光，主体更突出">${this._escapeHtml(draft)}</textarea>
-      </div>
-      <div class="property-item">
-        <label>应用方式</label>
-        <select class="property-select" data-module-prop="${capability.id}:applyMode">
-          ${applyModeOptions}
-        </select>
       </div>
       ${!target ? '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>' : `
       <div class="ai-note">当前图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>
@@ -262,6 +263,16 @@ class AIModule extends BaseModule {
     const verb = parts[1];
     const capability = getAiCapability(capabilityId);
     if (!capability) {
+      return;
+    }
+
+    // 应用方式单选（按钮组）：点击即切换并刷新面板，让选中态立刻生效
+    if (verb === 'applyMode') {
+      const value = parts[2];
+      if (Object.values(APPLY_MODES).includes(value)) {
+        this.options[`${capabilityId}:applyMode`] = value;
+        this._refreshPanel();
+      }
       return;
     }
 
