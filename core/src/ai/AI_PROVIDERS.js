@@ -14,6 +14,9 @@
  *   model       模型标识（local-onnx 为 rmbg-webgpu 预设键；openai-compat 取用户配置）
  *   description 一句话说明（面板提示文案）
  *   minSelection 是否要求先选中一个图片图层
+ *   inPanel     是否在属性面板展示（缺省 true）。false = 能力保留、仍可被
+ *               模型指令/内部调用触发，只是不再占用面板空间。阶段内收敛
+ *               入口时用它，而不是删能力——删了会连带丢模型资产与路由。
  */
 
 export const AI_PROVIDER_IDS = {
@@ -29,7 +32,10 @@ export const AI_CAPABILITIES = {
     entry: 'action',
     model: 'u2netp',
     description: '识别选中图层中的主体并抠除背景，结果生成为新图层。',
-    minSelection: true
+    minSelection: true,
+    // 现阶段面板只收修图入口；抠图能力保留（指令里的「去背景」仍可触发），
+    // 只是不再单独占一块面板。要恢复面板入口把这里改回 true。
+    inPanel: false
   },
   promptEdit: {
     id: 'promptEdit',
@@ -38,7 +44,8 @@ export const AI_CAPABILITIES = {
     entry: 'prompt',
     model: 'user-configured',
     description: '用一句话描述想要的效果，AI 返回编辑指令并应用到当前图层。',
-    minSelection: true
+    minSelection: true,
+    inPanel: true
   }
 };
 

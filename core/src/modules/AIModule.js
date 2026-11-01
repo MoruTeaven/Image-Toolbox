@@ -70,16 +70,19 @@ class AIModule extends BaseModule {
 
   /**
    * 属性面板（由 AI_PROVIDERS 注册表派生）
+   *
+   * 只渲染表里 inPanel !== false 的能力：阶段内收敛入口时在表里改标志即可，
+   * 能力本身（执行路由、模型资产、指令触发）不受影响。
    * @returns {string}
    */
   getPropertyPanelHTML() {
-    const capabilities = listAiCapabilities();
+    const capabilities = listAiCapabilities().filter((capability) => capability.inPanel !== false);
     const sections = capabilities.map((capability) => this._getCapabilityHTML(capability)).join('');
-    // 顶层不再笼统断言「图片不上传」：一键抠图确为本地推理，但
-    // AI 指令编辑走用户配置的服务商（会上传一张压缩预览图）。
-    // 数据去向按能力在各自区块里说明，避免文案与行为不符。
+    // 顶层不再笼统断言「图片不上传」：数据去向按能力在各自区块里说明，
+    // 避免文案与行为不符。只剩一个能力时不再加总标题（会和能力标题重复）。
+    const heading = capabilities.length > 1 ? '<div class="property-section-title">AI 修图</div>' : '';
     return `
-      <div class="property-section-title">AI 修图</div>
+      ${heading}
       ${sections}
     `;
   }
