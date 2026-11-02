@@ -142,6 +142,8 @@ class AccountPage {
     this._nicknameEditing = false;
     this._magicLinkEmail = '';
     this._magicLinkSending = false;
+    // AI 配置页当前正在编辑的提供商（master-detail 左侧选中项）
+    this._aiProviderId = null;
 
     // 初始化 SDK（异步，不阻塞渲染）
     this._identity.init().then(() => {
@@ -275,11 +277,20 @@ class AccountPage {
       }
 
       // ── AI 配置：提供商 / 模型 ──
+      const providerOpen = this._closest(e.target, '[data-ai-provider-open]')?.getAttribute('data-ai-provider-open');
+      if (providerOpen) {
+        this._aiProviderId = providerOpen;
+        this._render();
+        return;
+      }
+
       const providerAddPreset = this._closest(e.target, '[data-ai-provider-add]')?.getAttribute('data-ai-provider-add');
       if (providerAddPreset) {
         const preset = AI_SERVICE_PRESETS.find((item) => item.id === providerAddPreset);
         if (preset) {
-          addProvider({ label: preset.label, baseUrl: preset.baseUrl });
+          // 新建后直接切到该提供商的详情，省去用户再点一次左侧列表
+          const created = addProvider({ label: preset.label, baseUrl: preset.baseUrl });
+          this._aiProviderId = created.id;
           this._render();
         }
         return;
@@ -288,7 +299,8 @@ class AccountPage {
       if (this._closest(e.target, '[data-ai-provider-add-custom]')) {
         const label = this._el?.querySelector('[data-ai-new-provider-label]')?.value || '';
         const url = this._el?.querySelector('[data-ai-new-provider-url]')?.value || '';
-        addProvider({ label, baseUrl: url });
+        const created = addProvider({ label, baseUrl: url });
+        this._aiProviderId = created.id;
         this._render();
         return;
       }
@@ -296,6 +308,9 @@ class AccountPage {
       const providerRemove = this._closest(e.target, '[data-ai-provider-remove]')?.getAttribute('data-ai-provider-remove');
       if (providerRemove) {
         removeProvider(providerRemove);
+        if (this._aiProviderId === providerRemove) {
+          this._aiProviderId = null;
+        }
         this._render();
         eventBus.emit('toast:show', { message: '提供商已删除', type: 'success' });
         return;
@@ -747,57 +762,84 @@ class AccountPage {
     const systemPrompt = config.systemPrompt || '';
     const systemPromptField = AI_CONFIG_FIELDS.systemPrompt;
 
-    const providerCards = providers.map((provider) => {
-      const isActiveProvider = provider.id === selection.providerId;
-      const modelChips = provider.models.length
-        ? provider.models.map((model) => {
-          const active = isActiveProvider && model === selection.model;
-          return `
-            <span class="ai-model-chip${active ? ' ai-model-chip--active' : ''}">
-              <button type="button" class="ai-model-chip__pick"
-                      data-ai-model-select="${provider.id}|${this._escapeAttr(model)}">${this._escapeHTML(model)}</button>
-              <button type="button" class="ai-model-chip__remove"
-                      data-ai-model-remove="${provider.id}|${this._escapeAttr(model)}" title="删除该模型">×</button>
-            </span>
-          `;
-        }).join('')
-        : '<span class="account-page__ai-key-hint">还没有模型，在下面输入模型名添加</span>';
+    // 左侧当前编辑项：先看用户点过哪个，再回退到正在使用的提供商，最后取第一个
+    const editingId = (this._aiProviderId && providers.some((p) => p.id === this._aiProviderId))
+      ? this._aiProviderId
+      : (selection.providerId || (providers[0] ? providers[0].id : ''));
+    const editing = providers.find((p) => p.id === editingId) || null;
 
-      return `
-        <div class="account-card">
-          <div class="account-card__label">提供商</div>
-          <div class="account-card__value">${this._escapeHTML(provider.label || '未命名服务商')}</div>
-          <div class="ai-provider-fields">
-            <label class="ai-provider-field">
-              <span>名称</span>
-              <input class="account-page__ai-input" type="text" value="${this._escapeAttr(provider.label)}"
-                     data-ai-provider-field="${provider.id}:label" maxlength="77" autocomplete="off">
-            </label>
-            <label class="ai-provider-field">
-              <span>服务地址</span>
-              <input class="account-page__ai-input" type="text" value="${this._escapeAttr(provider.baseUrl)}"
-                     data-ai-provider-field="${provider.id}:baseUrl" maxlength="277"
-                     autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1">
-            </label>
-            <label class="ai-provider-field">
-              <span>API Key${provider.hasKey ? `（${this._escapeHTML(maskApiKey(provider.key))}）` : ''}</span>
-              <input class="account-page__ai-input" type="password" value="${this._escapeAttr(provider.key)}"
-                     data-ai-provider-key="${provider.id}" maxlength="277"
-                     autocomplete="off" spellcheck="false" placeholder="sk-…">
-            </label>
+    const providerItems = providers.length
+      ? providers.map((provider) => {
+        const inUse = provider.id === selection.providerId;
+        const meta = [
+          `${provider.models.length} 个模型`,
+          inUse ? '使用中' : '',
+          provider.hasKey ? '' : '缺 Key'
+        ].filter(Boolean).join(' · ');
+        return `
+          <button type="button" class="ai-provider-item${provider.id === editingId ? ' ai-provider-item--editing' : ''}${inUse ? ' ai-provider-item--in-use' : ''}"
+                  data-ai-provider-open="${provider.id}">
+            <span class="ai-provider-item__name">${this._escapeHTML(provider.label || '未命名服务商')}</span>
+            <span class="ai-provider-item__meta">${this._escapeHTML(meta)}</span>
+          </button>
+        `;
+      }).join('')
+      : '<div class="ai-provider-empty">还没有提供商，从下面添加一个</div>';
+
+    const modelChips = editing && editing.models.length
+      ? editing.models.map((model) => {
+        const active = editing.id === selection.providerId && model === selection.model;
+        return `
+          <span class="ai-model-chip${active ? ' ai-model-chip--active' : ''}">
+            <button type="button" class="ai-model-chip__pick"
+                    data-ai-model-select="${editing.id}|${this._escapeAttr(model)}">${this._escapeHTML(model)}</button>
+            <button type="button" class="ai-model-chip__remove"
+                    data-ai-model-remove="${editing.id}|${this._escapeAttr(model)}" title="删除该模型">×</button>
+          </span>
+        `;
+      }).join('')
+      : '<span class="ai-config-hint">还没有模型，在下面输入模型名添加</span>';
+
+    const detail = editing
+      ? `
+        <div class="ai-config-detail">
+          <div class="ai-config-detail__head">
+            <input class="account-page__ai-input ai-config-detail__name" type="text"
+                   value="${this._escapeAttr(editing.label)}" data-ai-provider-field="${editing.id}:label"
+                   maxlength="77" autocomplete="off" placeholder="提供商名称">
+            <button class="account-page__btn" type="button" data-ai-provider-remove="${editing.id}">删除提供商</button>
           </div>
-          <p>模型：点一下即切换到该模型，× 删除。</p>
-          <div class="ai-model-row">${modelChips}</div>
-          <div class="account-page__theme-row">
-            <input class="account-page__ai-input ai-model-add-input" type="text"
-                   data-ai-model-input="${provider.id}" maxlength="77"
-                   autocomplete="off" spellcheck="false" placeholder="模型名，如 gpt-4o-mini">
-            <button class="account-page__btn" type="button" data-ai-model-add="${provider.id}">添加模型</button>
-            <button class="account-page__btn" type="button" data-ai-provider-remove="${provider.id}">删除提供商</button>
+
+          <label class="ai-config-field">
+            <span class="ai-config-field__label">服务地址</span>
+            <input class="account-page__ai-input" type="text" value="${this._escapeAttr(editing.baseUrl)}"
+                   data-ai-provider-field="${editing.id}:baseUrl" maxlength="277"
+                   autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1">
+          </label>
+
+          <label class="ai-config-field">
+            <span class="ai-config-field__label">API Key${editing.hasKey ? `（${this._escapeHTML(maskApiKey(editing.key))}）` : ''}</span>
+            <input class="account-page__ai-input" type="password" value="${this._escapeAttr(editing.key)}"
+                   data-ai-provider-key="${editing.id}" maxlength="277"
+                   autocomplete="off" spellcheck="false" placeholder="sk-…">
+            <span class="ai-config-field__hint">只保存在本机，不随账号同步</span>
+          </label>
+
+          <div class="ai-config-models">
+            <div class="ai-config-models__head">
+              <span class="ai-config-field__label">模型</span>
+              <span class="ai-config-hint">点选即切换，× 删除</span>
+            </div>
+            <div class="ai-model-row">${modelChips}</div>
+            <div class="ai-config-add-model">
+              <input class="account-page__ai-input" type="text" data-ai-model-input="${editing.id}"
+                     maxlength="77" autocomplete="off" spellcheck="false" placeholder="模型名，如 gpt-4o-mini">
+              <button class="account-page__btn" type="button" data-ai-model-add="${editing.id}">添加模型</button>
+            </div>
           </div>
         </div>
-      `;
-    }).join('');
+      `
+      : '<div class="ai-config-detail ai-config-detail--empty">在左侧选择或添加一个提供商</div>';
 
     return `
       <div class="account-card account-card--ai-status">
@@ -817,24 +859,25 @@ class AccountPage {
         </div>
       </div>
 
-      ${providerCards}
+      <div class="ai-config-split">
+        <div class="ai-config-side">
+          <div class="ai-config-side__head">提供商</div>
+          <div class="ai-config-list">${providerItems}</div>
+          <div class="ai-config-side__add">
+            <div class="ai-config-add-presets">
+              ${AI_SERVICE_PRESETS.filter((preset) => preset.id !== 'custom').map((preset) => `
+                <button class="ai-config-preset" type="button" data-ai-provider-add="${preset.id}">${this._escapeHTML(preset.label)}</button>
+              `).join('')}
+            </div>
+            <input class="account-page__ai-input" type="text" data-ai-new-provider-label
+                   maxlength="77" autocomplete="off" placeholder="名称，如 自建网关">
+            <input class="account-page__ai-input" type="text" data-ai-new-provider-url
+                   maxlength="277" autocomplete="off" spellcheck="false" placeholder="地址，如 https://api.example.com/v1">
+            <button class="account-page__btn" type="button" data-ai-provider-add-custom>添加自定义提供商</button>
+          </div>
+        </div>
 
-      <div class="account-card">
-        <div class="account-card__label">提供商</div>
-        <div class="account-card__value">添加提供商</div>
-        <p>点选常用服务商直接添加，或填自定义名称与服务地址。API Key 可稍后再填。</p>
-        <div class="account-page__ai-presets">
-          ${AI_SERVICE_PRESETS.filter((preset) => preset.id !== 'custom').map((preset) => `
-            <button class="account-page__theme-choice" type="button" data-ai-provider-add="${preset.id}">${this._escapeHTML(preset.label)}</button>
-          `).join('')}
-        </div>
-        <div class="account-page__theme-row">
-          <input class="account-page__ai-input" type="text" data-ai-new-provider-label
-                 maxlength="77" autocomplete="off" placeholder="名称，如 自建网关">
-          <input class="account-page__ai-input" type="text" data-ai-new-provider-url
-                 maxlength="277" autocomplete="off" spellcheck="false" placeholder="服务地址，如 https://api.example.com/v1">
-          <button class="account-page__btn" type="button" data-ai-provider-add-custom>添加</button>
-        </div>
+        ${detail}
       </div>
 
       <div class="account-card">

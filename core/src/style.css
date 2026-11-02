@@ -869,30 +869,202 @@ html, body {
   line-height: 1.7;
 }
 
-/* ── AI 配置页：提供商字段组与模型 chips ── */
-.ai-provider-fields {
+/* ── AI 配置页：提供商主从布局 ── */
+.ai-config-split {
+  display: grid;
+  grid-template-columns: minmax(177px, 220px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.ai-config-side {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
 }
 
-.ai-provider-field {
+.ai-config-side__head {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.ai-config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-provider-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--color-text);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.ai-provider-item:hover {
+  background: var(--bg-hover);
+}
+
+.ai-provider-item--editing {
+  background: var(--bg-window);
+  border-color: var(--color-accent);
+}
+
+.ai-provider-item__name {
+  font-size: 13px;
+}
+
+.ai-provider-item__meta {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.ai-provider-item--in-use .ai-provider-item__name::after {
+  content: " ●";
+  color: var(--bg-active);
+  font-size: 9px;
+  vertical-align: middle;
+}
+
+.ai-provider-empty {
+  padding: 10px 4px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ai-config-side__add {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.ai-config-add-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ai-config-preset {
+  padding: 3px 8px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.ai-config-preset:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.ai-config-side__add .account-page__ai-input {
+  margin-top: 0;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
+.ai-config-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  min-width: 0;
+}
+
+.ai-config-detail--empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  min-height: 177px;
+}
+
+.ai-config-detail__head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
-.ai-provider-field > span {
-  flex: 0 0 77px;
+.ai-config-detail__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-top: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.ai-config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-config-field__label {
   color: var(--color-text-secondary);
   font-size: 12px;
 }
 
-.ai-provider-field > input {
+.ai-config-field .account-page__ai-input {
+  margin-top: 0;
+}
+
+.ai-config-field__hint,
+.ai-config-hint {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.ai-config-models {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.ai-config-models__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ai-config-add-model {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-config-add-model .account-page__ai-input {
   flex: 1 1 auto;
   min-width: 0;
   margin-top: 0;
+}
+
+@media (max-width: 777px) {
+  .ai-config-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .ai-model-row {
@@ -946,11 +1118,6 @@ html, body {
 
 .ai-model-chip__remove:hover {
   color: var(--color-danger);
-}
-
-.ai-model-add-input {
-  flex: 1 1 auto;
-  margin-top: 0;
 }
 
 .account-about {
