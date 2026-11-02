@@ -191,15 +191,15 @@
 
 本产品使用了以下开源组件，特此致谢。各组件的权利归属与使用条件以原始协议为准，完整依赖以代码仓库 `package.json` 为准：
 
-| 组件 | 用途 | 协议 |
-| --- | --- | --- |
-| Fabric.js 5.x | 画布编辑引擎 | MIT |
-| fflate | ORA 工程文件压缩 | MIT |
-| fast-xml-parser | ORA 工程文件解析 | MIT |
-| ag-psd | PSD 导入/导出 | MIT |
-| onnxruntime-web | 本地 AI 推理运行时 | MIT |
-| @planby-tech/rmbg-webgpu（含 u2netp 模型） | 本地抠图模型封装 | MIT AND Apache-2.0 |
-| @moruteaven/identity-sdk | 统一身份 SDK | MIT |
+| 组件 | 作者/权利人 | 用途 | 协议 |
+| --- | --- | --- | --- |
+| Fabric.js 5.x | Juriy Zaytsev (kangax) 及 Fabric.js 社区 | 画布编辑引擎 | MIT |
+| fflate | Arjun Barrett (101arrowz) | ORA 工程文件压缩 | MIT |
+| fast-xml-parser | Amit Gupta (NaturalIntelligence) | ORA 工程文件解析 | MIT |
+| ag-psd | Agamnentzar | PSD 导入/导出 | MIT |
+| onnxruntime-web | Microsoft（ONNX Runtime） | 本地 AI 推理运行时 | MIT |
+| @planby-tech/rmbg-webgpu（含 u2netp 模型） | Planby Technologies；u2netp 模型源自 U-2-Net 项目（xuebinqin） | 本地抠图模型封装 | MIT AND Apache-2.0 |
+| @moruteaven/identity-sdk | 抹露茶柒（MoruTeaven.com） | 统一身份 SDK | MIT |
 
 ---
 
