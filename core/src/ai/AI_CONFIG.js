@@ -29,13 +29,21 @@ import { AI_STAGE } from './AI_PROVIDERS.js';
 
 /** 存储键（历史沿用，勿改，改了会丢用户已配置的值）。 */
 const STORAGE_KEYS = {
+  // 旧版单套配置（仅用于迁移，写入路径已废弃）
   baseUrl: 'image-toolbox-ai-base-url',
   model: 'image-toolbox-ai-model',
   systemPrompt: 'image-toolbox-ai-system-prompt',
   draft: 'image-toolbox-ai-draft',
   // 仅本机：刻意不加 db 前缀，避免被宿主存储层（会同步）捡走
-  apiKeyLocal: 'image-toolbox-ai-api-key'
+  apiKeyLocal: 'image-toolbox-ai-api-key',
+  // 新版两级配置：提供商（不含 Key）+ 当前选中项
+  providers: 'image-toolbox-ai-providers',
+  activeProvider: 'image-toolbox-ai-active-provider',
+  activeModel: 'image-toolbox-ai-active-model'
 };
+
+/** 每个提供商的 Key 单独存本机：image-toolbox-ai-key-<providerId>。 */
+const PROVIDER_KEY_PREFIX = 'image-toolbox-ai-key-';
 
 /** 服务商预设：用户只需选地址并填 Key。 */
 export const AI_SERVICE_PRESETS = [
@@ -47,7 +55,13 @@ export const AI_SERVICE_PRESETS = [
   { id: 'custom', label: '自定义', baseUrl: '' }
 ];
 
-/** 各字段的权威定义（UI 与校验都由此派生）。 */
+/**
+ * 各字段的权威定义（UI 与校验都由此派生）。
+ *
+ * 注意：baseUrl / apiKey / model 三个字段属于旧版单套配置，现在由
+ * 「提供商 + 模型」两级结构取代（见 listProviders 一节），这里保留定义
+ * 仅用于旧配置迁移；新 UI 不再渲染这三个字段。
+ */
 export const AI_CONFIG_FIELDS = {
   baseUrl: {
     key: 'baseUrl',
@@ -174,27 +188,311 @@ const _writeLocal = (storageKey, value) => {
 
 const _storageKeyOf = (fieldKey) => STORAGE_KEYS[fieldKey === 'apiKey' ? 'apiKeyLocal' : fieldKey];
 
+// ── 提供商 / 模型两级配置 ──
+//
+// 结构：提供商 { id, label, baseUrl, models: string[] }，Key 按提供商单独存本机。
+// 这样用户可以一次配置多个服务商（OpenAI / DeepSeek / 自建网关…），
+// 每个服务商下挂多个模型，使用时在右侧栏选「提供商 · 模型」。
+
+let _migrated = false;
+
+const _generateProviderId = () => `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+const _readProviders = () => {
+  const raw = _readSync(STORAGE_KEYS.providers);
+  if (!raw) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        id: String(item.id || _generateProviderId()),
+        label: String(item.label || ''),
+        baseUrl: String(item.baseUrl || ''),
+        models: Array.isArray(item.models) ? item.models.map((m) => String(m)).filter(Boolean) : []
+      }));
+  } catch {
+    console.warn('[AI_CONFIG] 提供商配置解析失败，按空配置处理');
+    return [];
+  }
+};
+
+const _writeProviders = (providers) => _writeSync(STORAGE_KEYS.providers, JSON.stringify(providers));
+
 /**
- * 读取全部 AI 配置。
+ * 旧版单套配置 → 新版两级配置的一次性迁移。
+ * 已存在新版配置时不动；旧配置迁移后保留原键（只读，不再写入）。
+ */
+function _migrateLegacyConfig() {
+  if (_migrated) {
+    return;
+  }
+  _migrated = true;
+  if (_readProviders().length > 0) {
+    return;
+  }
+  const baseUrl = _readSync(STORAGE_KEYS.baseUrl) || '';
+  const model = _readSync(STORAGE_KEYS.model) || '';
+  const apiKey = _readLocal(STORAGE_KEYS.apiKeyLocal) || '';
+  if (!baseUrl && !model && !apiKey) {
+    return;
+  }
+  const provider = {
+    id: _generateProviderId(),
+    label: matchPresetId(baseUrl) ? String(matchPresetId(baseUrl)) : (baseUrl ? '自定义服务商' : '默认服务商'),
+    baseUrl,
+    models: model ? [model] : []
+  };
+  _writeProviders([provider]);
+  if (apiKey) {
+    _writeLocal(`${PROVIDER_KEY_PREFIX}${provider.id}`, apiKey);
+  }
+  if (baseUrl) {
+    _writeSync(STORAGE_KEYS.activeProvider, provider.id);
+  }
+  if (model) {
+    _writeSync(STORAGE_KEYS.activeModel, model);
+  }
+}
+
+/**
+ * 读取全部提供商（含 Key 与本机是否有 Key 的标记），UI 直接渲染用。
+ * @returns {Array<{id:string,label:string,baseUrl:string,models:string[],key:string,hasKey:boolean}>}
+ */
+export function listProviders() {
+  _migrateLegacyConfig();
+  return _readProviders().map((provider) => {
+    const key = getProviderKey(provider.id);
+    return { ...provider, key, hasKey: !!key };
+  });
+}
+
+/**
+ * 按 id 取提供商（不含 Key）。
+ * @param {string} providerId
+ * @returns {object|null}
+ */
+export function getProvider(providerId) {
+  return _readProviders().find((provider) => provider.id === providerId) || null;
+}
+
+/**
+ * 新增一个提供商。
+ * @param {object} params { label, baseUrl }
+ * @returns {object} 新增的提供商（不含 Key）
+ */
+export function addProvider({ label = '', baseUrl = '' } = {}) {
+  const providers = _readProviders();
+  const provider = {
+    id: _generateProviderId(),
+    label: String(label || '').trim() || '未命名服务商',
+    baseUrl: normalizeAiBaseUrl(baseUrl),
+    models: []
+  };
+  providers.push(provider);
+  _writeProviders(providers);
+  return provider;
+}
+
+/**
+ * 修改提供商的基础信息（label / baseUrl）。
+ * @param {string} providerId
+ * @param {object} patch { label?, baseUrl? }
+ * @returns {boolean}
+ */
+export function updateProvider(providerId, patch = {}) {
+  const providers = _readProviders();
+  const target = providers.find((provider) => provider.id === providerId);
+  if (!target) {
+    return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'label')) {
+    target.label = String(patch.label || '').trim();
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'baseUrl')) {
+    target.baseUrl = normalizeAiBaseUrl(patch.baseUrl);
+  }
+  _writeProviders(providers);
+  return true;
+}
+
+/**
+ * 删除提供商（连带删除本机 Key 与当前选中项指向它的引用）。
+ * @param {string} providerId
+ * @returns {boolean}
+ */
+export function removeProvider(providerId) {
+  const providers = _readProviders();
+  const next = providers.filter((provider) => provider.id !== providerId);
+  if (next.length === providers.length) {
+    return false;
+  }
+  _writeProviders(next);
+  _writeLocal(`${PROVIDER_KEY_PREFIX}${providerId}`, '');
+  if ((_readSync(STORAGE_KEYS.activeProvider) || '') === providerId) {
+    _writeSync(STORAGE_KEYS.activeProvider, next[0] ? next[0].id : '');
+    _writeSync(STORAGE_KEYS.activeModel, next[0] && next[0].models[0] ? next[0].models[0] : '');
+  }
+  return true;
+}
+
+/**
+ * 读取某提供商的 API Key（仅本机存储）。
+ * @param {string} providerId
+ * @returns {string}
+ */
+export function getProviderKey(providerId) {
+  if (!providerId) {
+    return '';
+  }
+  return _readLocal(`${PROVIDER_KEY_PREFIX}${providerId}`) || '';
+}
+
+/**
+ * 写入某提供商的 API Key（仅本机，不随宿主账号同步）。
+ * @param {string} providerId
+ * @param {string} apiKey
+ * @returns {boolean}
+ */
+export function setProviderKey(providerId, apiKey) {
+  if (!providerId) {
+    return false;
+  }
+  return _writeLocal(`${PROVIDER_KEY_PREFIX}${providerId}`, apiKey || '');
+}
+
+/**
+ * 给提供商添加一个模型（重名忽略）。
+ * @param {string} providerId
+ * @param {string} modelName
+ * @returns {boolean} 是否真的新增了
+ */
+export function addModel(providerId, modelName) {
+  const name = String(modelName || '').trim();
+  if (!name) {
+    return false;
+  }
+  const providers = _readProviders();
+  const target = providers.find((provider) => provider.id === providerId);
+  if (!target) {
+    return false;
+  }
+  if (target.models.includes(name)) {
+    return false;
+  }
+  target.models.push(name);
+  _writeProviders(providers);
+  return true;
+}
+
+/**
+ * 从提供商删除一个模型；若删的是当前选中模型，自动切到剩余第一个。
+ * @param {string} providerId
+ * @param {string} modelName
+ * @returns {boolean}
+ */
+export function removeModel(providerId, modelName) {
+  const providers = _readProviders();
+  const target = providers.find((provider) => provider.id === providerId);
+  if (!target) {
+    return false;
+  }
+  const next = target.models.filter((model) => model !== modelName);
+  if (next.length === target.models.length) {
+    return false;
+  }
+  target.models = next;
+  _writeProviders(providers);
+  if ((_readSync(STORAGE_KEYS.activeProvider) || '') === providerId
+    && (_readSync(STORAGE_KEYS.activeModel) || '') === modelName) {
+    _writeSync(STORAGE_KEYS.activeModel, next[0] || '');
+  }
+  return true;
+}
+
+/**
+ * 当前选中的「提供商 + 模型」。
+ * @returns {{providerId:string, model:string}}
+ */
+export function getActiveSelection() {
+  _migrateLegacyConfig();
+  const providers = _readProviders();
+  if (providers.length === 0) {
+    return { providerId: '', model: '' };
+  }
+  const selectedProviderId = _readSync(STORAGE_KEYS.activeProvider) || '';
+  const selectedModel = _readSync(STORAGE_KEYS.activeModel) || '';
+  const provider = providers.find((item) => item.id === selectedProviderId) || providers[0];
+  const model = provider.models.includes(selectedModel) ? selectedModel : (provider.models[0] || '');
+  return { providerId: provider.id, model };
+}
+
+/**
+ * 保存当前选中的「提供商 + 模型」。
+ * @param {string} providerId
+ * @param {string} model
+ * @returns {boolean}
+ */
+export function setActiveSelection(providerId, model) {
+  _writeSync(STORAGE_KEYS.activeProvider, providerId || '');
+  _writeSync(STORAGE_KEYS.activeModel, model || '');
+  return true;
+}
+
+/**
+ * 解析当前可用的执行目标（提供商 + 模型 + Key）。
+ * @returns {{provider:object, model:string, apiKey:string}|null}
+ */
+export function resolveActiveTarget() {
+  const { providerId, model } = getActiveSelection();
+  const provider = providerId ? getProvider(providerId) : null;
+  if (!provider || !model) {
+    return null;
+  }
+  return { provider, model, apiKey: getProviderKey(provider.id) };
+}
+
+/**
+ * 读取执行用配置（对上层保持「扁平」视图，避免每个调用方都处理两级结构）。
  * @returns {{ baseUrl:string, apiKey:string, model:string, systemPrompt:string, draft:string }}
  */
 export function getAiConfig() {
-  const out = {};
-  Object.values(AI_CONFIG_FIELDS).forEach((field) => {
-    const storageKey = _storageKeyOf(field.key);
-    const raw = field.storage === 'local' ? _readLocal(storageKey) : _readSync(storageKey);
-    out[field.key] = raw === null ? '' : raw;
-  });
-  return out;
+  const systemPrompt = _readSync(STORAGE_KEYS.systemPrompt) || '';
+  const draft = _readSync(STORAGE_KEYS.draft) || '';
+  const target = resolveActiveTarget();
+  if (!target) {
+    return { baseUrl: '', apiKey: '', model: '', systemPrompt, draft };
+  }
+  return {
+    baseUrl: target.provider.baseUrl,
+    apiKey: target.apiKey,
+    model: target.model,
+    systemPrompt,
+    draft
+  };
 }
 
 /**
  * 写入一个字段（按字段的存储分层自动路由）。
+ *
+ * 只接受全局面板字段（systemPrompt / draft）。baseUrl / apiKey / model 属于
+ * 提供商+模型两级结构，必须经 addProvider / setProviderKey / addModel 写入，
+ * 用扁平接口直写会让两级数据不同步。
+ *
  * @param {string} fieldKey AI_CONFIG_FIELDS 的键
  * @param {string} value
  * @returns {boolean} 是否成功持久化
  */
 export function setAiConfigField(fieldKey, value) {
+  if (fieldKey === 'baseUrl' || fieldKey === 'apiKey' || fieldKey === 'model') {
+    console.warn(`[AI_CONFIG] 字段 ${fieldKey} 已由提供商/模型两级配置接管，请使用 addProvider/setProviderKey/addModel`);
+    return false;
+  }
   const field = AI_CONFIG_FIELDS[fieldKey];
   if (!field) {
     console.warn(`[AI_CONFIG] 未知配置字段: ${fieldKey}`);

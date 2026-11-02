@@ -869,6 +869,90 @@ html, body {
   line-height: 1.7;
 }
 
+/* ── AI 配置页：提供商字段组与模型 chips ── */
+.ai-provider-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ai-provider-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-provider-field > span {
+  flex: 0 0 77px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.ai-provider-field > input {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-top: 0;
+}
+
+.ai-model-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ai-model-chip {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--bg-card);
+}
+
+.ai-model-chip--active {
+  border-color: var(--bg-active);
+  background: var(--bg-active);
+}
+
+.ai-model-chip__pick {
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: none;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ai-model-chip--active .ai-model-chip__pick {
+  color: #ffffff;
+}
+
+.ai-model-chip__remove {
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: none;
+  border-left: 1px solid var(--color-border);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ai-model-chip--active .ai-model-chip__remove {
+  color: rgba(255, 255, 255, 0.85);
+  border-left-color: rgba(255, 255, 255, 0.3);
+}
+
+.ai-model-chip__remove:hover {
+  color: var(--color-danger);
+}
+
+.ai-model-add-input {
+  flex: 1 1 auto;
+  margin-top: 0;
+}
+
 .account-about {
   max-width: 820px;
 }

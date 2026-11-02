@@ -3,7 +3,7 @@ import eventBus from '../EventBus.js';
 import { listAiCapabilities, getAiCapability, AI_PROVIDER_IDS, listVisiblePromptPresets, getAiPromptPreset } from '../ai/AI_PROVIDERS.js';
 import { runCapability } from '../ai/LocalOnnxProvider.js';
 import { requestInstruction } from '../ai/OpenAiCompatProvider.js';
-import { getAiConfig, isAiConfigReady, setAiConfigField, AI_CONFIG_LIMITS } from '../ai/AI_CONFIG.js';
+import { getAiConfig, isAiConfigReady, setAiConfigField, AI_CONFIG_LIMITS, listProviders, getActiveSelection, setActiveSelection } from '../ai/AI_CONFIG.js';
 import { parseInstruction, describeActions, applyActionsToImage } from '../ai/AI_INSTRUCTION.js';
 import { FILTER_PRESETS, setFilter, applyFilterPreset } from '../utils/filters.js';
 import { requestRender } from '../utils/helpers.js';
@@ -209,10 +209,33 @@ class AIModule extends BaseModule {
       ? 'AI 处理中…'
       : (applyMode === APPLY_MODES.inPlace ? '让 AI 编辑当前图层' : '让 AI 生成新图层');
 
+    // 模型选择器：按提供商分组列出全部已配置模型，选中即切换执行目标。
+    // 只在「已配置过提供商」时出现；一个模型都没有时由 statusLine 提示去配置。
+    const providers = listProviders().filter((provider) => provider.models.length > 0);
+    const selection = getActiveSelection();
+    const modelSelect = providers.length
+      ? `
+      <div class="property-item property-item--wide">
+        <label>模型</label>
+        <select class="property-select" data-module-prop="${capability.id}:model">
+          ${providers.map((provider) => `
+            <optgroup label="${this._escapeHtml(provider.label || '未命名服务商')}">
+              ${provider.models.map((model) => `
+                <option value="${provider.id}|${this._escapeHtml(model)}"
+                  ${provider.id === selection.providerId && model === selection.model ? 'selected' : ''}>${this._escapeHtml(model)}</option>
+              `).join('')}
+            </optgroup>
+          `).join('')}
+        </select>
+      </div>
+      `
+      : '';
+
     return `
       <div class="property-item property-item--wide">
         <div class="ai-mode-row">${applyModeButtons}</div>
       </div>
+      ${modelSelect}
       ${statusLine}
       <div class="property-item property-item--wide">
         <label>提示词</label>
@@ -249,6 +272,16 @@ class AIModule extends BaseModule {
     if (key === 'applyMode') {
       const valid = Object.values(APPLY_MODES);
       this.options[`${capabilityId}:applyMode`] = valid.includes(value) ? value : APPLY_MODES.newLayer;
+      return true;
+    }
+    // 模型切换：值形如 "providerId|modelName"，保存为当前执行目标。
+    // 需要刷新面板，让状态行显示新选中的模型。
+    if (key === 'model') {
+      const [providerId, modelName] = String(value || '').split('|');
+      if (providerId && modelName) {
+        setActiveSelection(providerId, modelName);
+        this._refreshPanel();
+      }
       return true;
     }
     // 提示词草稿：随输随存（AI_CONFIG 决定分层存储）。刻意不刷新面板，
