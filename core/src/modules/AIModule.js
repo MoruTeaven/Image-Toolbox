@@ -195,7 +195,6 @@ class AIModule extends BaseModule {
     )).join('');
 
     return `
-      <div class="property-section-title">${capability.label}</div>
       <div class="property-item property-item--wide">
         <div class="ai-mode-row">${applyModeButtons}</div>
       </div>
