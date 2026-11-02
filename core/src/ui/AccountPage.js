@@ -755,6 +755,18 @@ class AccountPage {
    * @returns {string}
    */
   _renderAiConfig() {
+    // 网页版不开放自定义服务商：浏览器直连第三方接口受 CORS 限制，
+    // 且不建议让用户在公开网页里粘贴 API Key。这里只给说明，不渲染表单。
+    if (this._isWebPlatform()) {
+      return `
+        <div class="account-card account-card--ai-note">
+          <div class="account-card__label">AI</div>
+          <div class="account-card__value">网页版不支持自定义 AI 服务商</div>
+          <p>出于密钥安全与浏览器跨域限制，网页版不提供第三方服务商接入。AI 编辑功能请在 uTools / ZTools 桌面客户端中使用。</p>
+        </div>
+      `;
+    }
+
     const providers = listProviders();
     const selection = getActiveSelection();
     const config = getAiConfig();
@@ -1419,6 +1431,17 @@ class AccountPage {
       console.warn('[AccountPage] 获取平台标识失败:', e);
     }
     return inferPlatformFromGlobals();
+  }
+
+  /**
+   * 是否运行在网页版（决定 AI 配置页是否开放自定义服务商）。
+   * @returns {boolean}
+   */
+  _isWebPlatform() {
+    const tokens = toPlatformTokens(this._getCurrentPlatform());
+    // PLATFORMS 常量表里没有 web（它只服务更新记录的平台过滤），
+    // 这里用 WebHostAdapter.platform.id 的实际取值。
+    return tokens.includes('web');
   }
 
   /**

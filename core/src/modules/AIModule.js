@@ -42,11 +42,24 @@ const APPLY_MODES = {
  * 纳入撤销链路；源图层保持不动，由用户决定去留。
  */
 class AIModule extends BaseModule {
-  constructor(canvasManager, historyManager, defaultOptions = {}) {
-    super(canvasManager, historyManager, defaultOptions);
+  constructor(canvasManager, historyManager, defaultOptions = {}, host = null) {
+    super(canvasManager, historyManager, defaultOptions, host);
     // 此模块接管属性面板（与调色模块一致）：即使有选中对象也显示 AI 控件
     this.overridePropertyPanel = true;
     this._running = false;
+  }
+
+  /**
+   * 是否运行在网页版。
+   *
+   * 网页版不开放自定义服务商：浏览器直连第三方接口受 CORS 限制（多数
+   * OpenAI 兼容服务商不返回 CORS 头，请求会被浏览器直接拦掉），且让用户
+   * 在公开网页里粘贴 API Key 有钓鱼/仿冒风险。云端 AI 仅在桌面客户端可用。
+   * @returns {boolean}
+   */
+  _isWebPlatform() {
+    const id = String(this._host?.platform?.id || '').toLowerCase();
+    return id === 'web';
   }
 
   activate(options = {}) {
@@ -76,6 +89,15 @@ class AIModule extends BaseModule {
    * @returns {string}
    */
   getPropertyPanelHTML() {
+    // 网页版不开放自定义服务商（CORS + Key 安全），面板只给说明。
+    if (this._isWebPlatform()) {
+      return `
+        <div class="property-section-title">AI 修图</div>
+        <div class="ai-note ai-note--warn">网页版不支持配置第三方 AI 服务商。</div>
+        <div class="ai-note ai-note--muted">浏览器直连第三方接口受跨域限制，且不建议在网页里填写 API Key。请使用 uTools / ZTools 桌面客户端的 AI 编辑功能。</div>
+      `;
+    }
+
     const capabilities = listAiCapabilities().filter((capability) => capability.inPanel !== false);
     const sections = capabilities.map((capability) => this._getCapabilityHTML(capability)).join('');
     // 顶层不再笼统断言「图片不上传」：数据去向按能力在各自区块里说明，
