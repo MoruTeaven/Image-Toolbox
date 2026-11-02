@@ -1,6 +1,6 @@
 import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
-import { listAiCapabilities, getAiCapability, AI_PROVIDER_IDS, AI_PROMPT_PRESETS, getAiPromptPreset } from '../ai/AI_PROVIDERS.js';
+import { listAiCapabilities, getAiCapability, AI_PROVIDER_IDS, listVisiblePromptPresets, getAiPromptPreset } from '../ai/AI_PROVIDERS.js';
 import { runCapability } from '../ai/LocalOnnxProvider.js';
 import { requestInstruction } from '../ai/OpenAiCompatProvider.js';
 import { getAiConfig, isAiConfigReady, setAiConfigField, AI_CONFIG_LIMITS } from '../ai/AI_CONFIG.js';
@@ -96,7 +96,7 @@ class AIModule extends BaseModule {
    * @returns {string}
    */
   getOptionsBarHTML() {
-    const chips = AI_PROMPT_PRESETS.map((preset) => `
+    const chips = listVisiblePromptPresets().map((preset) => `
       <button type="button" class="ai-preset-chip" data-preset="${preset.id}"
               title="${this._escapeHtml(preset.prompt)}">${this._escapeHtml(preset.label)}</button>
     `).join('');

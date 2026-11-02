@@ -8,10 +8,11 @@
  *   2. 结果走既有工具链，撤销/重做、图层面板、导出天然可用；
  *   3. 攻击面收敛：模型无法注入任意代码或属性，只能填白名单里的数。
  *
- * 输出契约与 ai/AI_CONFIG.js 的 DEFAULT_AI_SYSTEM_PROMPT 一一对应，
+ * 输出契约与 ai/AI_CONFIG.js 的 buildAiSystemPrompt() 一一对应，
  * 二者必须同步修改（改 prompt 不改解析器 = 能力静默失效）。
  */
 
+import { AI_STAGE } from './AI_PROVIDERS.js';
 import { FILTER_PARAMS } from '../utils/filters.js';
 
 /** 允许 AI 写入的调色参数白名单：直接取自 FILTER_PARAMS 的 inUi 项。 */
@@ -105,6 +106,11 @@ export function normalizeAction(action) {
   }
 
   if (type === 'background') {
+    // 3.0 未上线抠图（AI_STAGE.background === false）：模型即使返回该动作
+    // 也一律拒绝，避免「用户可见面没入口、却能通过提示词触发」的半上线状态。
+    if (!AI_STAGE.background) {
+      return { ok: false, reason: '去背景能力暂未开放' };
+    }
     const mode = String(action.mode || '').trim();
     if (mode !== 'transparent' && mode !== 'white') {
       return { ok: false, reason: `background.mode 只支持 transparent/white: ${mode || '(空)'}` };

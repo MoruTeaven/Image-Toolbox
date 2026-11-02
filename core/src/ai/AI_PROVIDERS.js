@@ -33,8 +33,9 @@ export const AI_CAPABILITIES = {
     model: 'u2netp',
     description: '识别选中图层中的主体并抠除背景，结果生成为新图层。',
     minSelection: true,
-    // 现阶段面板只收修图入口；抠图能力保留（指令里的「去背景」仍可触发），
-    // 只是不再单独占一块面板。要恢复面板入口把这里改回 true。
+    // 3.0 不上线抠图：面板不展示，且 AI_STAGE.background = false 让指令
+    // 白名单也拒绝 background（否则用户可见面无入口、却能靠提示词触发）。
+    // 3.1 上线时把 inPanel 改回 true，并把 AI_STAGE.background 改成 true。
     inPanel: false
   },
   promptEdit: {
@@ -64,6 +65,33 @@ export function listAiCapabilities() {
 }
 
 /**
+ * AI_STAGE — 能力的上线阶段开关（唯一开关点）
+ *
+ * 3.0 先不上线抠图：能力代码、本地模型与资产全部保留，只把「用户可见面」
+ * 关掉——顶部预设栏不出现「去背景」、系统提示词不告诉模型有此能力、
+ * 指令白名单拒绝 background。3.1 上线时把 background 改 true，并把
+ * AI_CAPABILITIES.removeBackground.inPanel 一起改回 true 即可。
+ */
+export const AI_STAGE = {
+  background: false
+};
+
+/**
+ * 预设是否已到可展示的阶段。
+ * @param {object} preset AI_PROMPT_PRESETS 表项
+ * @returns {boolean}
+ */
+function isPresetVisible(preset) {
+  if (!preset.stage) {
+    return true;
+  }
+  if (preset.stage === 'background') {
+    return AI_STAGE.background;
+  }
+  return true;
+}
+
+/**
  * AI_PROMPT_PRESETS — 预设提示词表（唯一权威来源）
  *
  * 顶部预设栏与右侧栏快捷 chips 全部由本表派生，新增一条预设 = 在表里
@@ -74,6 +102,7 @@ export function listAiCapabilities() {
  *   label  按钮短文案
  *   prompt 填入提示词框的完整文案（须与 AI_INSTRUCTION 的白名单能力匹配，
  *          否则模型会返回「无可执行指令」）
+ *   stage  可选，能力所属阶段（见 AI_STAGE）；未到阶段的预设不展示
  */
 export const AI_PROMPT_PRESETS = [
   { id: 'brighten', label: '提亮', prompt: '把画面整体提亮，保持自然肤色' },
@@ -82,10 +111,20 @@ export const AI_PROMPT_PRESETS = [
   { id: 'vivid', label: '鲜艳', prompt: '提高饱和度与对比度，色彩更鲜艳' },
   { id: 'soft', label: '柔雾', prompt: '加一点柔光雾感，降低对比度' },
   { id: 'mono', label: '黑白', prompt: '转换为黑白风格，保留层次感' },
-  { id: 'cutout', label: '去背景', prompt: '抠除背景，输出透明底' }
+  { id: 'cutout', label: '去背景', prompt: '抠除背景，输出透明底', stage: 'background' }
 ];
 
-/** 按预设 id 取定义；未知 id 返回 null。 */
+/** 当前阶段可见的预设（顶部预设栏与快捷 chips 用）。 */
+export function listVisiblePromptPresets() {
+  return AI_PROMPT_PRESETS.filter(isPresetVisible);
+}
+
+/**
+ * 按预设 id 取定义；未知 id 或未到阶段的预设返回 null。
+ * @param {string} id
+ * @returns {object|null}
+ */
 export function getAiPromptPreset(id) {
-  return AI_PROMPT_PRESETS.find((preset) => preset.id === id) || null;
+  const preset = AI_PROMPT_PRESETS.find((item) => item.id === id) || null;
+  return preset && isPresetVisible(preset) ? preset : null;
 }

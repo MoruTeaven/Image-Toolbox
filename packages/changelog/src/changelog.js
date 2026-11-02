@@ -72,7 +72,6 @@ export const CHANGELOG = [
     date: '2026-11-01',
     changes: {
       added: [
-        { text: '新增 AI 编辑工具，支持背景移除与智能抠图', platforms: null },
         { text: '新增「AI 配置」页，可接入自己的 OpenAI 兼容服务商', platforms: null },
         { text: '新增 AI 指令编辑，用一句话描述想要的效果即可自动调色', platforms: null },
         { text: '新增 PSD (Photoshop) 工程文件导入/导出，支持保留图层', platforms: null },

@@ -25,6 +25,7 @@
 
 import { getPreference, setPreference } from '../utils/preferences.js';
 import { getDomPort } from '../ports/DomPort.js';
+import { AI_STAGE } from './AI_PROVIDERS.js';
 
 /** 存储键（历史沿用，勿改，改了会丢用户已配置的值）。 */
 const STORAGE_KEYS = {
@@ -113,20 +114,34 @@ export const AI_CONFIG_LIMITS = {
 /**
  * 内置默认系统提示词（系统提示词留空时使用）。
  * 输出契约与 ai/AI_INSTRUCTION.js 的解析器一一对应，改这里必须同步改解析器。
+ *
+ * 为什么是函数而不是常量：可执行动作清单随上线阶段变化（AI_STAGE）。
+ * 未上线的能力不能写进提示词——否则模型会主动建议用户「去背景」，
+ * 而该动作会在白名单处被拒绝，体验上是「AI 说能做、点下去做不到」。
+ *
+ * @returns {string}
  */
-export const DEFAULT_AI_SYSTEM_PROMPT = [
-  '你是图片工具箱的 AI 修图指令引擎。用户会给出对一张图片的修图要求，',
-  '你只输出一个 JSON 对象，不要输出 Markdown、代码围栏或任何解释文字。',
-  'JSON 结构：{"actions":[{"type":"...","参数...":...}],"notes":"一句话说明"}',
-  '允许的 actions（数值一律用 UI 量程）：',
-  '- {"type":"filter","key":"brightness|contrast|saturation|vibrance|hue|temperature|gamma|blur","value":数值}',
-  '  量程：brightness/contrast/saturation -100~100；vibrance/gamma/temperature -77~77；hue -180~180；blur 0~100',
-  '- {"type":"preset","name":"滤镜预设名"}',
-  '- {"type":"background","mode":"transparent|white"}（抠图去背景）',
-  '- {"type":"rotate","angle":0|90|180|270} · {"type":"flip","axis":"x|y"}',
-  '- {"type":"opacity","value":0~100}',
-  '不确定或超出上述能力时，返回 {"actions":[],"notes":"说明为什么做不到"}。'
-].join('');
+export function buildAiSystemPrompt() {
+  const lines = [
+    '你是图片工具箱的 AI 修图指令引擎。用户会给出对一张图片的修图要求，',
+    '你只输出一个 JSON 对象，不要输出 Markdown、代码围栏或任何解释文字。',
+    'JSON 结构：{"actions":[{"type":"...","参数...":...}],"notes":"一句话说明"}',
+    '允许的 actions（数值一律用 UI 量程）：',
+    '- {"type":"filter","key":"brightness|contrast|saturation|vibrance|hue|temperature|gamma|blur","value":数值}',
+    '  量程：brightness/contrast/saturation -100~100；vibrance/gamma/temperature -77~77；hue -180~180；blur 0~100',
+    '- {"type":"preset","name":"滤镜预设名"}',
+    '- {"type":"rotate","angle":0|90|180|270} · {"type":"flip","axis":"x|y"}',
+    '- {"type":"opacity","value":0~100}'
+  ];
+  if (AI_STAGE.background) {
+    lines.splice(4, 0, '- {"type":"background","mode":"transparent|white"}（抠图去背景）');
+  }
+  lines.push('不确定或超出上述能力时，返回 {"actions":[],"notes":"说明为什么做不到"}。');
+  return lines.join('');
+}
+
+/** 3.1 起为兼容旧调用保留；新代码请用 buildAiSystemPrompt()。 */
+export const DEFAULT_AI_SYSTEM_PROMPT = buildAiSystemPrompt();
 
 const _readSync = (storageKey) => getPreference(storageKey);
 const _writeSync = (storageKey, value) => setPreference(storageKey, value);

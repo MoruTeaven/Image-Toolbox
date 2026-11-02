@@ -19,7 +19,7 @@
 import { aiFetch } from '../ports/AIPort.js';
 import {
   AI_CONFIG_LIMITS,
-  DEFAULT_AI_SYSTEM_PROMPT,
+  buildAiSystemPrompt,
   getAiConfig,
   normalizeAiBaseUrl,
   resolveChatCompletionsUrl,
@@ -86,7 +86,7 @@ export async function requestInstruction(params) {
   }
 
   const url = resolveChatCompletionsUrl(config.baseUrl);
-  const systemPrompt = String(config.systemPrompt || '').trim() || DEFAULT_AI_SYSTEM_PROMPT;
+  const systemPrompt = String(config.systemPrompt || '').trim() || buildAiSystemPrompt();
 
   const userContent = [];
   if (prompt) {
