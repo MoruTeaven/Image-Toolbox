@@ -181,7 +181,7 @@
 
 ## 十六、联系我们
 
-- **运营者**：抹露茶柒（MoruTeaven）· 个人开发者
+- **运营者**：MoruTeaven.com · 个人开发者
 - **联系邮箱**：me@MoruTeaven.com
 - **官方网站**：www.MoruTeaven.com
 
