@@ -205,13 +205,13 @@ class AIModule extends BaseModule {
                   data-module-prop="${capability.id}:draft"
                   placeholder="例如：整体偏冷一点，提高对比度并压暗高光，主体更突出">${this._escapeHtml(draft)}</textarea>
       </div>
-      ${!target ? '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>' : `
-      <div class="ai-note">当前图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>
+      ${target ? `<div class="ai-note">当前图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>` : (applyMode === APPLY_MODES.inPlace
+        ? '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>'
+        : '')}
       <div class="property-item property-item--wide property-item--actions">
         <button type="button" class="property-btn property-btn--primary"
                 data-module-action="${capability.id}:run"${this._running ? ' disabled' : ''}>${this._running ? 'AI 处理中…' : '让 AI 编辑当前图层'}</button>
       </div>
-      `}
     `;
   }
 
