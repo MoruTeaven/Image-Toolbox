@@ -194,6 +194,15 @@ class AIModule extends BaseModule {
                data-module-action="${capability.id}:applyMode:${item.value}">${item.label}</button>`
     )).join('');
 
+    // 选中状态行：有目标图层时显示图层名；「编辑当前图层」但未选中时
+    // 抬头提示要选图层；「新建图层」模式不显示该提示（副本模式对用户的
+    // 心智是「以选中的图为源」，不该再催他去选一个已有图层）。
+    const targetLine = target
+      ? `<div class="ai-note">当前图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>`
+      : (applyMode === APPLY_MODES.inPlace
+        ? '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>'
+        : '');
+
     return `
       <div class="property-item property-item--wide">
         <div class="ai-mode-row">${applyModeButtons}</div>
@@ -205,9 +214,7 @@ class AIModule extends BaseModule {
                   data-module-prop="${capability.id}:draft"
                   placeholder="例如：整体偏冷一点，提高对比度并压暗高光，主体更突出">${this._escapeHtml(draft)}</textarea>
       </div>
-      ${target ? `<div class="ai-note">当前图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>` : (applyMode === APPLY_MODES.inPlace
-        ? '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>'
-        : '')}
+      ${targetLine}
       <div class="property-item property-item--wide property-item--actions">
         <button type="button" class="property-btn property-btn--primary"
                 data-module-action="${capability.id}:run"${this._running ? ' disabled' : ''}>${this._running ? 'AI 处理中…' : '让 AI 编辑当前图层'}</button>
