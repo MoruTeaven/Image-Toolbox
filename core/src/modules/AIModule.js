@@ -203,6 +203,12 @@ class AIModule extends BaseModule {
         ? '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>'
         : '');
 
+    // 执行按钮文案随应用方式变化：新建图层模式下「编辑当前图层」是错的
+    // 描述（原图层保持不变），会让人以为点下去会改掉原图。
+    const runLabel = this._running
+      ? 'AI 处理中…'
+      : (applyMode === APPLY_MODES.inPlace ? '让 AI 编辑当前图层' : '让 AI 生成新图层');
+
     return `
       <div class="property-item property-item--wide">
         <div class="ai-mode-row">${applyModeButtons}</div>
@@ -217,7 +223,7 @@ class AIModule extends BaseModule {
       ${targetLine}
       <div class="property-item property-item--wide property-item--actions">
         <button type="button" class="property-btn property-btn--primary"
-                data-module-action="${capability.id}:run"${this._running ? ' disabled' : ''}>${this._running ? 'AI 处理中…' : '让 AI 编辑当前图层'}</button>
+                data-module-action="${capability.id}:run"${this._running ? ' disabled' : ''}>${runLabel}</button>
       </div>
     `;
   }
