@@ -182,8 +182,9 @@ class AIModule extends BaseModule {
     // 提示词预设只出现在顶部预设栏（getOptionsBarHTML）。属性面板
     // 不再重复渲染同一批 chips —— 同一批快捷入口放两处，点哪一处都要
     // 重新决策，且会挤占文本输入区的垂直空间。
-    // 应用方式放在提示词框上方、用按钮式单选：这是执行前必须先确定的
-    // 口径（改原图还是产副本），放在输入框下面容易被忽略而误改原图。
+    // 应用方式放在最上方、按钮式单选、不加文字标签：两个选项本身已说明
+    // 语义，标签纯属占位；放在提示词框上面是因为这是执行前必须先确定的
+    // 口径（改原图还是产副本），放到下面容易被忽略而误改原图。
     const applyMode = this._getApplyMode(capability.id);
     const applyModeButtons = [
       { value: APPLY_MODES.newLayer, label: '新建图层' },
@@ -195,11 +196,10 @@ class AIModule extends BaseModule {
 
     return `
       <div class="property-section-title">${capability.label}</div>
-      ${statusLine}
       <div class="property-item property-item--wide">
-        <label>应用方式</label>
         <div class="ai-mode-row">${applyModeButtons}</div>
       </div>
+      ${statusLine}
       <div class="property-item property-item--wide">
         <label>提示词</label>
         <textarea class="ai-prompt-box" rows="4"
