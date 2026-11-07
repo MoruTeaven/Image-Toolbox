@@ -1,5 +1,6 @@
 import eventBus from './EventBus.js';
 import {
+  getPreference,
   getJSONPreference,
   setJSONPreference,
   removePreference,
@@ -8,15 +9,24 @@ import { diffSnapshots } from './utils/historyDiff.js';
 
 /** 历史记录在本机的持久化键 */
 export const HISTORY_RECORDS_KEY = 'image-toolbox-history-records';
-/** 历史存档最多保留的条数（缩略图很小，200 条约数百 KB） */
-const MAX_ARCHIVED_RECORDS = 200;
+/** 持久化结构版本：v2 按文件分槽位，旧版的扁平数组不再读取 */
+const HISTORY_STORE_VERSION = 2;
+/** 单个文件最多保留的历史存档条数 */
+const MAX_ARCHIVED_RECORDS = 77;
+/** 本机最多保留多少个文件的历史（更早的文件槽位按最后编辑时间淘汰） */
+const MAX_FILES = 7;
 /** 持久化写入防抖，避免连续画笔操作时高频写本地存储 */
 const PERSIST_DEBOUNCE_MS = 1200;
 /** 历史缩略图的最大宽度与压缩质量 */
 const THUMBNAIL_MAX_WIDTH = 96;
 const THUMBNAIL_QUALITY = 0.5;
-/** 写入失败时的降级保留条数（本地存储配额有限） */
-const PERSIST_FALLBACK_LIMITS = [MAX_ARCHIVED_RECORDS, 100, 47, 20];
+/** 写入失败（本地存储配额有限）时的降级保留策略：文件数 × 每文件条数 */
+const PERSIST_FALLBACK_LIMITS = [
+  { files: 7, records: 77 },
+  { files: 7, records: 47 },
+  { files: 3, records: 47 },
+  { files: 3, records: 20 },
+];
 
 /**
  * 历史记录管理器 — 撤销/重做 + 可查看的完整时间线
@@ -32,8 +42,11 @@ const PERSIST_FALLBACK_LIMITS = [MAX_ARCHIVED_RECORDS, 100, 47, 20];
  * 快照；更早的条目仍留在时间线上，只保留标签/时间/缩略图，面板里标记为
  * 「仅可查看」。这样「查看所有历史记录」与内存占用可以兼得。
  *
- * 跨会话：条目摘要（标签/时间/缩略图）写入本机偏好存储，重开后可查看；
- * 快照本身不持久化，因此历史存档只可查看、不可恢复。
+ * 历史记录与当前文件绑定：setFileKey 切换文件时清空内存中的撤销栈与时间线，
+ * 并载入该文件自己的历史存档；换文件后不会看到上一个文件的记录。
+ *
+ * 跨会话：条目摘要（标签/时间/缩略图/参数变更）按文件分槽位写入本机偏好存储，
+ * 再次打开同一文件时可查看；快照本身不持久化，因此历史存档只可查看、不可恢复。
  */
 class HistoryManager {
   /**
@@ -52,14 +65,48 @@ class HistoryManager {
     this._timeline = [];
     /** 当前画布状态对应的条目 id（用于面板高亮），无对应条目时为 null */
     this._currentId = null;
-    /** 上次会话留存的历史存档（只读） */
-    this._archived = this._loadArchived();
+    /** 当前文件标识（由 setFileKey 绑定；未绑定时归入 unknown） */
+    this._fileKey = null;
+    /** 当前文件的历史存档（只读） */
+    this._archived = [];
+    /** 本机全部文件的历史槽位 { [fileKey]: { updatedAt, records } } */
+    this._store = this._loadStore();
 
     this._seq = 0;
     this._persistTimer = null;
     // 最近一次「状态未变化」的操作名：多数工具在动手前 saveState，
     // 此时快照还是上一步的结果，标签要留到下一次真正入栈时使用。
     this._pendingLabel = null;
+  }
+
+  /**
+   * 绑定当前编辑的文件（历史记录跟随文件）。
+   *
+   * key 变化时：先把上一个文件的记录写回它的槽位，再清空内存中的撤销栈、
+   * 时间线与待定标签，最后载入新文件自己的历史存档。同一个文件重复加载
+   * （key 相同）不清空，用户不会因为再次选择同一张图片而丢掉本次历史。
+   *
+   * @param {string} fileKey
+   * @returns {boolean} 是否发生了文件切换
+   */
+  setFileKey(fileKey) {
+    const key = fileKey || 'unknown';
+    if (key === this._fileKey) return false;
+
+    // 只把本次会话新增的记录写回上一个文件；单纯读取历史不应改写槽位
+    if (this._fileKey && this._timeline.length > 0) {
+      this._persistNow();
+    }
+
+    this._fileKey = key;
+    this._archived = this._getFileRecords(key);
+    this.undoStack = [];
+    this.redoStack = [];
+    this._timeline = [];
+    this._currentId = null;
+    this._pendingLabel = null;
+    this._notify();
+    return true;
   }
 
   /**
@@ -83,7 +130,8 @@ class HistoryManager {
     }
 
     const previousJson = last || null;
-    const entryLabel = this._pendingLabel || label;
+    const pendingLabel = this._pendingLabel;
+    const entryLabel = pendingLabel || label;
     const changes = previousJson ? diffSnapshots(previousJson, json) : { items: [] };
 
     this.undoStack.push(json);
@@ -108,7 +156,9 @@ class HistoryManager {
 
     // 当前画布就是刚入栈的快照
     this._currentId = this._timeline[this._timeline.length - 1].id;
-    this._pendingLabel = label;
+    // 本次是「操作前存档」时（pending 非空），本次标签属于下一个操作；
+    // 否则本次标签已经用于本条记录，不再挂起。
+    this._pendingLabel = pendingLabel ? label : null;
 
     this._notify();
     this._schedulePersist();
@@ -279,13 +329,13 @@ class HistoryManager {
   }
 
   /**
-   * 重置本次编辑的历史（加载新图片 / 导入工程时调用）。
-   * 先把当前记录并入本机存档，避免「打开新图 → 之前的记录消失」；
-   * 与 clear() 的区别是**不清空**历史存档。
+   * 重置当前文件的编辑历史（重新加载同一文件 / 导入工程时调用）。
+   * 先把当前记录并入该文件的存档，再清空时间线；该文件的历史存档仍可查看。
+   * 与 clear() 的区别是**不清空**当前文件的历史存档。
    */
   reset() {
     this._persistNow();
-    this._archived = this._loadArchived();
+    this._archived = this._getFileRecords(this._fileKey);
     this.undoStack = [];
     this.redoStack = [];
     this._timeline = [];
@@ -295,7 +345,8 @@ class HistoryManager {
   }
 
   /**
-   * 清空全部历史（含本机存档），由历史面板的「清空」按钮调用
+   * 清空当前文件的全部历史（含本机存档），由历史面板的「清空」按钮调用。
+   * 其它文件的历史槽位不受影响。
    */
   clear() {
     this._cancelPersistTimer();
@@ -305,7 +356,15 @@ class HistoryManager {
     this._currentId = null;
     this._pendingLabel = null;
     this._archived = [];
-    removePreference(HISTORY_RECORDS_KEY);
+
+    const key = this._fileKey;
+    if (key && this._store.files[key]) {
+      delete this._store.files[key];
+      this._writeStore(this._store);
+    } else if (!key) {
+      removePreference(HISTORY_RECORDS_KEY);
+    }
+
     this._notify();
   }
 
@@ -369,21 +428,58 @@ class HistoryManager {
     });
   }
 
-  _loadArchived() {
+  /**
+   * 读取本机历史存储（v2：按文件分槽位）。
+   * 旧版是扁平数组、不区分文件，与「历史跟随文件」不兼容，直接忽略
+   * （不删除旧数据，避免误伤；下次写入会覆盖为新结构）。
+   * @returns {{version:number, files:Object}}
+   */
+  _loadStore() {
     const raw = getJSONPreference(HISTORY_RECORDS_KEY, null);
-    if (!Array.isArray(raw)) return [];
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)
+      && raw.version === HISTORY_STORE_VERSION
+      && raw.files && typeof raw.files === 'object' && !Array.isArray(raw.files)) {
+      return { version: HISTORY_STORE_VERSION, files: raw.files };
+    }
+    return { version: HISTORY_STORE_VERSION, files: {} };
+  }
 
-    return raw
-      .filter((entry) => entry && Number.isFinite(entry.at) && typeof entry.id === 'string')
-      .map((entry) => ({
-        id: entry.id,
-        at: entry.at,
-        label: typeof entry.label === 'string' && entry.label ? entry.label : '编辑',
-        thumbnail: typeof entry.thumbnail === 'string' ? entry.thumbnail : null,
-        changes: normalizeChanges(entry.changes),
-      }))
+  /**
+   * 取某个文件的历史存档。
+   * @param {string|null} fileKey
+   * @returns {Array}
+   */
+  _getFileRecords(fileKey) {
+    if (!fileKey) return [];
+
+    const slot = this._store.files[fileKey];
+    if (!slot || !Array.isArray(slot.records)) return [];
+
+    return slot.records
+      .map(normalizeRecord)
+      .filter((record) => record !== null)
       .sort((a, b) => a.at - b.at)
       .slice(-MAX_ARCHIVED_RECORDS);
+  }
+
+  /**
+   * 写入本机历史存储；配额不足时按降级策略缩减文件数与每文件条数。
+   * @param {object} store
+   * @returns {boolean}
+   */
+  _writeStore(store) {
+    for (const limit of PERSIST_FALLBACK_LIMITS) {
+      const payload = truncateStore(store, limit);
+      if (setJSONPreference(HISTORY_RECORDS_KEY, payload)) {
+        return true;
+      }
+      // 没有持久化层（如 Node 测试环境）时 setPreference 会写内存并返回 false；
+      // 能读回就说明本次写入已生效，继续降级只会白丢数据。
+      if (getPreference(HISTORY_RECORDS_KEY) !== null) {
+        return false;
+      }
+    }
+    return false;
   }
 
   _schedulePersist() {
@@ -402,13 +498,16 @@ class HistoryManager {
   }
 
   /**
-   * 把「历史存档 + 本次会话记录」写入本机。
+   * 把「当前文件的历史存档 + 本次会话记录」写入该文件的槽位。
    * 失败（配额满等）时逐步减少保留条数重试，仍失败则静默放弃——
    * 历史记录丢持久化不应影响编辑本身。
    * @returns {boolean} 是否写入成功
    */
   _persistNow() {
     this._cancelPersistTimer();
+
+    // 没有显式绑定文件（纯测试或异常路径）时归入 unknown，避免记录丢失
+    if (!this._fileKey) this._fileKey = 'unknown';
 
     const sessionRecords = this._timeline.map((entry) => ({
       id: entry.id,
@@ -418,14 +517,22 @@ class HistoryManager {
       changes: entry.changes || null,
     }));
 
-    const merged = [...this._archived, ...sessionRecords].sort((a, b) => a.at - b.at);
+    const merged = [...this._archived, ...sessionRecords]
+      .sort((a, b) => a.at - b.at)
+      .slice(-MAX_ARCHIVED_RECORDS);
 
-    for (const limit of PERSIST_FALLBACK_LIMITS) {
-      if (setJSONPreference(HISTORY_RECORDS_KEY, merged.slice(-limit))) {
-        return true;
-      }
+    if (merged.length === 0) {
+      // 没有可写内容时不要创建空槽位（否则读取历史会把文件重新排序，挤掉别的文件）
+      delete this._store.files[this._fileKey];
+      return this._writeStore(this._store);
     }
-    return false;
+
+    this._store.files[this._fileKey] = {
+      updatedAt: Date.now(),
+      records: merged,
+    };
+
+    return this._writeStore(this._store);
   }
 
   _isSameSnapshot(a, b) {
@@ -456,6 +563,47 @@ class HistoryManager {
       return value;
     });
   }
+}
+
+/**
+ * 校验一条从本机存档读回的历史记录。
+ * @param {*} record
+ * @returns {object|null}
+ */
+function normalizeRecord(record) {
+  if (!record || typeof record !== 'object') return null;
+  if (!Number.isFinite(record.at) || typeof record.id !== 'string') return null;
+
+  return {
+    id: record.id,
+    at: record.at,
+    label: typeof record.label === 'string' && record.label ? record.label : '编辑',
+    thumbnail: typeof record.thumbnail === 'string' ? record.thumbnail : null,
+    changes: normalizeChanges(record.changes),
+  };
+}
+
+/**
+ * 按保留策略裁剪存储：只保留最近 N 个文件，每个文件最多保留 M 条记录。
+ * @param {{version:number, files:Object}} store
+ * @param {{files:number, records:number}} limit
+ * @returns {{version:number, files:Object}}
+ */
+function truncateStore(store, limit) {
+  const keys = Object.keys(store.files);
+  keys.sort((a, b) => (store.files[a]?.updatedAt || 0) - (store.files[b]?.updatedAt || 0));
+
+  const files = {};
+  for (const key of keys.slice(-limit.files)) {
+    const slot = store.files[key];
+    const records = Array.isArray(slot?.records) ? slot.records : [];
+    files[key] = {
+      updatedAt: slot?.updatedAt || 0,
+      records: records.slice(-limit.records),
+    };
+  }
+
+  return { version: HISTORY_STORE_VERSION, files };
 }
 
 /**

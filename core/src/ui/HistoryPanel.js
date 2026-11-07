@@ -40,7 +40,7 @@ class HistoryPanel {
           <span class="panel__title">历史</span>
           <div class="history-panel__actions">
             <span class="history-panel__count" id="history-count">0</span>
-            <button class="history-panel__clear" id="history-clear" type="button" title="清空历史记录" aria-label="清空历史记录">
+            <button class="history-panel__clear" id="history-clear" type="button" title="清空当前文件的历史记录" aria-label="清空当前文件的历史记录">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="14" height="14">
                 <path d="M3 6h18"/>
                 <path d="M8 6V4.5A1.5 1.5 0 019.5 3h5A1.5 1.5 0 0116 4.5V6"/>
@@ -60,7 +60,7 @@ class HistoryPanel {
             <span>暂无历史记录</span>
           </div>
         </div>
-        <div class="history-panel__footer" id="history-footer">记录自动保存在本机 · 点击查看参数变更</div>
+        <div class="history-panel__footer" id="history-footer">仅跟随当前文件 · 点击查看参数变更</div>
       </div>
     `;
   }
