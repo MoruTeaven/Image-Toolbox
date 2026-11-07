@@ -75,6 +75,8 @@ class App {
     this._externalSourceTimer = null;
     this._externalSourceFallbackTimer = null;
     this._saveTimer = null;
+    this._historyFlushTimer = null;
+    this._historyFlushLabel = null;
     this._onPluginEnterCallback = null;
 
     this._init();
@@ -332,6 +334,9 @@ class App {
       eventBus.on('canvas:objectModified', (target) => {
         if (target?.excludeFromHistory) return;
 
+        // 操作完成后补一条时间线记录（最后一次操作没有后续 saveState）
+        this._scheduleHistoryFlush('移动/变换');
+
         if (this._saveTimer) clearTimeout(this._saveTimer);
         this._saveTimer = setTimeout(() => {
           this.historyManager?.saveState('移动/变换');
@@ -340,7 +345,15 @@ class App {
 
       eventBus.on('layer:reorderWillChange', () => {
         this.historyManager?.saveState('图层排序');
+        this._scheduleHistoryFlush('图层排序');
       }),
+
+      // ═══ 操作结束：把「操作完成后」的画面补进历史时间线 ═══
+      eventBus.on('canvas:mouseUp', () => this._scheduleHistoryFlush()),
+      eventBus.on('canvas:objectAdded', () => this._scheduleHistoryFlush()),
+      eventBus.on('canvas:textEditingExited', () => this._scheduleHistoryFlush('文字')),
+      eventBus.on('crop:applied', () => this._scheduleHistoryFlush('裁剪')),
+      eventBus.on('ai:taskFinished', () => this._scheduleHistoryFlush('AI 修图')),
 
       // ═══ 工具自动切换 ═══
       eventBus.on('tool:requestChange', (toolName) => {
@@ -439,6 +452,7 @@ class App {
       if (active && active.excludeFromHistory) return;
       this.historyManager?.saveState('删除图层');
       this.canvasManager?.removeActiveObject();
+      this._scheduleHistoryFlush('删除图层');
       return;
     }
 
@@ -456,6 +470,7 @@ class App {
       e.preventDefault();
       this.historyManager?.saveState('复制图层');
       this.layerManager.duplicateLayer(meta.id);
+      this._scheduleHistoryFlush('复制图层');
       return;
     }
 
@@ -483,6 +498,12 @@ class App {
     if (this._saveTimer) {
       clearTimeout(this._saveTimer);
       this._saveTimer = null;
+    }
+
+    if (this._historyFlushTimer) {
+      clearTimeout(this._historyFlushTimer);
+      this._historyFlushTimer = null;
+      this._historyFlushLabel = null;
     }
 
     if (this._externalSourceTimer) {
@@ -520,6 +541,28 @@ class App {
     this.toolManager?.destroy?.();
     this.historyManager?.destroy?.();
     this.canvasManager?.destroy?.();
+  }
+
+  /**
+   * 安排一次「操作完成后」的历史记录补录。
+   *
+   * 多个事件（mouseup / objectModified / textEditingExited …）可能在同一操作里
+   * 连续触发，这里用防抖合并成一次 flush；标签取最先到达的具体操作名，
+   * 避免「文字」被随后的 objectModified 覆盖成「移动/变换」。
+   * @param {string} [label]
+   */
+  _scheduleHistoryFlush(label = null) {
+    if (label && !this._historyFlushLabel) {
+      this._historyFlushLabel = label;
+    }
+    if (this._historyFlushTimer) return;
+
+    this._historyFlushTimer = setTimeout(() => {
+      this._historyFlushTimer = null;
+      const flushLabel = this._historyFlushLabel;
+      this._historyFlushLabel = null;
+      this.historyManager?.flush?.(flushLabel);
+    }, 250);
   }
 
   async _loadImage(source) {

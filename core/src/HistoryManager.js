@@ -29,6 +29,33 @@ const PERSIST_FALLBACK_LIMITS = [
 ];
 
 /**
+ * 快照比较时忽略的交互属性。
+ * 它们会随工具切换（激活/停用模块）变化，但不影响画面内容，
+ * 不能算作「历史变化」——否则切一次工具就多一条空记录。
+ */
+const HISTORY_IGNORED_KEYS = new Set([
+  'selectable',
+  'evented',
+  'hasControls',
+  'hasBorders',
+  'lockMovementX',
+  'lockMovementY',
+  'lockRotation',
+  'lockScalingX',
+  'lockScalingY',
+  'hoverCursor',
+  'paintFirst',
+  'strokeUniform',
+  'objectCaching',
+  'cornerColor',
+  'cornerSize',
+  'cornerStyle',
+  'transparentCorners',
+  'borderColor',
+  'perPixelTargetFind',
+]);
+
+/**
  * 历史记录管理器 — 撤销/重做 + 可查看的完整时间线
  *
  * 撤销/重做沿用原有的「修改前存档」栈语义（undoStack / redoStack），
@@ -110,9 +137,14 @@ class HistoryManager {
   }
 
   /**
-   * 保存当前画布状态
+   * 保存当前画布状态（操作前调用，用于撤销）
+   *
+   * 撤销栈保持「操作前快照」的旧语义；时间线只记录**上一步操作完成后的
+   * 画布状态**（多数工具在动手前 saveState，此时画布正是上一步的结果），
+   * 所以历史面板里点击某条记录，恢复的是该操作完成后的画面。
+   *
    * @param {string} [label] - 记录标签（显示在历史面板上的操作名）
-   * @returns {boolean} 是否真正入栈（状态未变化时返回 false）
+   * @returns {boolean} 是否产生了新的撤销快照或时间线记录
    */
   saveState(label = '编辑') {
     if (!this._enabled || this._isRestoring) return false;
@@ -121,48 +153,97 @@ class HistoryManager {
     const json = this._cm.toJSON();
     if (!json) return false;
 
-    const last = this.undoStack[this.undoStack.length - 1];
-    if (last && this._isSameSnapshot(last, json)) {
-      // 状态没有变化（多数工具在动手前存档）：把这次操作名留给下一次真正入栈的记录，
-      // 这样「记录标签」对应的是产生该快照的那次操作，而不是下一个操作。
-      this._pendingLabel = label;
+    // ── 撤销栈：保持旧语义，存「操作前快照」 ──
+    const lastUndo = this.undoStack[this.undoStack.length - 1];
+    const undoChanged = !(lastUndo && this._isSameSnapshot(lastUndo, json));
+
+    if (undoChanged) {
+      this.undoStack.push(json);
+      if (this.undoStack.length > this.maxSteps) {
+        this.undoStack.shift();
+      }
+      this.redoStack = [];
+    }
+
+    // ── 时间线：记录「上一步操作完成后的画布状态」 ──
+    const lastRecord = this._timeline[this._timeline.length - 1];
+    const recordChanged = !(lastRecord?.json && this._isSameSnapshot(lastRecord.json, json));
+
+    if (recordChanged) {
+      const entryLabel = this._pendingLabel || label;
+      this._pushTimelineEntry(entryLabel, json, lastRecord?.json || null);
+    }
+
+    // 本次操作名留给「操作完成」时使用；若上一步没有产生画布变化（点击空白等），
+    // 旧的操作名随之作废。
+    this._pendingLabel = typeof label === 'string' && label ? label : null;
+
+    if (undoChanged || recordChanged) {
+      this._notify();
+      this._schedulePersist();
+    }
+    return undoChanged || recordChanged;
+  }
+
+  /**
+   * 操作完成时调用（松开鼠标、拖拽结束、文字退出编辑等）：
+   * 把当前画布状态作为「该操作完成后的结果」补进时间线。
+   *
+   * 与 saveState 的分工：
+   *   - saveState 负责撤销栈（操作前快照）与「上一步操作后」的落定；
+   *   - flush 负责最后一次操作——它没有后续 saveState，需要在这里补记录，
+   *     否则用户刚完成的那一步不会出现在历史面板里。
+   *
+   * flush 不修改撤销栈：撤销所需的操作前快照已由工具在动手前 saveState 入栈。
+   *
+   * @param {string} [label] - 操作名（未传入时沿用待定标签）
+   * @returns {boolean} 是否新增了记录
+   */
+  flush(label = null) {
+    if (!this._enabled || this._isRestoring) return false;
+    if (!this._cm.canvas) return false;
+
+    const json = this._cm.toJSON();
+    if (!json) return false;
+
+    const lastRecord = this._timeline[this._timeline.length - 1];
+    if (lastRecord?.json && this._isSameSnapshot(lastRecord.json, json)) {
+      // 没有实际变化（点击空白、切工具等），不制造空记录
       return false;
     }
 
-    const previousJson = last || null;
-    const pendingLabel = this._pendingLabel;
-    const entryLabel = pendingLabel || label;
-    const changes = previousJson ? diffSnapshots(previousJson, json) : { items: [] };
-
-    this.undoStack.push(json);
-
-    // 限制栈大小
-    if (this.undoStack.length > this.maxSteps) {
-      this.undoStack.shift();
-    }
-
-    // 新操作清空重做栈
-    this.redoStack = [];
-
-    this._timeline.push({
-      id: `c-${Date.now()}-${++this._seq}`,
-      at: Date.now(),
-      label: typeof entryLabel === 'string' && entryLabel ? entryLabel : '编辑',
-      thumbnail: this._cm.toThumbnailDataURL?.(THUMBNAIL_MAX_WIDTH, THUMBNAIL_QUALITY) || null,
-      changes,
-      json,
-    });
-    this._trimSnapshots();
-
-    // 当前画布就是刚入栈的快照
-    this._currentId = this._timeline[this._timeline.length - 1].id;
-    // 本次是「操作前存档」时（pending 非空），本次标签属于下一个操作；
-    // 否则本次标签已经用于本条记录，不再挂起。
-    this._pendingLabel = pendingLabel ? label : null;
+    const entryLabel = this._pendingLabel || label || '编辑';
+    this._pushTimelineEntry(entryLabel, json, lastRecord?.json || null);
+    this._pendingLabel = null;
 
     this._notify();
     this._schedulePersist();
     return true;
+  }
+
+  /**
+   * 向时间线追加一条记录并维护快照上限。
+   * @param {string} label
+   * @param {object} json
+   * @param {object|null} previousJson
+   * @returns {object}
+   */
+  _pushTimelineEntry(label, json, previousJson) {
+    const entry = {
+      id: `c-${Date.now()}-${++this._seq}`,
+      at: Date.now(),
+      label: typeof label === 'string' && label ? label : '编辑',
+      thumbnail: this._cm.toThumbnailDataURL?.(THUMBNAIL_MAX_WIDTH, THUMBNAIL_QUALITY) || null,
+      changes: previousJson ? diffSnapshots(previousJson, json) : { items: [] },
+      json,
+    };
+
+    this._timeline.push(entry);
+    this._trimSnapshots();
+
+    // 当前画布就是刚记录的这条
+    this._currentId = entry.id;
+    return entry;
   }
 
   /**
@@ -552,7 +633,13 @@ class HistoryManager {
   _snapshotSignature(json) {
     // 使用更强的内容指纹：首尾各 32 字符 + 长度 + 中间 16 字符，
     // 显著降低碰撞概率，同时仍然避免对大图做完整序列化。
+    //
+    // 交互属性（selectable / evented / 锁定 / 控制点样式等）会随工具切换变化，
+    // 但它们不影响画面，也不该产生「历史记录」或「参数变更」；比较时剔除，
+    // 否则每次切工具都会多出一条空记录。
     return JSON.stringify(json, (key, value) => {
+      if (HISTORY_IGNORED_KEYS.has(key)) return undefined;
+
       if (key === 'src' && typeof value === 'string' && value.length > 64) {
         const len = value.length;
         const head = value.slice(0, 32);

@@ -658,6 +658,7 @@ class CanvasManager {
       eventBus.emit('canvas:objectMetadataChanged', e.target);
     });
     this._onCanvas('text:editing:exited', (e) => {
+      eventBus.emit('canvas:textEditingExited', e.target);
       eventBus.emit('canvas:objectModified', e.target);
     });
 
