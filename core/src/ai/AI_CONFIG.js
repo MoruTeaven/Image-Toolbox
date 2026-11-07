@@ -662,7 +662,7 @@ export function validateAiConfig(config = getAiConfig()) {
   if (issue === AI_CONFIG_STATUS.NO_BASE_URL) {
     errors.baseUrl = '请填写服务地址';
   } else if (issue === AI_CONFIG_STATUS.INSECURE_BASE_URL) {
-    errors.baseUrl = '服务地址必须使用 https（本机或局域网地址可用 http）';
+    errors.baseUrl = '公网服务地址需要以 https:// 开头（本机或局域网地址可用 http://）';
   }
   if (!String(config.model || '').trim()) {
     errors.model = '请填写模型名';
@@ -731,7 +731,7 @@ export function getAiConfigStatus(config = getAiConfig()) {
     return {
       ready: false,
       code: AI_CONFIG_STATUS.INSECURE_BASE_URL,
-      message: '服务地址必须以 https:// 开头（本机或局域网地址可用 http）：请到「头像 → AI 配置」修正服务地址。',
+      message: '服务地址暂不可用：公网地址需要 https://，本机或局域网地址（如 http://192.168.1.10:8326）可以用 http。请到「头像 → AI 配置」检查服务地址。',
       providerId,
       model
     };

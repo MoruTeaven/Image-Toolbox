@@ -127,9 +127,9 @@ export async function requestInstruction(params) {
       throw new Error(`请求超时（${Math.round(AI_CONFIG_LIMITS.timeoutMs / 1000)} 秒），请检查网络或服务商`);
     }
     // 浏览器 fetch 对「连不上」和「被跨域拦掉」都只给一句 Failed to fetch，
-    // 单看原文无法判断是地址不对还是服务商没放行跨域，这里补一句排查方向。
+    // 单看原文无法判断是地址不对还是服务商没放行，这里把两种可能都交代清楚。
     if (/failed to fetch|networkerror|load failed/i.test(String(err?.message || ''))) {
-      throw new Error('网络请求失败：无法连接该地址（请确认地址可从本机访问，且服务商允许跨域请求）');
+      throw new Error('无法连接服务地址：请确认这个地址在本机能访问；如果地址没问题，通常是服务商限制了插件的直连访问（跨域）。');
     }
     throw new Error(`网络请求失败：${err?.message || '无法连接服务商'}`);
   }
@@ -172,7 +172,8 @@ export async function requestInstruction(params) {
 export async function testConnection(config = getAiConfig()) {
   const validation = validateAiConfig(config);
   if (!validation.ok) {
-    return { ok: false, message: Object.values(validation.errors)[0] || '请先完成配置', models: [] };
+    const firstError = Object.values(validation.errors)[0] || '请先完成配置';
+    return { ok: false, message: `请先完善 AI 配置：${firstError}`, models: [] };
   }
 
   const root = normalizeAiBaseUrl(config.baseUrl);

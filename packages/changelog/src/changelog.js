@@ -99,7 +99,8 @@ export const CHANGELOG = [
       improved: [
         { text: '暖色、鲜艳等滤镜预设改用自然饱和度，颜色更自然', platforms: null },
         { text: '设置页重新分类：设置项按外观、画板布局、侧栏分组，改为紧凑的行式布局', platforms: null },
-        { text: '优化 AI 配置的缺失项提示，缺什么会直接说明，并可从属性面板打开配置', platforms: null }
+        { text: '优化 AI 配置的缺失项提示，缺什么会直接说明，并可从属性面板打开配置', platforms: null },
+        { text: '优化 AI 服务地址相关提示的表述，直接说明该怎么改', platforms: null }
       ],
       adjusted: [],
       removed: []

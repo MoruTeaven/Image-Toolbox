@@ -330,7 +330,7 @@ class AccountPage {
         }
         if (urlIssue) {
           eventBus.emit('toast:show', {
-            message: '公网地址必须以 https:// 开头（本机 / 局域网地址可用 http）',
+            message: '公网地址需要以 https:// 开头（本机或局域网地址可用 http://）',
             type: 'error'
           });
           return;
@@ -798,10 +798,10 @@ class AccountPage {
   _describeBaseUrl(baseUrl) {
     const issue = getAiBaseUrlIssue(baseUrl);
     if (issue === AI_CONFIG_STATUS.NO_BASE_URL) {
-      return '必填，例如 https://api.openai.com/v1（本机或局域网可用 http://192.168.1.10:8326/v1）';
+      return '必填；公网地址用 https://，本机或局域网地址可用 http://（例如 http://192.168.1.10:8326/v1）';
     }
     if (issue === AI_CONFIG_STATUS.INSECURE_BASE_URL) {
-      return '公网地址必须以 https:// 开头（本机 / 局域网地址可用 http）';
+      return '公网地址需要以 https:// 开头（本机或局域网地址可用 http://）';
     }
     return '';
   }
@@ -1042,7 +1042,9 @@ class AccountPage {
       this._render();
     }
     eventBus.emit('toast:show', {
-      message: result.ok ? result.message : `连接失败：${result.message}`,
+      // message 各分支已自含语义（连接成功 / 请先完善 AI 配置：… / 服务商返回 …），
+      // 不再叠一层「连接失败：」前缀，避免出现「连接失败：请先填写服务地址」这种别扭拼接。
+      message: result.message,
       type: result.ok ? 'success' : 'error'
     });
   }
