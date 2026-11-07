@@ -3874,14 +3874,23 @@ html, body {
 }
 
 .history-item {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  transition: background 0.12s, opacity 0.12s;
+}
+
+.history-item__row {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   padding: 3px 5px;
-  border: 1px solid transparent;
-  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.12s, opacity 0.12s;
 }
 
 .history-item:hover {
@@ -3898,12 +3907,100 @@ html, body {
 }
 
 .history-item--archived {
-  cursor: default;
   opacity: 0.62;
 }
 
 .history-item--archived:hover {
-  background: transparent;
+  background: var(--bg-hover);
+}
+
+.history-item--expanded {
+  background: var(--bg-hover);
+}
+
+.history-item__chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  opacity: 0.55;
+  transition: transform 0.15s;
+}
+
+.history-item--expanded .history-item__chevron {
+  transform: rotate(90deg);
+}
+
+.history-item__changes-badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.history-item__details {
+  padding: 3px 6px 6px 31px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.history-change {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0;
+}
+
+.history-change__layer {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.history-change__props {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-change__prop {
+  color: var(--color-text);
+  font-size: 10px;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.history-change__prop b {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.history-change__prop i {
+  color: var(--color-text-secondary);
+  font-style: normal;
+}
+
+.history-change--add,
+.history-change--remove,
+.history-change--reorder {
+  color: var(--color-text);
+  font-size: 10px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.history-change--add {
+  color: var(--color-accent);
+}
+
+.history-change--empty {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .history-item__index {
@@ -3935,6 +4032,7 @@ html, body {
 
 .history-item__meta {
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-width: 0;
   gap: 1px;

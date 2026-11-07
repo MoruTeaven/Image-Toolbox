@@ -84,7 +84,7 @@ export const CHANGELOG = [
         { text: '滤镜预设新增底片效果', platforms: null },
         { text: '调色新增棕褐与灰度强度，可自行控制复古、黑白效果的程度', platforms: null },
         { text: '新增侧栏底部撤销/重做布局设置，可在紧凑与完整两种样式间切换', platforms: null },
-        { text: '新增历史记录面板，可查看并回到任意编辑步骤', platforms: null }
+        { text: '新增历史记录面板，可查看每一步的参数变更并回到该步骤', platforms: null }
       ],
       fixed: [
         { text: '修复画布缩放或平移后，图层对齐与分布位置偏移的问题', platforms: null },

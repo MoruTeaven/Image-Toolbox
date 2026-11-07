@@ -10,7 +10,7 @@ const REFRESH_THROTTLE_MS = 40;
  * 历史记录面板
  *
  * 按时间顺序展示全部历史记录（历史存档 + 本次会话），当前步骤高亮；
- * 点击本次会话中仍保留快照的记录可直接回到该步骤。
+ * 点击记录会展开「这一步改了哪些参数」，本次会话中仍保留快照的记录同时回到该步骤。
  * 记录由 HistoryManager 自动写入本机，面板只负责展示与清空。
  */
 class HistoryPanel {
@@ -25,6 +25,8 @@ class HistoryPanel {
     this._refreshTimer = null;
     this._clearConfirmTimer = null;
     this._pendingClear = false;
+    this._expandedId = null;
+    this._lastRecords = [];
 
     this._renderShell();
     this._bindEvents();
@@ -58,7 +60,7 @@ class HistoryPanel {
             <span>暂无历史记录</span>
           </div>
         </div>
-        <div class="history-panel__footer" id="history-footer">记录自动保存在本机</div>
+        <div class="history-panel__footer" id="history-footer">记录自动保存在本机 · 点击查看参数变更</div>
       </div>
     `;
   }
@@ -71,17 +73,12 @@ class HistoryPanel {
         return;
       }
 
-      const item = e.target.closest('.history-item');
-      if (!item) return;
+      const row = e.target.closest('.history-item__row');
+      if (!row) return;
 
-      if (item.classList.contains('history-item--archived')) {
-        eventBus.emit('toast:show', { message: '该记录来自上次会话，仅可查看', type: 'error' });
-        return;
-      }
-
-      const id = item.dataset.historyId;
-      if (id) {
-        this._hm.goTo(id);
+      const item = row.closest('.history-item');
+      if (item?.dataset.historyId) {
+        this._handleRecordClick(item.dataset.historyId);
       }
     });
 
@@ -89,6 +86,27 @@ class HistoryPanel {
       eventBus.on('history:changed', () => this._scheduleRefresh()),
       eventBus.on('image:loaded', () => this._scheduleRefresh())
     );
+  }
+
+  /**
+   * 点击一条历史记录：展开/收起参数变更；可恢复的记录同时回到该步骤。
+   * @param {string} id
+   */
+  _handleRecordClick(id) {
+    const record = this._lastRecords.find((item) => item.id === id);
+    if (!record) return;
+
+    const willExpand = this._expandedId !== id;
+    this._expandedId = willExpand ? id : null;
+    this._applyExpandedState();
+
+    if (!willExpand) return;
+
+    if (record.restorable && !record.current) {
+      this._hm.goTo(id);
+    } else {
+      this._scrollExpandedIntoView();
+    }
   }
 
   _handleClearClick() {
@@ -110,6 +128,7 @@ class HistoryPanel {
     clearTimeout(this._clearConfirmTimer);
     this._clearConfirmTimer = null;
     this._pendingClear = false;
+    this._expandedId = null;
     btn.classList.remove('is-confirming');
     btn.title = '清空历史记录';
 
@@ -132,6 +151,7 @@ class HistoryPanel {
     if (!listEl) return;
 
     const records = this._hm.getRecords?.() || [];
+    this._lastRecords = records;
 
     if (countEl) countEl.textContent = String(records.length);
     if (emptyEl) emptyEl.hidden = records.length > 0;
@@ -148,6 +168,7 @@ class HistoryPanel {
       if (currentIndex !== -1 && index > currentIndex && !record.archived) {
         classes.push('history-item--future');
       }
+      if (record.id === this._expandedId) classes.push('history-item--expanded');
 
       const thumb = record.thumbnail
         ? `<img class="history-item__thumb" src="${escapeAttr(record.thumbnail)}" alt="" loading="lazy" draggable="false" />`
@@ -155,16 +176,30 @@ class HistoryPanel {
 
       const indexLabel = record.archived ? '上次' : String(sessionNo);
       const time = this._formatTime(record.at);
-      const hint = record.archived ? '来自上次会话，仅可查看' : '点击回到这一步';
+      const hint = record.archived ? '来自上次会话，仅可查看' : '点击查看参数并回到这一步';
+      const changeCount = countChanges(record.changes);
+      const badge = changeCount > 0
+        ? `<span class="history-item__changes-badge">${changeCount} 项</span>`
+        : '';
+      const expanded = record.id === this._expandedId;
 
       return `
-        <li class="${classes.join(' ')}" data-history-id="${escapeAttr(record.id)}" title="${escapeAttr(`${record.label} · ${hint}`)}">
-          <span class="history-item__index">${indexLabel}</span>
-          ${thumb}
-          <span class="history-item__meta">
-            <span class="history-item__label">${escapeHTML(record.label)}</span>
-            <span class="history-item__time">${time}</span>
-          </span>
+        <li class="${classes.join(' ')}" data-history-id="${escapeAttr(record.id)}">
+          <button class="history-item__row" type="button" title="${escapeAttr(`${record.label} · ${hint}`)}" aria-expanded="${expanded ? 'true' : 'false'}">
+            <span class="history-item__index">${indexLabel}</span>
+            ${thumb}
+            <span class="history-item__meta">
+              <span class="history-item__label">${escapeHTML(record.label)}</span>
+              <span class="history-item__time">${time}</span>
+            </span>
+            ${badge}
+            <svg class="history-item__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+          <div class="history-item__details"${expanded ? '' : ' hidden'}>
+            ${this._renderChanges(record)}
+          </div>
         </li>
       `;
     }).join('');
@@ -174,6 +209,66 @@ class HistoryPanel {
     // 让当前步骤始终可见（列表可能很长）
     const currentEl = listEl.querySelector('.history-item--current');
     currentEl?.scrollIntoView?.({ block: 'nearest' });
+    if (this._expandedId) this._scrollExpandedIntoView();
+  }
+
+  _renderChanges(record) {
+    const items = record.changes?.items;
+    if (!Array.isArray(items) || items.length === 0) {
+      return '<div class="history-change history-change--empty">初始状态，无参数变更</div>';
+    }
+
+    return items.map((item) => {
+      const layer = escapeHTML(item.layer || '');
+      const props = this._renderProps(item.changes);
+
+      if (item.kind === 'add') {
+        return `<div class="history-change history-change--add">新增图层「${layer}」</div>`;
+      }
+      if (item.kind === 'remove') {
+        return `<div class="history-change history-change--remove">删除图层「${layer}」</div>`;
+      }
+      if (item.kind === 'reorder') {
+        return '<div class="history-change history-change--reorder">调整图层顺序</div>';
+      }
+      if (item.kind === 'more') {
+        return `<div class="history-change history-change--empty">${layer}</div>`;
+      }
+
+      const kind = item.kind === 'canvas' ? 'canvas' : 'modify';
+      return `
+        <div class="history-change history-change--${kind}">
+          <div class="history-change__layer">${layer}</div>
+          ${props}
+        </div>
+      `;
+    }).join('');
+  }
+
+  _renderProps(changes) {
+    if (!Array.isArray(changes) || changes.length === 0) return '';
+
+    const rows = changes.map((change) => (
+      `<span class="history-change__prop">${escapeHTML(change.label)} <b>${escapeHTML(change.from)}</b> <i>→</i> <b>${escapeHTML(change.to)}</b></span>`
+    ));
+
+    return `<div class="history-change__props">${rows.join('')}</div>`;
+  }
+
+  _applyExpandedState() {
+    this._el.querySelectorAll('.history-item').forEach((item) => {
+      const expanded = item.dataset.historyId === this._expandedId;
+      item.classList.toggle('history-item--expanded', expanded);
+      item.querySelector('.history-item__row')?.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+
+      const details = item.querySelector('.history-item__details');
+      if (details) details.hidden = !expanded;
+    });
+  }
+
+  _scrollExpandedIntoView() {
+    const item = this._el.querySelector('.history-item--expanded');
+    item?.scrollIntoView?.({ block: 'nearest' });
   }
 
   _formatTime(at) {
@@ -202,6 +297,21 @@ class HistoryPanel {
     this._unsubscribers.forEach((unsubscribe) => unsubscribe());
     this._unsubscribers = [];
   }
+}
+
+/**
+ * 一条记录里的变更条数（用于列表上的「N 项」角标）。
+ * @param {{items: Array}|null} changes
+ * @returns {number}
+ */
+function countChanges(changes) {
+  if (!changes || !Array.isArray(changes.items)) return 0;
+  return changes.items.reduce((count, item) => {
+    if (item.kind === 'modify' || item.kind === 'canvas') {
+      return count + (Array.isArray(item.changes) ? Math.max(1, item.changes.length) : 1);
+    }
+    return count + 1;
+  }, 0);
 }
 
 export default HistoryPanel;

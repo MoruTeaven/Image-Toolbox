@@ -4,6 +4,7 @@ import {
   setJSONPreference,
   removePreference,
 } from './utils/preferences.js';
+import { diffSnapshots } from './utils/historyDiff.js';
 
 /** 历史记录在本机的持久化键 */
 export const HISTORY_RECORDS_KEY = 'image-toolbox-history-records';
@@ -56,6 +57,9 @@ class HistoryManager {
 
     this._seq = 0;
     this._persistTimer = null;
+    // 最近一次「状态未变化」的操作名：多数工具在动手前 saveState，
+    // 此时快照还是上一步的结果，标签要留到下一次真正入栈时使用。
+    this._pendingLabel = null;
   }
 
   /**
@@ -71,7 +75,16 @@ class HistoryManager {
     if (!json) return false;
 
     const last = this.undoStack[this.undoStack.length - 1];
-    if (last && this._isSameSnapshot(last, json)) return false;
+    if (last && this._isSameSnapshot(last, json)) {
+      // 状态没有变化（多数工具在动手前存档）：把这次操作名留给下一次真正入栈的记录，
+      // 这样「记录标签」对应的是产生该快照的那次操作，而不是下一个操作。
+      this._pendingLabel = label;
+      return false;
+    }
+
+    const previousJson = last || null;
+    const entryLabel = this._pendingLabel || label;
+    const changes = previousJson ? diffSnapshots(previousJson, json) : { items: [] };
 
     this.undoStack.push(json);
 
@@ -86,14 +99,16 @@ class HistoryManager {
     this._timeline.push({
       id: `c-${Date.now()}-${++this._seq}`,
       at: Date.now(),
-      label: typeof label === 'string' && label ? label : '编辑',
+      label: typeof entryLabel === 'string' && entryLabel ? entryLabel : '编辑',
       thumbnail: this._cm.toThumbnailDataURL?.(THUMBNAIL_MAX_WIDTH, THUMBNAIL_QUALITY) || null,
+      changes,
       json,
     });
     this._trimSnapshots();
 
     // 当前画布就是刚入栈的快照
     this._currentId = this._timeline[this._timeline.length - 1].id;
+    this._pendingLabel = label;
 
     this._notify();
     this._schedulePersist();
@@ -235,6 +250,7 @@ class HistoryManager {
       at: entry.at,
       label: entry.label,
       thumbnail: entry.thumbnail,
+      changes: entry.changes || null,
       restorable: !!entry.json,
       archived: !entry.json,
       current: entry.id === this._currentId,
@@ -245,6 +261,7 @@ class HistoryManager {
       at: entry.at,
       label: entry.label,
       thumbnail: entry.thumbnail,
+      changes: entry.changes || null,
       restorable: false,
       archived: true,
       current: false,
@@ -273,6 +290,7 @@ class HistoryManager {
     this.redoStack = [];
     this._timeline = [];
     this._currentId = null;
+    this._pendingLabel = null;
     this._notify();
   }
 
@@ -285,6 +303,7 @@ class HistoryManager {
     this.redoStack = [];
     this._timeline = [];
     this._currentId = null;
+    this._pendingLabel = null;
     this._archived = [];
     removePreference(HISTORY_RECORDS_KEY);
     this._notify();
@@ -361,6 +380,7 @@ class HistoryManager {
         at: entry.at,
         label: typeof entry.label === 'string' && entry.label ? entry.label : '编辑',
         thumbnail: typeof entry.thumbnail === 'string' ? entry.thumbnail : null,
+        changes: normalizeChanges(entry.changes),
       }))
       .sort((a, b) => a.at - b.at)
       .slice(-MAX_ARCHIVED_RECORDS);
@@ -395,6 +415,7 @@ class HistoryManager {
       at: entry.at,
       label: entry.label,
       thumbnail: entry.thumbnail,
+      changes: entry.changes || null,
     }));
 
     const merged = [...this._archived, ...sessionRecords].sort((a, b) => a.at - b.at);
@@ -435,6 +456,34 @@ class HistoryManager {
       return value;
     });
   }
+}
+
+/**
+ * 校验从本机存档读回的变更数据。结构不对就当没有——
+ * 历史展示可以降级，但不能因为一条脏数据让面板渲染报错。
+ * @param {*} changes
+ * @returns {{items: Array}|null}
+ */
+function normalizeChanges(changes) {
+  if (!changes || !Array.isArray(changes.items)) return null;
+
+  const items = changes.items
+    .filter((item) => item && typeof item === 'object' && typeof item.kind === 'string')
+    .map((item) => ({
+      kind: item.kind,
+      layer: typeof item.layer === 'string' ? item.layer : '',
+      changes: Array.isArray(item.changes)
+        ? item.changes
+          .filter((change) => change && typeof change.label === 'string')
+          .map((change) => ({
+            label: change.label,
+            from: String(change.from ?? ''),
+            to: String(change.to ?? ''),
+          }))
+        : [],
+    }));
+
+  return items.length > 0 ? { items } : null;
 }
 
 export default HistoryManager;
