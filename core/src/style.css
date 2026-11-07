@@ -2400,6 +2400,7 @@ html, body {
 .property-empty,
 .property-actions,
 .ai-note,
+.ai-preview-banner,
 .filter-categories,
 .filter-presets {
   grid-column: 1 / -1;
