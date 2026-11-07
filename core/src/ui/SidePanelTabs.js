@@ -7,7 +7,7 @@ export const SIDE_PANEL_LAYOUTS = {
   SPLIT: 'split',
 };
 
-const VALID_TABS = new Set(['property', 'layer']);
+const VALID_TABS = new Set(['property', 'layer', 'history']);
 const VALID_LAYOUTS = new Set(Object.values(SIDE_PANEL_LAYOUTS));
 
 /**
@@ -15,9 +15,15 @@ const VALID_LAYOUTS = new Set(Object.values(SIDE_PANEL_LAYOUTS));
  * Supports tab and split layouts, with remembered user preference.
  */
 class SidePanelTabs {
-  constructor(containerEl, layerManager) {
+  /**
+   * @param {HTMLElement} containerEl
+   * @param {LayerManager} layerManager
+   * @param {HistoryManager} [historyManager] - 用于显示历史记录条数
+   */
+  constructor(containerEl, layerManager, historyManager = null) {
     this._el = containerEl;
     this._lm = layerManager;
+    this._hm = historyManager;
     this._activeTab = this._getInitialTab();
     this._layout = this._getInitialLayout();
     this._eventBusUnsubscribers = [];
@@ -27,6 +33,7 @@ class SidePanelTabs {
     this._applyLayout(this._layout, false);
     this._activateTab(this._activeTab, false);
     this._updateLayerCount();
+    this._updateHistoryCount();
   }
 
   _render() {
@@ -39,6 +46,9 @@ class SidePanelTabs {
           <button class="side-tabs__tab" type="button" role="tab" data-panel-tab="layer" aria-controls="side-pane-layer">
             图层 <span class="side-tabs__badge" id="side-layer-count">0</span>
           </button>
+          <button class="side-tabs__tab" type="button" role="tab" data-panel-tab="history" aria-controls="side-pane-history">
+            历史 <span class="side-tabs__badge" id="side-history-count">0</span>
+          </button>
         </div>
         <div class="side-tabs__content">
           <div class="side-tabs__pane" id="side-pane-property" role="tabpanel" data-panel-pane="property">
@@ -46,6 +56,9 @@ class SidePanelTabs {
           </div>
           <div class="side-tabs__pane" id="side-pane-layer" role="tabpanel" data-panel-pane="layer">
             <div id="layer-panel"></div>
+          </div>
+          <div class="side-tabs__pane" id="side-pane-history" role="tabpanel" data-panel-pane="history">
+            <div id="history-panel"></div>
           </div>
         </div>
       </div>
@@ -63,7 +76,8 @@ class SidePanelTabs {
     this._eventBusUnsubscribers.push(
       eventBus.on('layers:updated', () => this._updateLayerCount()),
       eventBus.on('image:loaded', () => this._updateLayerCount()),
-      eventBus.on('canvas:restored', () => this._updateLayerCount())
+      eventBus.on('canvas:restored', () => this._updateLayerCount()),
+      eventBus.on('history:changed', () => this._updateHistoryCount())
     );
   }
 
@@ -134,6 +148,14 @@ class SidePanelTabs {
     if (!countEl) return;
 
     const count = this._lm?.getLayers?.().length || 0;
+    countEl.textContent = count;
+  }
+
+  _updateHistoryCount() {
+    const countEl = this._el.querySelector('#side-history-count');
+    if (!countEl) return;
+
+    const count = this._hm?.getRecordCount?.() || 0;
     countEl.textContent = count;
   }
 

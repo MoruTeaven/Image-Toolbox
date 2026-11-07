@@ -31,6 +31,7 @@ export const ELEMENT_IDS = {
   PANEL_AREA: 'panel-area',
   PROPERTY_PANEL: 'property-panel',
   LAYER_PANEL: 'layer-panel',
+  HISTORY_PANEL: 'history-panel',
   STATUS_BAR: 'statusbar',
   ACCOUNT_PAGE: 'account-page',
   APP_ROOT: 'app',
@@ -83,6 +84,7 @@ class EditorShell {
     return {
       propertyPanel: this.el(ELEMENT_IDS.PROPERTY_PANEL),
       layerPanel: this.el(ELEMENT_IDS.LAYER_PANEL),
+      historyPanel: this.el(ELEMENT_IDS.HISTORY_PANEL),
     };
   }
 

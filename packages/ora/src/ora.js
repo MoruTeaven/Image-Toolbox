@@ -616,10 +616,10 @@ export async function importORA(oraBlob, canvasManager, layerManager, historyMan
       canvasManager.fitToCanvas(40);
     }
 
-    // 同步图层和历史记录
+    // 同步图层和历史记录：重置本次编辑时间线，历史存档保留
     layerManager.syncLayers();
-    historyManager.clear();
-    historyManager.saveState();
+    historyManager.reset();
+    historyManager.saveState('导入 ORA');
 
     eventBus.emit('image:loaded', bgImage);
     eventBus.emit('toast:show', { message: 'ORA 文件已导入', type: 'success' });

@@ -1,4 +1,4 @@
-﻿import BaseModule from './BaseModule.js';
+import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { clamp } from '../utils/helpers.js';
 
@@ -218,7 +218,7 @@ class EraserModule extends BaseModule {
     this._strokeTarget = target;
     if (!target) return;
 
-    this.history.saveState();
+    this.history.saveState('擦除');
 
     const canvas = this.canvasManager.canvas;
     const pointer = canvas.getPointer(e.e);
@@ -343,7 +343,7 @@ class EraserModule extends BaseModule {
     if (!this._isErasableObject(target)) return;
     if (!this._intersectsTarget(target, selection)) return;
 
-    this.history.saveState();
+    this.history.saveState('擦除');
 
     if (!this._beginLivePreview(target)) {
       this._resetStrokeState();

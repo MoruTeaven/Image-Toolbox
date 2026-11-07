@@ -117,7 +117,7 @@ class SelectModule extends BaseModule {
     const changed = targets.some(obj => this._normalizeAngle(obj.angle || 0) !== nextAngle);
     if (!changed) return;
 
-    this.history.saveState();
+    this.history.saveState('旋转');
     targets.forEach(obj => this._setObjectTransform(obj, { angle: nextAngle }));
     this._refreshActiveSelection(targets);
     this._refreshDynamicMosaics();
@@ -125,7 +125,7 @@ class SelectModule extends BaseModule {
   }
 
   _flipTargets(targets, prop) {
-    this.history.saveState();
+    this.history.saveState('翻转');
     targets.forEach(obj => this._setObjectTransform(obj, { [prop]: !obj[prop] }));
     this._refreshActiveSelection(targets);
     this._refreshDynamicMosaics();
@@ -186,7 +186,7 @@ class SelectModule extends BaseModule {
 
       if (!deltas.some(d => Math.abs(d.x) > 0.01 || Math.abs(d.y) > 0.01)) return;
 
-      this.history.saveState();
+      this.history.saveState('对齐');
       targets.forEach((obj, i) => this._translateObject(obj, deltas[i].x, deltas[i].y));
       this._refreshDynamicMosaics();
       this._requestRender();
@@ -223,7 +223,7 @@ class SelectModule extends BaseModule {
       const step = (last - first) / (items.length - 1);
       const deltas = items.map((it, i) => first + i * step - it.center);
       if (!deltas.every(d => Math.abs(d) <= 0.01)) {
-        this.history.saveState();
+        this.history.saveState('分布');
         items.forEach((it, i) => this._translateObject(it.obj, isX ? deltas[i] : 0, isX ? 0 : deltas[i]));
         this._refreshDynamicMosaics();
         this._requestRender();

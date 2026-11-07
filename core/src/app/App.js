@@ -27,6 +27,7 @@ import OptionsBar from '../ui/OptionsBar.js';
 import SidePanelTabs from '../ui/SidePanelTabs.js';
 import PropertyPanel from '../ui/PropertyPanel.js';
 import LayerPanel from '../ui/LayerPanel.js';
+import HistoryPanel from '../ui/HistoryPanel.js';
 import StatusBar from '../ui/StatusBar.js';
 import AccountPage, {
   EDITOR_BARS_LAYOUT_KEY,
@@ -64,6 +65,7 @@ class App {
     this.sidePanelTabs = null;
     this.propertyPanel = null;
     this.layerPanel = null;
+    this.historyPanel = null;
     this.statusBar = null;
     this.accountPage = null;
     this.hostAdapter = null;
@@ -129,7 +131,7 @@ class App {
       this.optionsBar = new OptionsBar(mounts.optionsBar, this.toolManager);
       // SidePanelTabs._render() 会动态写入 #property-panel / #layer-panel，
       // 这两个挂载点必须在它构造之后才能取到。
-      this.sidePanelTabs = new SidePanelTabs(mounts.sidePanel, this.layerManager);
+      this.sidePanelTabs = new SidePanelTabs(mounts.sidePanel, this.layerManager, this.historyManager);
       const panelMounts = this.shell.getPanelMountPoints();
       this.propertyPanel = new PropertyPanel(
         panelMounts.propertyPanel,
@@ -138,6 +140,7 @@ class App {
         this.layerManager
       );
       this.layerPanel = new LayerPanel(panelMounts.layerPanel, this.layerManager, this.historyManager);
+      this.historyPanel = new HistoryPanel(panelMounts.historyPanel, this.historyManager);
       this.statusBar = new StatusBar(mounts.statusBar, this.canvasManager, this.layerManager);
       this.accountPage = new AccountPage(
         mounts.accountPage,
@@ -324,12 +327,12 @@ class App {
 
         if (this._saveTimer) clearTimeout(this._saveTimer);
         this._saveTimer = setTimeout(() => {
-          this.historyManager?.saveState();
+          this.historyManager?.saveState('移动/变换');
         }, 300);
       }),
 
       eventBus.on('layer:reorderWillChange', () => {
-        this.historyManager?.saveState();
+        this.historyManager?.saveState('图层排序');
       }),
 
       // ═══ 工具自动切换 ═══
@@ -427,7 +430,7 @@ class App {
       const active = this.canvasManager?.getActiveObject();
       if (active && active.isEditing) return;
       if (active && active.excludeFromHistory) return;
-      this.historyManager?.saveState();
+      this.historyManager?.saveState('删除图层');
       this.canvasManager?.removeActiveObject();
       return;
     }
@@ -444,7 +447,7 @@ class App {
       if (!meta) return;
 
       e.preventDefault();
-      this.historyManager?.saveState();
+      this.historyManager?.saveState('复制图层');
       this.layerManager.duplicateLayer(meta.id);
       return;
     }
@@ -503,10 +506,12 @@ class App {
       this.sidePanelTabs,
       this.propertyPanel,
       this.layerPanel,
+      this.historyPanel,
       this.statusBar,
     ].forEach(component => component?.destroy?.());
 
     this.toolManager?.destroy?.();
+    this.historyManager?.destroy?.();
     this.canvasManager?.destroy?.();
   }
 
@@ -519,8 +524,9 @@ class App {
 
       this.layerManager.syncLayers();
 
-      this.historyManager.clear();
-      this.historyManager.saveState();
+      // 加载新图片时重置本次编辑的时间线；历史存档会保留，重开后仍可查看
+      this.historyManager.reset();
+      this.historyManager.saveState('打开图片');
 
       this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
     } catch (err) {

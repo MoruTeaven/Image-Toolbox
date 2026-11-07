@@ -186,7 +186,7 @@ class BrushModule extends BaseModule {
     const nativeEvent = e?.e;
     if (nativeEvent && typeof nativeEvent.button === 'number' && nativeEvent.button !== 0) return;
 
-    this.history.saveState();
+    this.history.saveState('画笔');
     this._savedBeforeStroke = true;
   }
 

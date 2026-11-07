@@ -83,7 +83,8 @@ export const CHANGELOG = [
         { text: '调色新增色温参数，可整体调暖或调冷画面', platforms: null },
         { text: '滤镜预设新增底片效果', platforms: null },
         { text: '调色新增棕褐与灰度强度，可自行控制复古、黑白效果的程度', platforms: null },
-        { text: '新增侧栏底部撤销/重做布局设置，可在紧凑与完整两种样式间切换', platforms: null }
+        { text: '新增侧栏底部撤销/重做布局设置，可在紧凑与完整两种样式间切换', platforms: null },
+        { text: '新增历史记录面板，可查看并回到任意编辑步骤', platforms: null }
       ],
       fixed: [
         { text: '修复画布缩放或平移后，图层对齐与分布位置偏移的问题', platforms: null },
@@ -94,13 +95,15 @@ export const CHANGELOG = [
         { text: '修复 uTools 启动时控制台反复输出报错信息的问题', platforms: null },
         { text: '修复 AI 配置未填服务地址时，属性面板只提示「尚未配置服务商」的问题', platforms: null },
         { text: '修复局域网或本机 AI 服务地址无法保存使用的问题', platforms: null },
-        { text: '修复「使用中」停在没有模型的服务商上，导致 AI 面板一直提示未配置的问题', platforms: null }
+        { text: '修复「使用中」停在没有模型的服务商上，导致 AI 面板一直提示未配置的问题', platforms: null },
+        { text: '修复画布只有一张图片时，AI 新建图层仍要求先手动选中图层的问题', platforms: null }
       ],
       improved: [
         { text: '暖色、鲜艳等滤镜预设改用自然饱和度，颜色更自然', platforms: null },
         { text: '设置页重新分类：设置项按外观、画板布局、侧栏分组，改为紧凑的行式布局', platforms: null },
         { text: '优化 AI 配置的缺失项提示，缺什么会直接说明，并可从属性面板打开配置', platforms: null },
-        { text: '优化 AI 服务地址相关提示的表述，直接说明该怎么改', platforms: null }
+        { text: '优化 AI 服务地址相关提示的表述，直接说明该怎么改', platforms: null },
+        { text: '调整「编辑当前图层」：AI 效果先生成预览，确认后才替换原图', platforms: null }
       ],
       adjusted: [],
       removed: []

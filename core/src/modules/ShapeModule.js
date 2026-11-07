@@ -326,7 +326,7 @@ class ShapeModule extends BaseModule {
     const pointer = e.pointer || canvas.getPointer(nativeEvent);
     this._isDrawing = true;
     this._startPoint = { x: pointer.x, y: pointer.y };
-    this.history.saveState();
+    this.history.saveState('形状');
     this._savedBeforeShape = true;
   }
 

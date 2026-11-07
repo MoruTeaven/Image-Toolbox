@@ -1285,7 +1285,7 @@ class MosaicModule extends BaseModule {
   _saveStateWithCanvasClipPath() {
     const canvas = this.canvasManager.canvas;
     if (!canvas) {
-      this.history.saveState();
+      this.history.saveState('打码');
       return;
     }
 
@@ -1296,14 +1296,14 @@ class MosaicModule extends BaseModule {
     const session = this._clipPathSession;
     try {
       if (!session || !session.isHeld()) {
-        this.history.saveState();
+        this.history.saveState('打码');
         return;
       }
 
       // 暂存时需要看到未裁剪的画布：由共享会话负责「还原对象级临时挂载 /
       // 写回画布级 clipPath / 跑完再逐个恢复」。手工版要把这三步成对写出，
       // 漏一步就是图层被永久裁掉那一类 bug（见 ClipPathSession.js 头部）。
-      session.withCanvasClipPath(() => this.history.saveState());
+      session.withCanvasClipPath(() => this.history.saveState('打码'));
     } finally {
       transientObjects.forEach(obj => canvas.add(obj));
       this._bringBrushPreviewToFront();

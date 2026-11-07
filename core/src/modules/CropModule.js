@@ -624,10 +624,10 @@ class CropModule extends BaseModule {
     if (session) {
       // 暂存时需要看到未裁剪的画布：借会话的 withCanvasClipPath 包住 saveState，
       // 不用手动配对「写回旧值 / 再挂回临时值」。
-      session.withCanvasClipPath(() => this.history.saveState());
+      session.withCanvasClipPath(() => this.history.saveState('裁剪'));
       return;
     }
-    this.history.saveState();
+    this.history.saveState('裁剪');
   }
 
   _requestRender() {

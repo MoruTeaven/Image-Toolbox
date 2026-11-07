@@ -223,6 +223,26 @@ class CanvasManager {
   }
 
   /**
+   * 生成历史记录面板用的缩略图（小尺寸 JPEG DataURL）。
+   * 失败时返回 null —— 缩略图只是展示信息，不应影响历史记录本身。
+   * @param {number} [maxWidth=96] - 缩略图最大宽度
+   * @param {number} [quality=0.5] - JPEG 压缩质量
+   * @returns {string|null}
+   */
+  toThumbnailDataURL(maxWidth = 96, quality = 0.5) {
+    if (!this.canvas) return null;
+
+    try {
+      const canvasWidth = this.canvas.width || maxWidth;
+      const multiplier = Math.min(1, maxWidth / canvasWidth);
+      return this.canvas.toDataURL({ format: 'jpeg', quality, multiplier });
+    } catch (err) {
+      console.warn('[CanvasManager] 生成历史缩略图失败:', err);
+      return null;
+    }
+  }
+
+  /**
    * 图片自适应画布大小
    * @param {number} [padding=40] - 边距
    */

@@ -334,8 +334,8 @@ export async function importPSD(psdBlob, canvasManager, layerManager, historyMan
     canvasManager.fitToCanvas(40);
 
     layerManager.syncLayers();
-    historyManager.clear();
-    historyManager.saveState();
+    historyManager.reset();
+    historyManager.saveState('导入 PSD');
 
     eventBus.emit('image:loaded', bgImage);
     eventBus.emit('toast:show', { message: 'PSD 文件已导入', type: 'success' });

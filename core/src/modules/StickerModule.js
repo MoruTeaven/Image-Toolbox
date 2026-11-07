@@ -117,7 +117,7 @@ class StickerModule extends BaseModule {
     });
 
     // 沿用 TextModule 的撤销语义：先保存快照（不含新图层），再添加
-    this.history?.saveState();
+    this.history?.saveState('贴纸');
 
     canvas.add(img);
     canvas.setActiveObject(img);

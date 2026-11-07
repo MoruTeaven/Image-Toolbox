@@ -239,7 +239,7 @@ class LayerPanel {
 
     if (action === 'delete') {
       if (meta.isBackground || meta.locked) return;
-      this._hm?.saveState();
+      this._hm?.saveState('删除图层');
       this._lm.deleteLayer(layerId);
       this._selectedLayerId = null;
       this._activeLayerIds = [];
@@ -254,7 +254,7 @@ class LayerPanel {
     const meta = this._lm.getLayerById(layerId);
     if (!meta) return;
 
-    this._hm?.saveState();
+    this._hm?.saveState('复制图层');
     const newMeta = await this._lm.duplicateLayer(layerId);
     if (newMeta) {
       this._selectedLayerId = newMeta.id;
@@ -438,7 +438,7 @@ class LayerPanel {
     if (target.id === 'layer-delete') {
       const selected = this._getSelectedLayerId();
       if (selected !== null) {
-        this._hm?.saveState();
+        this._hm?.saveState('删除图层');
         this._lm.deleteLayer(selected);
       }
       return;

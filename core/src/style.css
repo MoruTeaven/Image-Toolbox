@@ -2179,7 +2179,7 @@ html, body {
 
 .side-tabs__header {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 2px;
   padding: 5px;
   background: var(--bg-panel);
@@ -2510,6 +2510,32 @@ html, body {
 
 .ai-note__btn:hover {
   background: var(--bg-hover);
+}
+
+/* 「编辑当前图层」的预览确认横幅：副本是预览，应用后才替换原图 */
+.ai-preview-banner {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(47, 127, 134, 0.35);
+  border-radius: 6px;
+  background: rgba(47, 127, 134, 0.1);
+}
+
+.ai-preview-banner__title {
+  color: var(--bg-active);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ai-preview-banner__desc {
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ai-preview-actions {
+  gap: 8px;
 }
 
 /* AI 提示词输入区（属性面板内） */
@@ -3756,4 +3782,191 @@ html, body {
 
 .save-dialog__cancel:hover {
   background: var(--bg-hover, #e8eaed);
+}
+
+/* ── 历史记录面板 ── */
+
+.side-tabs__pane #history-panel {
+  height: 100%;
+  min-height: 0;
+}
+
+/* 历史面板的头部承载「清空」按钮，Tab 布局下也保留 */
+.side-tabs--tabs .panel--history .panel__header {
+  display: flex;
+}
+
+.side-tabs--split .side-tabs__pane[data-panel-pane="history"] {
+  flex: 2;
+  height: auto;
+  border-top: 1px solid var(--color-border);
+}
+
+.panel--history {
+  height: 100%;
+}
+
+.panel__body--history {
+  display: block;
+  padding: 4px;
+}
+
+.history-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-panel__count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.history-panel__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.history-panel__clear:hover {
+  background: var(--bg-hover);
+  color: var(--color-text);
+}
+
+.history-panel__clear.is-confirming {
+  border-color: var(--color-danger);
+  background: rgba(200, 79, 70, 0.12);
+  color: var(--color-danger);
+}
+
+.history-panel__footer {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  text-align: center;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 5px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.12s, opacity 0.12s;
+}
+
+.history-item:hover {
+  background: var(--bg-hover);
+}
+
+.history-item--current {
+  background: var(--bg-card);
+  border-color: var(--color-accent);
+}
+
+.history-item--future {
+  opacity: 0.5;
+}
+
+.history-item--archived {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.history-item--archived:hover {
+  background: transparent;
+}
+
+.history-item__index {
+  flex-shrink: 0;
+  width: 22px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.history-item--current .history-item__index {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.history-item__thumb {
+  flex-shrink: 0;
+  width: 38px;
+  height: 26px;
+  border-radius: 3px;
+  background: var(--bg-canvas);
+  object-fit: cover;
+}
+
+.history-item__thumb--empty {
+  display: block;
+}
+
+.history-item__meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.history-item__label {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-item__time {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px 8px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.history-empty[hidden] {
+  display: none;
 }
