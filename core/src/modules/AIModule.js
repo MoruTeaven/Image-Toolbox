@@ -47,6 +47,10 @@ class AIModule extends BaseModule {
     // 此模块接管属性面板（与调色模块一致）：即使有选中对象也显示 AI 控件
     this.overridePropertyPanel = true;
     this._running = false;
+    // 「编辑当前图层」的预览确认态：{ source, previewLayer } | null。
+    // 预览副本只在用户点「应用」后才替换原图，放弃则原样恢复。
+    this._preview = null;
+    this._aiEventUnsubs = [];
   }
 
   /**
@@ -75,10 +79,16 @@ class AIModule extends BaseModule {
     canvas.defaultCursor = 'default';
     // 保持未锁定图层可选中：抠图作用于用户选中的图片图层
     this._enableEditableLayerInteractivity();
+    this._ensurePreviewListeners();
   }
 
   deactivate() {
     this.active = false;
+    this._teardownPreviewListeners();
+    // 离开 AI 工具时预览未决：自动放弃，避免源图层一直处于隐藏态
+    if (this._preview) {
+      this._discardPreview({ silent: true });
+    }
   }
 
   /**
@@ -217,23 +227,37 @@ class AIModule extends BaseModule {
     // 应用方式放在最上方、按钮式单选、不加文字标签：两个选项本身已说明
     // 语义，标签纯属占位；放在提示词框上面是因为这是执行前必须先确定的
     // 口径（改原图还是产副本），放到下面容易被忽略而误改原图。
+    // 预览确认中不允许切换方式：切换语义与未决预览冲突。
+    const preview = this._preview;
     const applyMode = this._getApplyMode(capability.id);
     const applyModeButtons = [
       { value: APPLY_MODES.newLayer, label: '新建图层' },
       { value: APPLY_MODES.inPlace, label: '编辑当前图层' }
     ].map((item) => (
       `<button type="button" class="ai-mode-btn ${item.value === applyMode ? 'ai-mode-btn--active' : ''}"
-               data-module-action="${capability.id}:applyMode:${item.value}">${item.label}</button>`
+               data-module-action="${capability.id}:applyMode:${item.value}"${preview ? ' disabled' : ''}>${item.label}</button>`
     )).join('');
+
+    // 「编辑当前图层」的预览确认块：AI 结果先以副本形式叠加显示，原图
+    // 临时隐藏，由用户决定应用（替换原图）还是放弃（原样恢复）。
+    const previewBlock = preview && preview.source
+      ? `
+      <div class="ai-preview-banner">
+        <div class="ai-preview-banner__title">AI 预览中</div>
+        <div class="ai-preview-banner__desc">画布上的「${this._escapeHtml(this._getObjectDisplayName(preview.previewLayer))}」是效果预览，「${this._escapeHtml(this._getObjectDisplayName(preview.source))}」已临时隐藏。应用后替换原图，放弃则恢复原样。</div>
+      </div>`
+      : '';
 
     // 选中状态行：有目标图层时显示图层名；「编辑当前图层」但未选中时
     // 抬头提示要选图层；「新建图层」模式不显示该提示（副本模式对用户的
     // 心智是「以选中的图为源」，不该再催他去选一个已有图层）。
-    const targetLine = target
-      ? `<div class="ai-note">当前图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>`
-      : (applyMode === APPLY_MODES.inPlace
-        ? '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>'
-        : '');
+    const targetLine = preview
+      ? ''
+      : (target
+        ? `<div class="ai-note">源图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>`
+        : (applyMode === APPLY_MODES.inPlace
+          ? '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>'
+          : '<div class="ai-note ai-note--muted">未选中图层：画布上只有一张图片时会自动作为源，多张图片请先选中一张。</div>'));
 
     // 执行按钮文案随应用方式变化：新建图层模式下「编辑当前图层」是错的
     // 描述（原图层保持不变），会让人以为点下去会改掉原图。
@@ -263,10 +287,22 @@ class AIModule extends BaseModule {
       `
       : '';
 
+    // 预览确认中把执行按钮换成「应用 / 放弃」：同一时刻只允许一个未决预览
+    const actionButtons = preview && preview.source
+      ? `
+        <button type="button" class="property-btn property-btn--primary"
+                data-module-action="${capability.id}:applyPreview">应用到「${this._escapeHtml(this._getObjectDisplayName(preview.source))}」</button>
+        <button type="button" class="property-btn"
+                data-module-action="${capability.id}:discardPreview">放弃预览</button>`
+      : `
+        <button type="button" class="property-btn property-btn--primary"
+                data-module-action="${capability.id}:run"${this._running ? ' disabled' : ''}>${runLabel}</button>`;
+
     return `
       <div class="property-item property-item--wide">
         <div class="ai-mode-row">${applyModeButtons}</div>
       </div>
+      ${previewBlock}
       ${modelSelect}
       ${statusLine}
       <div class="property-item property-item--wide">
@@ -277,8 +313,7 @@ class AIModule extends BaseModule {
       </div>
       ${targetLine}
       <div class="property-item property-item--wide property-item--actions">
-        <button type="button" class="property-btn property-btn--primary"
-                data-module-action="${capability.id}:run"${this._running ? ' disabled' : ''}>${runLabel}</button>
+        ${actionButtons}
       </div>
     `;
   }
@@ -347,6 +382,10 @@ class AIModule extends BaseModule {
 
     // 应用方式单选（按钮组）：点击即切换并刷新面板，让选中态立刻生效
     if (verb === 'applyMode') {
+      if (this._preview) {
+        // 预览未决：方式按钮已禁用，这里兜底忽略（切换语义与未决预览冲突）
+        return;
+      }
       const value = parts[2];
       if (Object.values(APPLY_MODES).includes(value)) {
         this.options[`${capabilityId}:applyMode`] = value;
@@ -362,9 +401,24 @@ class AIModule extends BaseModule {
       return;
     }
 
+    // 预览确认：应用（副本转正替换原图）或放弃（原样恢复）
+    if (verb === 'applyPreview') {
+      this._applyPreview();
+      return;
+    }
+    if (verb === 'discardPreview') {
+      this._discardPreview();
+      return;
+    }
+
     // 提示词填入口径已经收敛到顶部预设栏（OptionsBar 的 [data-preset]
     // → applyPreset），属性面板不再派发 fill 动作。
     if (verb !== 'run') {
+      return;
+    }
+    if (this._preview) {
+      // 预览未决时不允许再发起请求：结果没有落脚点，还会顶掉当前预览
+      eventBus.emit('toast:show', { message: '请先应用或放弃当前的 AI 预览', type: 'error' });
       return;
     }
     if (this._running) {
@@ -393,10 +447,17 @@ class AIModule extends BaseModule {
       return;
     }
 
-    const source = this._getTargetImage();
-    if (!source) {
-      eventBus.emit('toast:show', { message: '请先选中要编辑的图片图层', type: 'error' });
+    // 源图层解析：显式选中优先；「新建图层」模式在画布只有一张图片时
+    // 自动把它作为源——AI 编辑总要有一张源图，但不应逼用户先去点一下画布。
+    const applyMode = this._getApplyMode(capability.id);
+    const resolved = this._resolveSourceLayer(applyMode);
+    if (!resolved.source) {
+      eventBus.emit('toast:show', { message: resolved.note, type: 'error' });
       return;
+    }
+    const source = resolved.source;
+    if (resolved.note) {
+      eventBus.emit('toast:show', { message: resolved.note, type: 'info' });
     }
 
     const prompt = String(getAiConfig().draft || '').trim();
@@ -442,12 +503,16 @@ class AIModule extends BaseModule {
       const background = instruction.actions.find((item) => item.type === 'background');
       const rest = instruction.actions.filter((item) => item.type !== 'background');
 
-      const applyMode = this._getApplyMode(capability.id);
+      // 「编辑当前图层」走预览确认流：效果先以副本呈现，应用后才替换原图；
+      // 抠图（background）本就产新图层，维持原路径。
+      const previewMode = !background && applyMode === APPLY_MODES.inPlace;
       let appliedTo = source;
       if (background) {
         // 抠图本身就产新图层，不再额外复制
         appliedTo = await this._runCutoutToLayer(source, background.mode);
-      } else if (applyMode === APPLY_MODES.newLayer) {
+      } else if (previewMode) {
+        appliedTo = this._enterPreview(source);
+      } else {
         // 复制副本只在指令确认可执行之后才创建：请求失败或全被拒绝时
         // 不会在画布上留下一个没有改动的幽灵副本。
         appliedTo = this._cloneAsNewLayer(source);
@@ -465,14 +530,20 @@ class AIModule extends BaseModule {
       }
 
       this.canvasManager.canvas?.requestRenderAll?.();
-      this.history?.saveState?.();
+      // 预览态不入历史：应用（替换原图）才产生一步可撤销的变更，放弃则
+      // 完全回到进入预览前的状态，撤销栈保持干净。
+      if (!previewMode) {
+        this.history?.saveState?.();
+      }
 
       const rejectedNote = instruction.rejected.length
         ? `（${instruction.rejected.length} 条超出可用能力已忽略）`
         : '';
-      const targetNote = appliedTo !== source
-        ? '，已生成为新图层'
-        : (applyMode === APPLY_MODES.inPlace && !background ? '，已修改当前图层' : '');
+      const targetNote = previewMode
+        ? '，已生成预览，请在右侧确认是否应用'
+        : (appliedTo !== source
+          ? '，已生成为新图层'
+          : (applyMode === APPLY_MODES.inPlace && !background ? '，已修改当前图层' : ''));
       eventBus.emit('toast:show', {
         message: `${describeActions(instruction.actions)}${rejectedNote}${targetNote}`,
         type: 'success'
@@ -718,6 +789,170 @@ class AIModule extends BaseModule {
   }
 
   // ── 工具方法 ──
+
+  /**
+   * 画布上可作为 AI 源的图片图层（可见、非辅助对象、非当前预览副本）。
+   * @returns {fabric.Image[]}
+   */
+  _listImageLayers() {
+    const canvas = this.canvasManager && this.canvasManager.canvas;
+    if (!canvas || typeof canvas.getObjects !== 'function') {
+      return [];
+    }
+    return canvas.getObjects().filter((obj) => (
+      obj.type === 'image'
+      && !obj.excludeFromLayer
+      && !obj.excludeFromHistory
+      && obj.visible !== false
+      && (!this._preview || obj !== this._preview.previewLayer)
+    ));
+  }
+
+  /**
+   * 解析本次 AI 编辑的源图层。
+   *
+   * 规则：显式选中的图片图层优先；「新建图层」模式对未选中更宽容——画布
+   * 只有唯一图片图层时直接用它（用户的心智是「让 AI 出一张新图」，多一步
+   * 「先点一下画布」是纯粹的拦路），多张图片才要求先选中；「编辑当前图层」
+   * 改的是哪个图层必须无歧义，仍然要求显式选中。
+   * @param {string} applyMode APPLY_MODES 的取值
+   * @returns {{source: fabric.Image|null, note: string}} note 为空表示无需提示
+   */
+  _resolveSourceLayer(applyMode) {
+    const selected = this._getTargetImage();
+    if (selected) {
+      return { source: selected, note: '' };
+    }
+    if (applyMode !== APPLY_MODES.newLayer) {
+      return { source: null, note: '请先选中要编辑的图片图层' };
+    }
+    const candidates = this._listImageLayers();
+    if (candidates.length === 0) {
+      return { source: null, note: '请先打开一张图片再使用 AI 编辑' };
+    }
+    if (candidates.length > 1) {
+      return { source: null, note: '画布上有多张图片：请先选中要作为源的那一张' };
+    }
+    return {
+      source: candidates[0],
+      note: `未手动选中图层，已使用「${this._getObjectDisplayName(candidates[0])}」作为源`
+    };
+  }
+
+  /**
+   * 进入预览态：克隆源图层为预览副本，源图层临时隐藏。
+   * 效果由调用方继续 applyActionsToImage 应用到返回的副本上。
+   * 不入历史：应用时才产生一步可撤销的替换，放弃则原样恢复。
+   * @param {fabric.Image} source 源图层
+   * @returns {fabric.Image} 预览副本（已入画布）
+   */
+  _enterPreview(source) {
+    const previewLayer = this._cloneAsNewLayer(source);
+    // 先隐藏源再改名：副本入画布事件触发的图层面板刷新能看到源已隐藏
+    source.visible = false;
+    previewLayer.set({
+      _layerName: `${this._getObjectDisplayName(source)} · AI 预览`,
+      _layerNameAuto: false
+    });
+    const canvas = this.canvasManager.canvas;
+    canvas?.requestRenderAll?.();
+    this._preview = { source, previewLayer };
+    return previewLayer;
+  }
+
+  /**
+   * 应用预览：副本转正（继承源图层名与层序）替换原图层，入历史一步撤销。
+   */
+  _applyPreview() {
+    const preview = this._preview;
+    if (!preview || !preview.source || !preview.previewLayer) {
+      this._preview = null;
+      this._refreshPanel();
+      return;
+    }
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) {
+      this._preview = null;
+      return;
+    }
+    const { source, previewLayer } = preview;
+    const index = canvas.getObjects().indexOf(source);
+    const name = this._getObjectDisplayName(source);
+
+    // 源图层移除、副本摘下后再按原层序插回：副本还在画布上时直接
+    // insertAt 会让同一对象在画布里出现两份（fabric 5 的 insertAt 不去重）
+    this.canvasManager.removeObject(source);
+    this.canvasManager.removeObject(previewLayer);
+    previewLayer.set({ _layerName: name, _layerNameAuto: false });
+    if (index >= 0 && typeof canvas.insertAt === 'function') {
+      // 层序保持：副本顶替源图层原来的位置，而不是浮到最上层
+      canvas.insertAt(previewLayer, index, false);
+      eventBus.emit('canvas:objectAdded', previewLayer);
+    } else {
+      this.canvasManager.addObject(previewLayer);
+    }
+    canvas.discardActiveObject?.();
+    canvas.setActiveObject?.(previewLayer);
+    canvas.requestRenderAll?.();
+
+    this._preview = null;
+    this.history?.saveState?.();
+    eventBus.emit('toast:show', { message: `已应用 AI 效果到「${name}」`, type: 'success' });
+    this._refreshPanel();
+  }
+
+  /**
+   * 放弃预览：移除副本、恢复源图层显示，画布回到进入预览前的样子。
+   * 不入历史（没有产生内容变更）。
+   * @param {{silent?: boolean}} [options] silent 时不弹提示不刷面板（切工具自动放弃等场景）
+   */
+  _discardPreview(options = {}) {
+    const preview = this._preview;
+    if (!preview) {
+      return;
+    }
+    this._preview = null;
+    const canvas = this.canvasManager.canvas;
+    if (preview.previewLayer && canvas) {
+      this.canvasManager.removeObject(preview.previewLayer);
+    }
+    if (preview.source && canvas) {
+      preview.source.visible = true;
+      canvas.requestRenderAll?.();
+    }
+    if (!options.silent) {
+      eventBus.emit('toast:show', { message: '已放弃 AI 预览，原图未改动', type: 'info' });
+      this._refreshPanel();
+    }
+  }
+
+  /**
+   * 订阅会让预览引用失效的事件：撤销/重做与历史恢复会整体重建画布对象，
+   * 新图加载会清空画布——这两种情况下预览状态直接作废（快照本身就是
+   * 预览前的正确状态，不需要也没有办法恢复隐藏的源图层）。
+   */
+  _ensurePreviewListeners() {
+    if (this._aiEventUnsubs.length > 0) {
+      return;
+    }
+    this._aiEventUnsubs.push(
+      eventBus.on('canvas:restored', () => {
+        this._preview = null;
+      }),
+      eventBus.on('image:loaded', () => {
+        this._preview = null;
+      })
+    );
+  }
+
+  _teardownPreviewListeners() {
+    this._aiEventUnsubs.forEach((off) => {
+      if (typeof off === 'function') {
+        off();
+      }
+    });
+    this._aiEventUnsubs = [];
+  }
 
   /**
    * 取抠图目标：当前选中的图片图层（排除辅助对象）。

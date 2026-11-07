@@ -61,7 +61,7 @@
 │       ├── EventBus.js     # 事件总线
 │       ├── CanvasManager.js# 画布管理器（Fabric.js 封装）
 │       ├── LayerManager.js # 图层管理器
-│       ├── HistoryManager.js # 历史记录（撤销/重做）
+│       ├── HistoryManager.js # 历史记录（撤销/重做 + 时间线）
 │       ├── ToolManager.js  # 工具管理器
 │       ├── preloadHelpers.cjs # preload 公共逻辑（CJS，见 AGENTS.md §7.2）
 │       ├── app/            # 跨平台应用入口
