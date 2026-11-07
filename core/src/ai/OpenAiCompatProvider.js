@@ -12,7 +12,9 @@
  * ----------------------------------------
  * - Key 只在用户填写的 baseUrl 这一跳发出；aiFetch 是唯一网络出口；
  * - Key 不写日志，错误文案里不含 Key；
- * - 只允许 https；
+ * - 公网地址只允许 https；本机 / 局域网地址（127.0.0.0/8、10/8、
+ *   172.16/12、192.168/16、169.254/16、localhost 等）允许 http——
+ *   这类设备通常没有证书，且流量不出内网；判定统一在 AI_CONFIG；
  * - 发给模型的是 ≤777px 的 JPEG 缩略图（供理解画面），不是原图上传。
  */
 
@@ -123,6 +125,11 @@ export async function requestInstruction(params) {
   } catch (err) {
     if (err?.name === 'AbortError') {
       throw new Error(`请求超时（${Math.round(AI_CONFIG_LIMITS.timeoutMs / 1000)} 秒），请检查网络或服务商`);
+    }
+    // 浏览器 fetch 对「连不上」和「被跨域拦掉」都只给一句 Failed to fetch，
+    // 单看原文无法判断是地址不对还是服务商没放行跨域，这里补一句排查方向。
+    if (/failed to fetch|networkerror|load failed/i.test(String(err?.message || ''))) {
+      throw new Error('网络请求失败：无法连接该地址（请确认地址可从本机访问，且服务商允许跨域请求）');
     }
     throw new Error(`网络请求失败：${err?.message || '无法连接服务商'}`);
   }

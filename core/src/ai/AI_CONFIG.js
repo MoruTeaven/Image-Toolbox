@@ -417,6 +417,11 @@ export function removeModel(providerId, modelName) {
 
 /**
  * 当前选中的「提供商 + 模型」。
+ *
+ * 选择有优先级：先认用户真正选中的服务商；若它一个模型都没有，就退到
+ * 第一个有模型的服务商。历史缺陷：用户点预设建的空服务商（0 模型）
+ * 会一直占着「使用中」，后来在另一个自定义服务商下加了模型也轮不到它，
+ * 属性面板因此永远说未配置——用户看着填好的地址和 Key 一头雾水。
  * @returns {{providerId:string, model:string}}
  */
 export function getActiveSelection() {
@@ -427,9 +432,21 @@ export function getActiveSelection() {
   }
   const selectedProviderId = _readSync(STORAGE_KEYS.activeProvider) || '';
   const selectedModel = _readSync(STORAGE_KEYS.activeModel) || '';
-  const provider = providers.find((item) => item.id === selectedProviderId) || providers[0];
-  const model = provider.models.includes(selectedModel) ? selectedModel : (provider.models[0] || '');
-  return { providerId: provider.id, model };
+  const selected = providers.find((item) => item.id === selectedProviderId);
+
+  if (selected && selected.models.length > 0) {
+    const model = selected.models.includes(selectedModel) ? selectedModel : selected.models[0];
+    return { providerId: selected.id, model };
+  }
+
+  const usable = providers.find((item) => item.models.length > 0);
+  if (usable) {
+    const model = usable.models.includes(selectedModel) ? selectedModel : usable.models[0];
+    return { providerId: usable.id, model };
+  }
+
+  const provider = selected || providers[0];
+  return { providerId: provider.id, model: '' };
 }
 
 /**
@@ -504,7 +521,70 @@ export function setAiConfigField(fieldKey, value) {
 }
 
 /**
- * 规范化服务商根地址：去空格、去尾部斜杠，缺 scheme 时补 https://。
+ * 判断主机是否属于「本机 / 局域网」范围。
+ *
+ * 只用于放宽 http：这类地址通常没有证书（路由器、NAS、内网网关、
+ * 本机 Ollama 等），而流量根本不出内网，不存在公网明文泄露面。
+ * 公网地址仍然强制 https。
+ *
+ * @param {string} host 主机名或 IP（不含端口）
+ * @returns {boolean}
+ */
+function _isPrivateHost(host) {
+  const name = String(host || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (!name) {
+    return false;
+  }
+  if (name === 'localhost' || name.endsWith('.localhost') || name === '::1') {
+    return true;
+  }
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(name);
+  if (ipv4) {
+    const a = Number(ipv4[1]);
+    const b = Number(ipv4[2]);
+    if (a === 127 || a === 10) {
+      return true;
+    }
+    if (a === 192 && b === 168) {
+      return true;
+    }
+    if (a === 172 && b >= 16 && b <= 31) {
+      return true;
+    }
+    // 169.254/16：链路本地，常见于直连设备的自建服务；
+    // 但云厂商元数据端点（169.254.169.254）不是 AI 服务，排除掉
+    if (a === 169 && b === 254) {
+      return name !== '169.254.169.254';
+    }
+    return false;
+  }
+  // .local（mDNS）/ .lan / .internal / .home 等内网后缀
+  return /\.(local|lan|internal|home)$/.test(name);
+}
+
+/**
+ * 从地址文本里取主机名；解析失败返回空串。
+ * @param {string} text
+ * @returns {string}
+ */
+function _hostOf(text) {
+  const raw = String(text || '').trim();
+  if (!raw) {
+    return '';
+  }
+  try {
+    return new URL(raw).hostname || '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 规范化服务商根地址：去空格、去尾部斜杠，缺 scheme 时补上。
+ *
+ * 补 scheme 时会看主机：本机 / 局域网地址补 http://（这类设备几乎都没有
+ * 证书，补 https 只会让人对着一个必然失败的地址排查），公网地址仍补
+ * https://（Key 与图片不得走明文公网通道）。
  * @param {string} baseUrl
  * @returns {string}
  */
@@ -514,7 +594,7 @@ export function normalizeAiBaseUrl(baseUrl) {
     return '';
   }
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) {
-    text = `https://${text}`;
+    text = `${_isPrivateHost(_hostOf(`http://${text}`)) ? 'http' : 'https'}://${text}`;
   }
   return text.replace(/\/+$/, '');
 }
@@ -545,24 +625,30 @@ export const AI_CONFIG_STATUS = {
 };
 
 /**
- * 服务地址的问题码（空 / 非 https），没问题返回空串。
+ * 服务地址的问题码（空 / 明文公网），没问题返回空串。
  *
- * 抽成单一函数是因为「校验」（validateAiConfig）与「诊断文案」
- * （getAiConfigStatus）必须同一个口径：以前两处各自判断 https，
- * 一旦规则改动就会一边放行一边拒绝。
+ * 抽成单一函数是因为「校验」（validateAiConfig）、「诊断文案」
+ * （getAiConfigStatus）与「配置页输入提示」必须同一个口径：
+ * 以前两处各自判断 https，一旦规则改动就会一边放行一边拒绝。
+ *
+ * 规则：本机 / 局域网地址允许 http（通常无证书、流量不出内网），
+ * 公网地址必须 https（Key 与图片不得走明文公网通道）。
+ *
  * @param {string} baseUrl
  * @returns {''|'no-base-url'|'insecure-base-url'}
  */
-function _baseUrlIssue(baseUrl) {
+export function getAiBaseUrlIssue(baseUrl) {
   const root = normalizeAiBaseUrl(baseUrl);
   if (!root) {
     return AI_CONFIG_STATUS.NO_BASE_URL;
   }
-  // 只允许 https：Key 与图片数据不得走明文通道
-  if (!/^https:\/\//i.test(root)) {
-    return AI_CONFIG_STATUS.INSECURE_BASE_URL;
+  if (/^https:\/\//i.test(root)) {
+    return '';
   }
-  return '';
+  if (/^http:\/\//i.test(root) && _isPrivateHost(_hostOf(root))) {
+    return '';
+  }
+  return AI_CONFIG_STATUS.INSECURE_BASE_URL;
 }
 
 /**
@@ -572,11 +658,11 @@ function _baseUrlIssue(baseUrl) {
  */
 export function validateAiConfig(config = getAiConfig()) {
   const errors = {};
-  const issue = _baseUrlIssue(config.baseUrl);
+  const issue = getAiBaseUrlIssue(config.baseUrl);
   if (issue === AI_CONFIG_STATUS.NO_BASE_URL) {
     errors.baseUrl = '请填写服务地址';
   } else if (issue === AI_CONFIG_STATUS.INSECURE_BASE_URL) {
-    errors.baseUrl = '服务地址必须使用 https';
+    errors.baseUrl = '服务地址必须使用 https（本机或局域网地址可用 http）';
   }
   if (!String(config.model || '').trim()) {
     errors.model = '请填写模型名';
@@ -631,7 +717,7 @@ export function getAiConfigStatus(config = getAiConfig()) {
     };
   }
 
-  const issue = _baseUrlIssue(config.baseUrl);
+  const issue = getAiBaseUrlIssue(config.baseUrl);
   if (issue === AI_CONFIG_STATUS.NO_BASE_URL) {
     return {
       ready: false,
@@ -645,7 +731,7 @@ export function getAiConfigStatus(config = getAiConfig()) {
     return {
       ready: false,
       code: AI_CONFIG_STATUS.INSECURE_BASE_URL,
-      message: '服务地址必须以 https:// 开头：请到「头像 → AI 配置」修正服务地址。',
+      message: '服务地址必须以 https:// 开头（本机或局域网地址可用 http）：请到「头像 → AI 配置」修正服务地址。',
       providerId,
       model
     };

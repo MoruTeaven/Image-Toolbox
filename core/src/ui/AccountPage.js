@@ -6,12 +6,13 @@ import { escapeHTML, escapeAttr } from '../utils/helpers.js';
 import IdentityClient from '../identity/IdentityClient.js';
 import {
   AI_CONFIG_FIELDS,
+  AI_CONFIG_STATUS,
   AI_SERVICE_PRESETS,
   getAiConfig,
   getAiConfigStatus,
+  getAiBaseUrlIssue,
   setAiConfigField,
   maskApiKey,
-  normalizeAiBaseUrl,
   listProviders,
   addProvider,
   updateProvider,
@@ -321,12 +322,17 @@ class AccountPage {
         const url = this._el?.querySelector('[data-ai-new-provider-url]')?.value || '';
         // 服务地址是必填项：允许建一个没有地址的提供商，只会产出
         // 「模型下拉里能选、面板却报未配置」的坏配置（历史缺陷）。
-        if (!normalizeAiBaseUrl(url)) {
-          eventBus.emit('toast:show', { message: '请填写服务地址（以 https:// 开头）', type: 'error' });
+        // 判定与保存/执行同源：本机与局域网地址允许 http。
+        const urlIssue = getAiBaseUrlIssue(url);
+        if (urlIssue === AI_CONFIG_STATUS.NO_BASE_URL) {
+          eventBus.emit('toast:show', { message: '请填写服务地址', type: 'error' });
           return;
         }
-        if (!/^https:\/\//i.test(normalizeAiBaseUrl(url))) {
-          eventBus.emit('toast:show', { message: '服务地址必须以 https:// 开头', type: 'error' });
+        if (urlIssue) {
+          eventBus.emit('toast:show', {
+            message: '公网地址必须以 https:// 开头（本机 / 局域网地址可用 http）',
+            type: 'error'
+          });
           return;
         }
         const created = addProvider({ label, baseUrl: url });
@@ -783,18 +789,19 @@ class AccountPage {
   /**
    * 服务地址的输入提示（空串表示当前值可用）。
    *
-   * 与 AI_CONFIG 的校验口径一致：空 → 必填；非 https → 明确说「不能是 http」。
+   * 判定走 AI_CONFIG.getAiBaseUrlIssue()，与保存/执行前的校验同一个口径：
+   * 空 → 必填；公网明文 → 明确说必须 https；本机/局域网 http → 放行。
    * 只服务于输入框旁的即时提示，真正的就绪判定仍由 getAiConfigStatus() 给出。
    * @param {string} baseUrl
    * @returns {string}
    */
   _describeBaseUrl(baseUrl) {
-    const root = normalizeAiBaseUrl(baseUrl);
-    if (!root) {
-      return '必填，必须以 https:// 开头，例如 https://api.openai.com/v1';
+    const issue = getAiBaseUrlIssue(baseUrl);
+    if (issue === AI_CONFIG_STATUS.NO_BASE_URL) {
+      return '必填，例如 https://api.openai.com/v1（本机或局域网可用 http://192.168.1.10:8326/v1）';
     }
-    if (!/^https:\/\//i.test(root)) {
-      return '必须以 https:// 开头（不支持 http）';
+    if (issue === AI_CONFIG_STATUS.INSECURE_BASE_URL) {
+      return '公网地址必须以 https:// 开头（本机 / 局域网地址可用 http）';
     }
     return '';
   }

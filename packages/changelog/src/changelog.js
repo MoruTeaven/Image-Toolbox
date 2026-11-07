@@ -92,7 +92,9 @@ export const CHANGELOG = [
         { text: '修复连续裁剪或切换工具后图层被裁掉的问题', platforms: null },
         { text: '修复保存图片或 ORA 工程文件时，默认保存位置可能被带出常用目录的问题', platforms: null },
         { text: '修复 uTools 启动时控制台反复输出报错信息的问题', platforms: null },
-        { text: '修复 AI 配置未填服务地址时，属性面板只提示「尚未配置服务商」的问题', platforms: null }
+        { text: '修复 AI 配置未填服务地址时，属性面板只提示「尚未配置服务商」的问题', platforms: null },
+        { text: '修复局域网或本机 AI 服务地址无法保存使用的问题', platforms: null },
+        { text: '修复「使用中」停在没有模型的服务商上，导致 AI 面板一直提示未配置的问题', platforms: null }
       ],
       improved: [
         { text: '暖色、鲜艳等滤镜预设改用自然饱和度，颜色更自然', platforms: null },
