@@ -3,7 +3,7 @@ import eventBus from '../EventBus.js';
 import { listAiCapabilities, getAiCapability, AI_PROVIDER_IDS, listVisiblePromptPresets, getAiPromptPreset } from '../ai/AI_PROVIDERS.js';
 import { runCapability } from '../ai/LocalOnnxProvider.js';
 import { requestInstruction } from '../ai/OpenAiCompatProvider.js';
-import { getAiConfig, isAiConfigReady, setAiConfigField, AI_CONFIG_LIMITS, listProviders, getActiveSelection, setActiveSelection } from '../ai/AI_CONFIG.js';
+import { getAiConfig, getAiConfigStatus, setAiConfigField, AI_CONFIG_LIMITS, listProviders, getActiveSelection, setActiveSelection } from '../ai/AI_CONFIG.js';
 import { parseInstruction, describeActions, applyActionsToImage } from '../ai/AI_INSTRUCTION.js';
 import { FILTER_PRESETS, setFilter, applyFilterPreset } from '../utils/filters.js';
 import { requestRender } from '../utils/helpers.js';
@@ -193,13 +193,23 @@ class AIModule extends BaseModule {
    */
   _getPromptCapabilityHTML(capability) {
     const target = this._getTargetImage();
-    const configured = isAiConfigReady();
+    // 状态判定统一走 getAiConfigStatus()：它区分「没有服务商」「没有模型」
+    // 「缺服务地址」「地址不是 https」四种情况。历史上这里只有一个布尔值，
+    // 四种情况共用一句「尚未配置服务商」，于是模型下拉里明明有可选项、
+    // 面板却坚持说没配置，用户无法知道真正缺的是服务地址。
+    const status = getAiConfigStatus();
     const config = getAiConfig();
     const draft = config.draft || '';
 
-    const statusLine = !configured
-      ? '<div class="ai-note ai-note--warn">尚未配置服务商：请到「头像 → AI 配置」填写服务地址、Key 与模型。</div>'
-      : `<div class="ai-note ai-note--muted">服务商：${this._escapeHtml(config.model || '')}（仅发送压缩预览图，原图不上传）</div>`;
+    const statusLine = status.ready
+      ? `<div class="ai-note ai-note--muted">服务商：${this._escapeHtml(config.model || '')}（仅发送压缩预览图，原图不上传）</div>`
+      : `
+        <div class="ai-note ai-note--warn ai-note--action">
+          <span>${this._escapeHtml(status.message)}</span>
+          <button type="button" class="ai-note__btn"
+                  data-module-action="${capability.id}:openAiConfig">打开 AI 配置</button>
+        </div>
+      `;
 
     // 提示词预设只出现在顶部预设栏（getOptionsBarHTML）。属性面板
     // 不再重复渲染同一批 chips —— 同一批快捷入口放两处，点哪一处都要
@@ -345,6 +355,13 @@ class AIModule extends BaseModule {
       return;
     }
 
+    // 提示行里的「打开 AI 配置」：直接跳到账户中心的 AI 配置页，
+    // 省得用户自己回想「头像 → AI 配置」在哪一层。
+    if (verb === 'openAiConfig') {
+      eventBus.emit('account:open', { section: 'ai' });
+      return;
+    }
+
     // 提示词填入口径已经收敛到顶部预设栏（OptionsBar 的 [data-preset]
     // → applyPreset），属性面板不再派发 fill 动作。
     if (verb !== 'run') {
@@ -369,8 +386,10 @@ class AIModule extends BaseModule {
    * @param {object} capability AI_CAPABILITIES 表项
    */
   async _executePromptCapability(capability) {
-    if (!isAiConfigReady()) {
-      eventBus.emit('toast:show', { message: '请先在「头像 → AI 配置」填写服务地址、Key 与模型', type: 'error' });
+    // 与属性面板同源：缺什么就说缺什么，而不是笼统让人「去配置」
+    const status = getAiConfigStatus();
+    if (!status.ready) {
+      eventBus.emit('toast:show', { message: status.message, type: 'error' });
       return;
     }
 

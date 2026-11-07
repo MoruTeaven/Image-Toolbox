@@ -811,6 +811,14 @@ html, body {
   color: var(--color-danger);
 }
 
+/* 「未配置」的具体原因：徽标只说结论，这一行说还差什么 */
+.ai-config-status-reason {
+  margin: 8px 0 0;
+  color: var(--color-warning);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 /* ── AI 配置页：输入控件、服务商快捷、校验提示 ── */
 .account-page__ai-input {
   width: 100%;
@@ -938,6 +946,11 @@ html, body {
   vertical-align: middle;
 }
 
+/* 缺服务地址的提供商：光看「N 个模型」看不出它其实用不了 */
+.ai-provider-item--incomplete .ai-provider-item__meta {
+  color: var(--color-warning);
+}
+
 .ai-provider-empty {
   padding: 10px 4px;
   color: var(--color-text-secondary);
@@ -1034,6 +1047,16 @@ html, body {
   color: var(--color-text-secondary);
   font-size: 11px;
   opacity: 0.85;
+}
+
+/* 服务地址为空 / 非 https 时的即时提示（与校验口径一致） */
+.ai-config-field__hint--warn {
+  color: var(--color-warning);
+  opacity: 1;
+}
+
+.ai-config-field__hint:empty {
+  display: none;
 }
 
 .ai-config-models {
@@ -2463,6 +2486,30 @@ html, body {
 
 .ai-note--warn {
   color: var(--color-warning, #d9a13f);
+}
+
+/* 诊断提示行：说明还差什么 + 直达配置页的按钮 */
+.ai-note--action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-note__btn {
+  padding: 2px 8px;
+  background: transparent;
+  color: var(--color-warning, #d9a13f);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: inherit;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.ai-note__btn:hover {
+  background: var(--bg-hover);
 }
 
 /* AI 提示词输入区（属性面板内） */

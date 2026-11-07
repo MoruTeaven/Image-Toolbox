@@ -533,17 +533,49 @@ export function resolveChatCompletionsUrl(baseUrl) {
 }
 
 /**
+ * 配置状态码（UI 文案与执行前置判断共用）。
+ * @type {{READY:string, NO_PROVIDER:string, NO_MODEL:string, NO_BASE_URL:string, INSECURE_BASE_URL:string}}
+ */
+export const AI_CONFIG_STATUS = {
+  READY: 'ready',
+  NO_PROVIDER: 'no-provider',
+  NO_MODEL: 'no-model',
+  NO_BASE_URL: 'no-base-url',
+  INSECURE_BASE_URL: 'insecure-base-url'
+};
+
+/**
+ * 服务地址的问题码（空 / 非 https），没问题返回空串。
+ *
+ * 抽成单一函数是因为「校验」（validateAiConfig）与「诊断文案」
+ * （getAiConfigStatus）必须同一个口径：以前两处各自判断 https，
+ * 一旦规则改动就会一边放行一边拒绝。
+ * @param {string} baseUrl
+ * @returns {''|'no-base-url'|'insecure-base-url'}
+ */
+function _baseUrlIssue(baseUrl) {
+  const root = normalizeAiBaseUrl(baseUrl);
+  if (!root) {
+    return AI_CONFIG_STATUS.NO_BASE_URL;
+  }
+  // 只允许 https：Key 与图片数据不得走明文通道
+  if (!/^https:\/\//i.test(root)) {
+    return AI_CONFIG_STATUS.INSECURE_BASE_URL;
+  }
+  return '';
+}
+
+/**
  * 配置完整性与合法性校验（保存前与执行前共用）。
  * @param {object} [config] 缺省自动读取
  * @returns {ok:boolean, errors:Record<string,string>}
  */
 export function validateAiConfig(config = getAiConfig()) {
   const errors = {};
-  const root = normalizeAiBaseUrl(config.baseUrl);
-  if (!root) {
+  const issue = _baseUrlIssue(config.baseUrl);
+  if (issue === AI_CONFIG_STATUS.NO_BASE_URL) {
     errors.baseUrl = '请填写服务地址';
-  } else if (!/^https:\/\//i.test(root)) {
-    // 只允许 https：Key 与图片数据不得走明文通道
+  } else if (issue === AI_CONFIG_STATUS.INSECURE_BASE_URL) {
     errors.baseUrl = '服务地址必须使用 https';
   }
   if (!String(config.model || '').trim()) {
@@ -559,6 +591,67 @@ export function validateAiConfig(config = getAiConfig()) {
  */
 export function isAiConfigReady(config = getAiConfig()) {
   return validateAiConfig(config).ok;
+}
+
+/**
+ * 配置就绪状态 + 面向用户的诊断文案（唯一来源）。
+ *
+ * 为什么需要它：过去 UI 只有 isAiConfigReady() 一个布尔值，「没配服务商」
+ * 「没加模型」「没填服务地址」「地址不是 https」四种完全不同的情况都被
+ * 渲染成同一句「尚未配置服务商」。于是用户在配置页明明已经加好服务商与
+ * 模型（右侧栏模型下拉都能选），属性面板却坚持说他没配置，谁也看不出
+ * 还差的是服务地址。
+ *
+ * 文案里的入口统一写「头像 → AI 配置」，与编辑器属性面板的实际路径一致。
+ *
+ * @param {object} [config] 缺省自动读取
+ * @returns {{ready:boolean, code:string, message:string, providerId:string, model:string}}
+ */
+export function getAiConfigStatus(config = getAiConfig()) {
+  const selection = getActiveSelection();
+  const providerId = selection.providerId || '';
+  const model = String(config.model || '').trim();
+
+  if (!providerId || listProviders().length === 0) {
+    return {
+      ready: false,
+      code: AI_CONFIG_STATUS.NO_PROVIDER,
+      message: '尚未添加服务商：请到「头像 → AI 配置」添加服务商与模型。',
+      providerId,
+      model
+    };
+  }
+  if (!model) {
+    return {
+      ready: false,
+      code: AI_CONFIG_STATUS.NO_MODEL,
+      message: '服务商还没有模型：请到「头像 → AI 配置」添加一个模型名。',
+      providerId,
+      model
+    };
+  }
+
+  const issue = _baseUrlIssue(config.baseUrl);
+  if (issue === AI_CONFIG_STATUS.NO_BASE_URL) {
+    return {
+      ready: false,
+      code: AI_CONFIG_STATUS.NO_BASE_URL,
+      message: '服务商缺少服务地址：请到「头像 → AI 配置」填写该服务商的服务地址。',
+      providerId,
+      model
+    };
+  }
+  if (issue === AI_CONFIG_STATUS.INSECURE_BASE_URL) {
+    return {
+      ready: false,
+      code: AI_CONFIG_STATUS.INSECURE_BASE_URL,
+      message: '服务地址必须以 https:// 开头：请到「头像 → AI 配置」修正服务地址。',
+      providerId,
+      model
+    };
+  }
+
+  return { ready: true, code: AI_CONFIG_STATUS.READY, message: '', providerId, model };
 }
 
 /**

@@ -8,9 +8,10 @@ import {
   AI_CONFIG_FIELDS,
   AI_SERVICE_PRESETS,
   getAiConfig,
+  getAiConfigStatus,
   setAiConfigField,
-  validateAiConfig,
   maskApiKey,
+  normalizeAiBaseUrl,
   listProviders,
   addProvider,
   updateProvider,
@@ -116,6 +117,9 @@ export const TOOLBAR_HISTORY_LAYOUT = {
   STACKED: 'stacked'
 };
 
+/** 账户中心的全部分区（导航项与 `account:open` 直达目标共用）。 */
+const ACCOUNT_SECTIONS = ['mine', 'settings', 'ai', 'updates', 'about'];
+
 const VALID_EDITOR_BARS_LAYOUTS = new Set(Object.values(EDITOR_BARS_LAYOUTS));
 const VALID_EDITOR_SIDE_PANEL_POSITIONS = new Set(Object.values(EDITOR_SIDE_PANEL_POSITIONS));
 const VALID_TOOLBAR_LABELS_VISIBLE = new Set(Object.values(TOOLBAR_LABELS_VISIBLE));
@@ -160,7 +164,19 @@ class AccountPage {
     this._bindEvents();
   }
 
-  open() {
+  /**
+   * 打开账户中心。
+   *
+   * 支持从编辑器其它面板直达某个分区（如 AI 属性面板的「打开 AI 配置」
+   * 按钮会 emit account:open + { section: 'ai' }），避免用户还要自己
+   * 记住「头像 → AI 配置」的两层路径。
+   * @param {{section?:string}} [payload]
+   */
+  open(payload = {}) {
+    const section = payload && typeof payload === 'object' ? payload.section : '';
+    if (ACCOUNT_SECTIONS.includes(section)) {
+      this._activeSection = section;
+    }
     this._user = this._getHostUser();
     this._render();
     this._editorEl?.classList.add('hidden');
@@ -176,6 +192,10 @@ class AccountPage {
   close() {
     this._el?.classList.add('hidden');
     this._editorEl?.classList.remove('hidden');
+    // 账户页里可以改 AI 配置（服务商/地址/模型）。属性面板的 AI 区块
+    // 在渲染时就把「是否已就绪」写进 HTML，不重渲染会一直显示旧结论——
+    // 用户配完地址回到编辑器，面板仍在说「尚未配置」，只能靠切工具刷新。
+    eventBus.emit('tool:propertiesChanged');
   }
 
   _render() {
@@ -234,7 +254,7 @@ class AccountPage {
     }
 
     this._eventBusUnsubscribers.push(
-      eventBus.on('account:open', () => this.open())
+      eventBus.on('account:open', (payload) => this.open(payload))
     );
 
     this._el.addEventListener('click', (e) => {
@@ -299,6 +319,16 @@ class AccountPage {
       if (this._closest(e.target, '[data-ai-provider-add-custom]')) {
         const label = this._el?.querySelector('[data-ai-new-provider-label]')?.value || '';
         const url = this._el?.querySelector('[data-ai-new-provider-url]')?.value || '';
+        // 服务地址是必填项：允许建一个没有地址的提供商，只会产出
+        // 「模型下拉里能选、面板却报未配置」的坏配置（历史缺陷）。
+        if (!normalizeAiBaseUrl(url)) {
+          eventBus.emit('toast:show', { message: '请填写服务地址（以 https:// 开头）', type: 'error' });
+          return;
+        }
+        if (!/^https:\/\//i.test(normalizeAiBaseUrl(url))) {
+          eventBus.emit('toast:show', { message: '服务地址必须以 https:// 开头', type: 'error' });
+          return;
+        }
         const created = addProvider({ label, baseUrl: url });
         this._aiProviderId = created.id;
         this._render();
@@ -437,6 +467,11 @@ class AccountPage {
         const [providerId, key] = providerField.split(':');
         if (key === 'label' || key === 'baseUrl') {
           updateProvider(providerId, { [key]: target.value });
+          // 地址是「就绪」的关键字段，边输边更新提示；但绝不整页重渲染
+          // ——重渲染会打断输入焦点，用户正在填的字会被吞掉。
+          if (key === 'baseUrl') {
+            this._refreshAiConfigHints();
+          }
         }
         return;
       }
@@ -746,6 +781,57 @@ class AccountPage {
   }
 
   /**
+   * 服务地址的输入提示（空串表示当前值可用）。
+   *
+   * 与 AI_CONFIG 的校验口径一致：空 → 必填；非 https → 明确说「不能是 http」。
+   * 只服务于输入框旁的即时提示，真正的就绪判定仍由 getAiConfigStatus() 给出。
+   * @param {string} baseUrl
+   * @returns {string}
+   */
+  _describeBaseUrl(baseUrl) {
+    const root = normalizeAiBaseUrl(baseUrl);
+    if (!root) {
+      return '必填，必须以 https:// 开头，例如 https://api.openai.com/v1';
+    }
+    if (!/^https:\/\//i.test(root)) {
+      return '必须以 https:// 开头（不支持 http）';
+    }
+    return '';
+  }
+
+  /**
+   * 局部刷新 AI 配置页的就绪提示（不重渲染整页，避免打断输入焦点）。
+   *
+   * 只更新三处：服务地址输入框下的即时提示、状态徽章、状态原因行。
+   * 列表里的「缺地址」标记与模型选中态仍依赖下一次重渲染（用户点
+   * 「添加模型」、切换提供商或重进页面时自然刷新）。
+   * @returns {void}
+   */
+  _refreshAiConfigHints() {
+    if (!this._el) {
+      return;
+    }
+
+    this._el.querySelectorAll('[data-ai-provider-url-hint]').forEach((hintEl) => {
+      const providerId = hintEl.getAttribute('data-ai-provider-url-hint');
+      const input = this._el.querySelector(`[data-ai-provider-field="${providerId}:baseUrl"]`);
+      hintEl.textContent = this._describeBaseUrl(input ? input.value : '');
+    });
+
+    const status = getAiConfigStatus();
+    const badge = this._el.querySelector('[data-ai-status-badge]');
+    if (badge) {
+      badge.classList.toggle('account-page__ai-status--ready', status.ready);
+      badge.classList.toggle('account-page__ai-status--unavailable', !status.ready);
+      badge.textContent = status.ready ? '云端 AI 已就绪' : '云端 AI 未配置';
+    }
+    const reasonEl = this._el.querySelector('[data-ai-status-reason]');
+    if (reasonEl) {
+      reasonEl.textContent = status.ready ? '' : status.message;
+    }
+  }
+
+  /**
    * AI 配置页（「设置」与「更新记录」之间的独立导航项）。
    *
    * 结构：提供商（地址 + Key）→ 每个提供商下的模型列表。
@@ -770,7 +856,10 @@ class AccountPage {
     const providers = listProviders();
     const selection = getActiveSelection();
     const config = getAiConfig();
-    const ready = validateAiConfig(config).ok;
+    // 状态与文案都来自 AI_CONFIG 的唯一判定入口：这里只负责展示，
+    // 不再自己用 validateAiConfig().ok 拼一句「未配置」。
+    const status = getAiConfigStatus(config);
+    const ready = status.ready;
     const systemPrompt = config.systemPrompt || '';
     const systemPromptField = AI_CONFIG_FIELDS.systemPrompt;
 
@@ -783,13 +872,16 @@ class AccountPage {
     const providerItems = providers.length
       ? providers.map((provider) => {
         const inUse = provider.id === selection.providerId;
+        // 完整性一目了然：缺服务地址的提供商不可能被「使用中」，
+        // 但过去列表只标「N 个模型 / 缺 Key」，看不出问题出在地址上。
         const meta = [
           `${provider.models.length} 个模型`,
+          provider.baseUrl ? '' : '缺地址',
           inUse ? '使用中' : '',
           provider.hasKey ? '' : '缺 Key'
         ].filter(Boolean).join(' · ');
         return `
-          <button type="button" class="ai-provider-item${provider.id === editingId ? ' ai-provider-item--editing' : ''}${inUse ? ' ai-provider-item--in-use' : ''}"
+          <button type="button" class="ai-provider-item${provider.id === editingId ? ' ai-provider-item--editing' : ''}${inUse ? ' ai-provider-item--in-use' : ''}${provider.baseUrl ? '' : ' ai-provider-item--incomplete'}"
                   data-ai-provider-open="${provider.id}">
             <span class="ai-provider-item__name">${this._escapeHTML(provider.label || '未命名服务商')}</span>
             <span class="ai-provider-item__meta">${this._escapeHTML(meta)}</span>
@@ -827,6 +919,8 @@ class AccountPage {
             <input class="account-page__ai-input" type="text" value="${this._escapeAttr(editing.baseUrl)}"
                    data-ai-provider-field="${editing.id}:baseUrl" maxlength="277"
                    autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1">
+            <span class="ai-config-field__hint ai-config-field__hint--warn"
+                  data-ai-provider-url-hint="${editing.id}">${this._escapeHTML(this._describeBaseUrl(editing.baseUrl))}</span>
           </label>
 
           <label class="ai-config-field">
@@ -859,11 +953,13 @@ class AccountPage {
         <div class="account-card__value">配置状态</div>
         <p>配置完成后，在编辑器左侧选「AI 修图」工具，于右侧栏直接写提示词即可让 AI 编辑当前图片。</p>
         <div class="account-page__theme-row">
-          <span class="account-page__ai-status ${ready ? 'account-page__ai-status--ready' : 'account-page__ai-status--unavailable'}">
+          <span class="account-page__ai-status ${ready ? 'account-page__ai-status--ready' : 'account-page__ai-status--unavailable'}"
+                data-ai-status-badge>
             ${ready ? '云端 AI 已就绪' : '云端 AI 未配置'}
           </span>
           ${ready ? `<span class="account-page__ai-key-hint">当前：${this._escapeHTML(config.model)}</span>` : ''}
         </div>
+        ${ready ? '' : `<p class="ai-config-status-reason" data-ai-status-reason>${this._escapeHTML(status.message)}</p>`}
         <div class="account-page__theme-row">
           <button class="account-page__btn account-page__btn--primary" type="button" data-ai-action="test">测试连接</button>
           <button class="account-page__btn" type="button" data-ai-action="clear">清空配置</button>
