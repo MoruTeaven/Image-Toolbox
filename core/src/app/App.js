@@ -16,7 +16,7 @@ import {
   CanvasManager,
   LayerManager,
   HistoryManager,
-  ToolManager,
+  ToolManager
 } from '../runtime/fabric.js';
 
 import { exportORA, importORA } from '@moruteaven/img-toolbox_ora';
@@ -35,7 +35,7 @@ import AccountPage, {
   EDITOR_SIDE_PANEL_POSITION_KEY,
   EDITOR_SIDE_PANEL_POSITIONS,
   TOOLBAR_COLLAPSED_KEY,
-  TOOLBAR_COLLAPSED,
+  TOOLBAR_COLLAPSED
 } from '../ui/AccountPage.js';
 import { initTheme } from '../utils/theme.js';
 import { buildFileKey } from '../utils/fileKey.js';
@@ -109,7 +109,7 @@ class App {
         preserveObjectStacking: true,
         selection: true,
         stopContextMenu: true,
-        fireRightClick: true,
+        fireRightClick: true
       });
 
       // 2. 初始化图层管理器
@@ -124,7 +124,7 @@ class App {
 
       // 5. 初始化工具管理器（注入 host adapter）
       this.toolManager = new ToolManager(this.canvasManager, this.historyManager, {
-        host: this.hostAdapter,
+        host: this.hostAdapter
       });
 
       // 6. 初始化 UI 组件 —— 挂载点由 shell 统一解析
@@ -205,12 +205,14 @@ class App {
 
       onWheelZoom: (delta) => {
         const canvas = this.canvasManager?.canvas;
-        if (!canvas) return;
+        if (!canvas) {
+          return;
+        }
         this.canvasManager.zoomIn(delta);
         this._updateZoomLabel();
       },
 
-      onKeyDown: (e) => this._handleKeyDown(e),
+      onKeyDown: (e) => this._handleKeyDown(e)
     });
 
     // ═══ EventBus 订阅 ═══
@@ -332,12 +334,16 @@ class App {
     // ═══ 画布操作后自动保存历史 ═══
     this._eventBusUnsubscribers.push(
       eventBus.on('canvas:objectModified', (target) => {
-        if (target?.excludeFromHistory) return;
+        if (target?.excludeFromHistory) {
+          return;
+        }
 
         // 操作完成后补一条时间线记录（最后一次操作没有后续 saveState）
         this._scheduleHistoryFlush('移动/变换');
 
-        if (this._saveTimer) clearTimeout(this._saveTimer);
+        if (this._saveTimer) {
+          clearTimeout(this._saveTimer);
+        }
         this._saveTimer = setTimeout(() => {
           this.historyManager?.saveState('移动/变换');
         }, 300);
@@ -363,6 +369,11 @@ class App {
       // ═══ Toast ═══
       eventBus.on('toast:show', ({ message, type }) => {
         this.shell.showToast(message, type);
+      }),
+
+      // ═══ 带操作按钮的提示条（如 AI 就地修改后的「撤销」）═══
+      eventBus.on('toast:action', (payload) => {
+        this.shell.showActionToast(payload);
       })
     );
 
@@ -371,7 +382,9 @@ class App {
     // 交给宿主适配器暂存，由此处的回调拾取。此处理后续进入的情况。
     this._onPluginEnterCallback = ({ code, type, payload, from }) => {
       console.log('[App] onPluginEnter:', { code, type, from, payload });
-      if (code !== 'image-edit') return;
+      if (code !== 'image-edit') {
+        return;
+      }
 
       // PSD/ORA 工程文件从文件路径直接导入，不走图片加载
       if (type === 'file' || type === 'files') {
@@ -395,7 +408,9 @@ class App {
         this._loadImage(source);
       } else if (type === 'img') {
         const fallbackSource = this._consumePendingSource();
-        if (fallbackSource) this._loadImage(fallbackSource);
+        if (fallbackSource) {
+          this._loadImage(fallbackSource);
+        }
       }
 
       this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
@@ -448,8 +463,12 @@ class App {
     // Delete 删除选中物件
     if (e.key === 'Delete' || e.key === 'Backspace') {
       const active = this.canvasManager?.getActiveObject();
-      if (active && active.isEditing) return;
-      if (active && active.excludeFromHistory) return;
+      if (active && active.isEditing) {
+        return;
+      }
+      if (active && active.excludeFromHistory) {
+        return;
+      }
       this.historyManager?.saveState('删除图层');
       this.canvasManager?.removeActiveObject();
       this._scheduleHistoryFlush('删除图层');
@@ -459,13 +478,23 @@ class App {
     // Ctrl+D（mac: Cmd+D）复制当前选中图层
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'd' || e.key === 'D')) {
       const active = this.canvasManager?.getActiveObject();
-      if (!active) return;
-      if (active.isEditing) return;                  // 文字编辑中，不拦截
-      if (active.excludeFromHistory) return;         // 裁剪框等辅助对象不可复制
-      if (active.type === 'activeSelection') return; // 多选暂不支持整体复制
+      if (!active) {
+        return;
+      }
+      if (active.isEditing) {
+        return;
+      }                  // 文字编辑中，不拦截
+      if (active.excludeFromHistory) {
+        return;
+      }         // 裁剪框等辅助对象不可复制
+      if (active.type === 'activeSelection') {
+        return;
+      } // 多选暂不支持整体复制
 
       const meta = this.layerManager?.getLayerByObject(active);
-      if (!meta) return;
+      if (!meta) {
+        return;
+      }
 
       e.preventDefault();
       this.historyManager?.saveState('复制图层');
@@ -476,10 +505,14 @@ class App {
 
     // 工具快捷键：在输入控件里打字时不抢键
     if (!e.ctrlKey && !e.metaKey) {
-      if (this.shell.isTextInputFocused()) return;
+      if (this.shell.isTextInputFocused()) {
+        return;
+      }
 
       const active = this.canvasManager?.getActiveObject();
-      if (active && active.isEditing) return;
+      if (active && active.isEditing) {
+        return;
+      }
 
       const key = e.key.toUpperCase();
       const tools = this.toolManager?.getTools() || [];
@@ -492,7 +525,9 @@ class App {
   }
 
   destroy() {
-    if (this._destroyed) return;
+    if (this._destroyed) {
+      return;
+    }
     this._destroyed = true;
 
     if (this._saveTimer) {
@@ -535,7 +570,7 @@ class App {
       this.propertyPanel,
       this.layerPanel,
       this.historyPanel,
-      this.statusBar,
+      this.statusBar
     ].forEach(component => component?.destroy?.());
 
     this.toolManager?.destroy?.();
@@ -555,7 +590,9 @@ class App {
     if (label && !this._historyFlushLabel) {
       this._historyFlushLabel = label;
     }
-    if (this._historyFlushTimer) return;
+    if (this._historyFlushTimer) {
+      return;
+    }
 
     this._historyFlushTimer = setTimeout(() => {
       this._historyFlushTimer = null;
@@ -604,7 +641,9 @@ class App {
     }
     const binary = atob(match[2]);
     const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
     const blob = new Blob([bytes], { type: match[1] });
     if (blob.size === 0) {
       eventBus.emit('toast:show', { message: '文件为空', type: 'error' });
@@ -624,13 +663,19 @@ class App {
    */
   _getExternalImageSource(type, payload) {
     const bridged = this.hostAdapter?.getImageSourceFromPayload?.(type, payload);
-    if (bridged) return bridged;
+    if (bridged) {
+      return bridged;
+    }
 
-    if (type !== 'file' && type !== 'files') return null;
+    if (type !== 'file' && type !== 'files') {
+      return null;
+    }
 
     const files = Array.isArray(payload) ? payload : [payload];
     const fileInfo = files.find(item => item && item.path);
-    if (!fileInfo) return null;
+    if (!fileInfo) {
+      return null;
+    }
 
     try {
       return this.hostAdapter?.file?.readImageFile?.(fileInfo.path) ?? null;
@@ -647,7 +692,9 @@ class App {
    */
   _consumePendingSource(expected) {
     const pending = this.hostAdapter?.consumePendingImageSource?.();
-    if (!pending) return null;
+    if (!pending) {
+      return null;
+    }
 
     if (expected !== undefined && pending !== expected) {
       // 不匹配：放回，交给下一次进入处理

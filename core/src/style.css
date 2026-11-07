@@ -3363,6 +3363,59 @@ html, body {
   flex-shrink: 0;
 }
 
+/**
+ * 带操作按钮的提示条（如 AI 就地修改后的「撤销」）。
+ * 位于底部避免遮挡顶部工具条，pointer-events 打开以便点按钮。
+ */
+.action-toast {
+  position: fixed;
+  bottom: 47px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(777px, calc(100vw - 40px));
+  padding: 10px 14px 10px 18px;
+  background: var(--bg-card);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+  font-size: 13px;
+  pointer-events: auto;
+  animation: actionToastIn 0.18s ease;
+}
+
+.action-toast__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-toast__btn {
+  flex-shrink: 0;
+  padding: 5px 14px;
+  background: var(--bg-active);
+  color: #ffffff;
+  border: none;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.action-toast__btn:hover {
+  opacity: 0.88;
+}
+
+@keyframes actionToastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 @keyframes toastFadeInOut {
   0%   { opacity: 0; transform: translateX(-50%) translateY(-10px); }
   15%  { opacity: 1; transform: translateX(-50%) translateY(0); }

@@ -23,6 +23,7 @@
  */
 
 import { getDomPort } from '../ports/DomPort.js';
+import { eventBus } from '../index.js';
 
 /** 界面元素 id 清单 —— 与各端 index.html 的约定，集中一处便于核对 */
 export const ELEMENT_IDS = {
@@ -43,12 +44,12 @@ export const ELEMENT_IDS = {
   ZOOM_CONTROL: 'zoom-control',
   ZOOM_IN: 'zoom-in',
   ZOOM_OUT: 'zoom-out',
-  ZOOM_VALUE: 'zoom-value',
+  ZOOM_VALUE: 'zoom-value'
 };
 
 const TOAST_ICONS = {
   success: '<svg class="toast__icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  error: '<svg class="toast__icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v4M8 11h0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  error: '<svg class="toast__icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v4M8 11h0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'
 };
 
 class EditorShell {
@@ -71,7 +72,7 @@ class EditorShell {
       sidePanel: this.el(ELEMENT_IDS.PANEL_AREA),
       statusBar: this.el(ELEMENT_IDS.STATUS_BAR),
       accountPage: this.el(ELEMENT_IDS.ACCOUNT_PAGE),
-      appRoot: this.el(ELEMENT_IDS.APP_ROOT),
+      appRoot: this.el(ELEMENT_IDS.APP_ROOT)
     };
   }
 
@@ -84,7 +85,7 @@ class EditorShell {
     return {
       propertyPanel: this.el(ELEMENT_IDS.PROPERTY_PANEL),
       layerPanel: this.el(ELEMENT_IDS.LAYER_PANEL),
-      historyPanel: this.el(ELEMENT_IDS.HISTORY_PANEL),
+      historyPanel: this.el(ELEMENT_IDS.HISTORY_PANEL)
     };
   }
 
@@ -131,7 +132,9 @@ class EditorShell {
    */
   showFatalError(html) {
     const body = getDomPort()?.getBody?.();
-    if (body) body.innerHTML = html;
+    if (body) {
+      body.innerHTML = html;
+    }
   }
 
   // ── Toast ──
@@ -144,14 +147,18 @@ class EditorShell {
   showToast(message, type = 'success') {
     const port = getDomPort();
     const body = port?.getBody?.();
-    if (!body) return;
+    if (!body) {
+      return;
+    }
 
     // 同时只保留一条，避免叠字
     const existing = port.querySelector?.('.toast');
     existing?.remove?.();
 
     const toast = port.createElement?.('div');
-    if (!toast) return;
+    if (!toast) {
+      return;
+    }
 
     toast.className = `toast toast--${type}`;
     toast.innerHTML = TOAST_ICONS[type] || '';
@@ -165,8 +172,74 @@ class EditorShell {
     body.appendChild(toast);
 
     port.onElement?.(toast, 'animationend', () => {
-      if (toast.parentNode) toast.parentNode.removeChild(toast);
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
     });
+  }
+
+  /**
+   * 显示一条带操作按钮的提示条（如 AI 就地修改后的「撤销」）。
+   *
+   * 与 Toast 的区别：不自动依赖动画消失（保留可点击时间），按钮点击后
+   * 通过 EventBus 触发约定的事件；超时未操作视为「保留」，自动收起。
+   *
+   * @param {object} payload
+   * @param {string} payload.message 提示正文
+   * @param {string} [payload.actionLabel] 按钮文案
+   * @param {string} payload.event 按钮点击后 emit 的事件名
+   * @param {number} [payload.timeoutMs] 自动收起时间
+   */
+  showActionToast({ message, actionLabel = '撤销', event, timeoutMs = 8000 } = {}) {
+    const port = getDomPort();
+    const body = port?.getBody?.();
+    if (!body || !message || !event) {
+      return;
+    }
+
+    // 同时只保留一条，避免叠字
+    port.querySelector?.('.action-toast')?.remove?.();
+
+    const bar = port.createElement?.('div');
+    if (!bar) {
+      return;
+    }
+    bar.className = 'action-toast';
+
+    const textEl = port.createElement?.('span');
+    if (textEl) {
+      textEl.className = 'action-toast__text';
+      textEl.textContent = message;
+      bar.appendChild(textEl);
+    }
+
+    const btnEl = port.createElement?.('button');
+    if (btnEl) {
+      btnEl.type = 'button';
+      btnEl.className = 'action-toast__btn';
+      btnEl.textContent = actionLabel;
+      bar.appendChild(btnEl);
+    }
+
+    body.appendChild(bar);
+
+    let timer = null;
+    const dismiss = () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      if (bar.parentNode) {
+        bar.parentNode.removeChild(bar);
+      }
+    };
+
+    if (btnEl) {
+      port.onElement?.(btnEl, 'click', () => {
+        dismiss();
+        eventBus.emit(event);
+      });
+    }
+    timer = setTimeout(dismiss, timeoutMs);
   }
 
   // ── 全局事件绑定 ──
@@ -201,7 +274,9 @@ class EditorShell {
       e.stopPropagation();
 
       const file = e.dataTransfer?.files?.[0];
-      if (!file) return;
+      if (!file) {
+        return;
+      }
 
       if (isOra(file.name)) {
         handlers.onOraFile?.(file);
@@ -218,12 +293,16 @@ class EditorShell {
 
     const onPaste = (e) => {
       const items = e.clipboardData?.items;
-      if (!items) return;
+      if (!items) {
+        return;
+      }
 
       for (const item of items) {
         if (item.type?.startsWith('image/')) {
           const file = item.getAsFile?.();
-          if (file) handlers.onImageFile?.(file);
+          if (file) {
+            handlers.onImageFile?.(file);
+          }
           break;
         }
       }
@@ -274,7 +353,7 @@ class EditorShell {
       onDragOver, onDrop, onPaste, onKeyDown, onWheel,
       onWelcomeClick, onWelcomeDropClick,
       onZoomInClick, onZoomOutClick, onZoomValueClick,
-      welcomeBtn, welcomeDrop, zoomIn, zoomOut, zoomValue, canvasArea,
+      welcomeBtn, welcomeDrop, zoomIn, zoomOut, zoomValue, canvasArea
     };
 
     return this._bound;
@@ -283,7 +362,9 @@ class EditorShell {
   /** 解绑 bindGlobalEvents 注册的全部监听器 */
   unbindGlobalEvents() {
     const b = this._bound;
-    if (!b) return;
+    if (!b) {
+      return;
+    }
 
     const port = getDomPort();
     port?.offDocument?.('dragover', b.onDragOver);
@@ -309,10 +390,14 @@ class EditorShell {
    */
   isTextInputFocused() {
     const el = getDomPort()?.getActiveElement?.();
-    if (!el) return false;
+    if (!el) {
+      return false;
+    }
 
     const tagName = el.tagName?.toUpperCase?.();
-    if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return true;
+    if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') {
+      return true;
+    }
     return !!el.isContentEditable;
   }
 
@@ -325,13 +410,17 @@ class EditorShell {
   openFilePicker(accept, onPick) {
     const port = getDomPort();
     const input = port?.createElement?.('input');
-    if (!input) return false;
+    if (!input) {
+      return false;
+    }
 
     input.type = 'file';
     input.accept = accept;
     input.onchange = (e) => {
       const file = e.target?.files?.[0];
-      if (file) onPick?.(file);
+      if (file) {
+        onPick?.(file);
+      }
     };
     input.click?.();
     return true;
