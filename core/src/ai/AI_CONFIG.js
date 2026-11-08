@@ -25,7 +25,6 @@
 
 import { getPreference, setPreference } from '../utils/preferences.js';
 import { getDomPort } from '../ports/DomPort.js';
-import { AI_STAGE } from './AI_PROVIDERS.js';
 
 /** 存储键（历史沿用，勿改，改了会丢用户已配置的值）。 */
 const STORAGE_KEYS = {
@@ -129,10 +128,6 @@ export const AI_CONFIG_LIMITS = {
  * 内置默认系统提示词（系统提示词留空时使用）。
  * 输出契约与 ai/AI_INSTRUCTION.js 的解析器一一对应，改这里必须同步改解析器。
  *
- * 为什么是函数而不是常量：可执行动作清单随上线阶段变化（AI_STAGE）。
- * 未上线的能力不能写进提示词——否则模型会主动建议用户「去背景」，
- * 而该动作会在白名单处被拒绝，体验上是「AI 说能做、点下去做不到」。
- *
  * @returns {string}
  */
 export function buildAiSystemPrompt() {
@@ -147,9 +142,6 @@ export function buildAiSystemPrompt() {
     '- {"type":"rotate","angle":0|90|180|270} · {"type":"flip","axis":"x|y"}',
     '- {"type":"opacity","value":0~100}'
   ];
-  if (AI_STAGE.background) {
-    lines.splice(4, 0, '- {"type":"background","mode":"transparent|white"}（抠图去背景）');
-  }
   lines.push('不确定或超出上述能力时，返回 {"actions":[],"notes":"说明为什么做不到"}。');
   return lines.join('');
 }

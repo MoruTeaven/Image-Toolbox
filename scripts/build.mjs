@@ -395,10 +395,6 @@ for (const platform of PLATFORMS) {
     '--target=chrome100',
     '--charset=utf8',
     '--define:global=globalThis',
-    // AI 运行时只用 wasm 执行提供器：把 rmbg-webgpu 写死的 webgpu 入口
-    // 重定向到主入口，避免把 25.6MB 的 jsep（含 WebGPU/Dawn）wasm 卷进资产
-    // —— 主入口对应的 ort-wasm-simd-threaded.wasm 只有 12.9MB。
-    '--alias:onnxruntime-web/webgpu=onnxruntime-web',
     '--minify',
     '--legal-comments=inline',
     '--external:jsdom',
@@ -425,38 +421,6 @@ for (const platform of PLATFORMS) {
   // 4. Client assets. plugin.json / preload.js are Electron-only, logo.png is
   //    the plugin icon on Electron and kept as a favicon on web.
   fs.copyFileSync(path.join(clientRoot, 'logo.png'), path.join(target, 'logo.png'));
-
-  // 4b. AI runtime assets (AI tool). File names mirror AI_ASSET_FILES in
-  //     core/src/ports/AIPort.js — keep the two in step:
-  //   - the wasm glue .mjs ships on every platform: onnxruntime-web loads it
-  //     with a runtime dynamic import under the wasmPaths prefix;
-  //   - .wasm and the u2netp model only ship on web, which fetches them on
-  //     demand by relative URL. Electron platforms inline both as base64 via
-  //     the staging ai-assets-inline.js (see prepare-build.mjs) and feed them
-  //     to onnxruntime-web as byte buffers, so no file copy and no page-level
-  //     fetch of local files on restricted host protocols.
-  //     Electron pages live under src/, so the directory must go there too or
-  //     the relative './assets/ai/' prefix resolves outside the plugin payload.
-  // AI 资产（AI 修图工具）。文件名与 core/src/ports/AIPort.js 的
-  // AI_ASSET_FILES 一一对应，改动须两处同步：
-  //   - 胶水 .mjs + 运行时 .wasm 用「非 jsep」变体（esbuild 已把
-  //     onnxruntime-web/webgpu alias 到主入口，对应 ort-wasm-simd-threaded.*，
-  //     12.9MB，而非 25.6MB 的 jsep 变体）；
-  //   - 三端都拷 .mjs（onnxruntime-web 运行时按 wasmPaths 前缀动态 import 它）；
-  //   - .wasm 与 u2netp 模型仅 Web 端按相对 URL 按需 fetch；Electron 端两者
-  //     经 prepare-build 生成的 ai-assets-inline.js 以 base64 内联、字节直喂
-  //     onnxruntime-web，受限页面协议下零本地 fetch。
-  //     Electron 页面在 src/ 下，目录必须落在 src/assets/ai 才与
-  //     './assets/ai/' 前缀对得上。
-  const ortDist = path.join(ROOT, 'node_modules', 'onnxruntime-web', 'dist');
-  const rmbgModel = path.join(ROOT, 'node_modules', '@planby-tech', 'rmbg-webgpu', 'models', 'u2netp.onnx');
-  const aiAssetsTarget = path.join(isElectron ? path.join(target, 'src') : target, 'assets', 'ai');
-  fs.mkdirSync(aiAssetsTarget, { recursive: true });
-  fs.copyFileSync(path.join(ortDist, 'ort-wasm-simd-threaded.mjs'), path.join(aiAssetsTarget, 'ort-wasm-simd-threaded.mjs'));
-  if (!isElectron) {
-    fs.copyFileSync(path.join(ortDist, 'ort-wasm-simd-threaded.wasm'), path.join(aiAssetsTarget, 'ort-wasm-simd-threaded.wasm'));
-    fs.copyFileSync(rmbgModel, path.join(aiAssetsTarget, 'u2netp.onnx'));
-  }
 
   if (isElectron) {
     fs.copyFileSync(path.join(clientRoot, 'plugin.json'), path.join(target, 'plugin.json'));

@@ -151,15 +151,13 @@ class ToolManager {
       module: StickerModule
     });
 
-    // AI 修图：面板由 AI_PROVIDERS 注册表派生（3.0 只开放指令编辑，
-    // 本地抠图由 AI_STAGE.background 关闭，3.1 上线），无快捷键
+    // AI 修图：面板由 AI_PROVIDERS 注册表派生（当前为「AI 指令编辑」），无快捷键
     this.registerTool({
       name: 'ai',
       label: 'AI 修图',
       icon: 'ai',
       group: 'adjust',
-      module: AIModule,
-      defaultOptions: { 'removeBackground:outputMode': 'transparent' }
+      module: AIModule
     });
   }
 

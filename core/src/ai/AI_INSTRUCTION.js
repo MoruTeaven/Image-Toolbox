@@ -12,14 +12,13 @@
  * 二者必须同步修改（改 prompt 不改解析器 = 能力静默失效）。
  */
 
-import { AI_STAGE } from './AI_PROVIDERS.js';
 import { FILTER_PARAMS } from '../utils/filters.js';
 
 /** 允许 AI 写入的调色参数白名单：直接取自 FILTER_PARAMS 的 inUi 项。 */
 const FILTERABLE_KEYS = Object.keys(FILTER_PARAMS).filter((key) => FILTER_PARAMS[key].inUi);
 
 /** 允许的 action 类型。 */
-export const AI_ACTION_TYPES = ['filter', 'preset', 'background', 'rotate', 'flip', 'opacity'];
+export const AI_ACTION_TYPES = ['filter', 'preset', 'rotate', 'flip', 'opacity'];
 
 /** 旋转允许的角度（避免模型给出无意义的小数角）。 */
 const ALLOWED_ROTATE_ANGLES = [0, 90, 180, 270, -90, -180, -270];
@@ -105,19 +104,6 @@ export function normalizeAction(action) {
     return { ok: true, action: { type, name } };
   }
 
-  if (type === 'background') {
-    // 3.0 未上线抠图（AI_STAGE.background === false）：模型即使返回该动作
-    // 也一律拒绝，避免「用户可见面没入口、却能通过提示词触发」的半上线状态。
-    if (!AI_STAGE.background) {
-      return { ok: false, reason: '去背景能力暂未开放' };
-    }
-    const mode = String(action.mode || '').trim();
-    if (mode !== 'transparent' && mode !== 'white') {
-      return { ok: false, reason: `background.mode 只支持 transparent/white: ${mode || '(空)'}` };
-    }
-    return { ok: true, action: { type, mode } };
-  }
-
   if (type === 'rotate') {
     const angle = toNumber(action.angle);
     if (angle === null || !ALLOWED_ROTATE_ANGLES.includes(angle)) {
@@ -188,9 +174,6 @@ export function describeActions(actions) {
     if (action.type === 'preset') {
       return `预设「${action.name}」`;
     }
-    if (action.type === 'background') {
-      return action.mode === 'white' ? '抠图为白底' : '抠图为透明底';
-    }
     if (action.type === 'rotate') {
       return `旋转 ${action.angle}°`;
     }
@@ -242,7 +225,6 @@ export function applyActionsToImage(image, actions, helpers) {
       image.set({ opacity: action.value / 100 });
       applied += 1;
     }
-    // background 由调用方单独处理（需要走推理链，不在此同步应用）
   });
   if (applied > 0) {
     // 必须显式置 dirty：fabric.Image 默认开启 objectCaching，缓存的是上一次

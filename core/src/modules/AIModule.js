@@ -1,7 +1,6 @@
 import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { listAiCapabilities, getAiCapability, AI_PROVIDER_IDS, listVisiblePromptPresets, getAiPromptPreset } from '../ai/AI_PROVIDERS.js';
-import { runCapability } from '../ai/LocalOnnxProvider.js';
 import { requestInstruction } from '../ai/OpenAiCompatProvider.js';
 import { getAiConfig, getAiConfigStatus, setAiConfigField, AI_CONFIG_LIMITS, listProviders, getActiveSelection, setActiveSelection } from '../ai/AI_CONFIG.js';
 import { parseInstruction, describeActions, applyActionsToImage } from '../ai/AI_INSTRUCTION.js';
@@ -9,26 +8,18 @@ import { FILTER_PRESETS, setFilter, applyFilterPreset } from '../utils/filters.j
 import { createCanvas2D } from '../ports/CanvasPort.js';
 
 /**
- * 单边输入像素上限：u2netp 推理输入固定缩到 320×320，但输入图层
- * 在合成 alpha 前会以原始分辨率驻留内存（宽×高×4 字节）。超过该上限
- * 的图层直接拒绝执行，避免一次抠图占用数百 MB 内存。
+ * 源图层尺寸上限：发给模型做理解的缩略图虽已缩放，但源图层像素若过大
+ * 仍会占用过多内存，超过该上限直接拒绝执行。
  */
 const MAX_INPUT_EDGE = 4096;
-
-/** 输出背景色映射：面板取值 → rmbg-webgpu 的 backgroundColor 参数。 */
-const OUTPUT_BACKGROUND = {
-  transparent: null,
-  white: [255, 255, 255, 255]
-};
 
 /**
  * AI 修图模块 — 左侧工具栏「AI」工具
  *
  * 面板由 AI_PROVIDERS 注册表派生：能力清单、描述、执行路由全部来自表，
  * 新增 AI 能力只改注册表与对应 Provider，不改本模块结构。
- * AI 指令编辑直接作用于当前选中的图层（一步历史快照，可撤销），不再有
- * 「新建图层/编辑当前图层」两种应用方式；「生成一张全新的图」属于生图
- * 能力，由 AI_PROVIDERS 阶段开关决定是否上线。
+ * 当前唯一能力是「AI 指令编辑」：用一句话描述想要的效果，模型返回编辑
+ * 指令（调色/预设）应用到当前选中的图片图层，一步历史快照可撤销。
  */
 class AIModule extends BaseModule {
   constructor(canvasManager, historyManager, defaultOptions = {}, host = null) {
@@ -200,7 +191,7 @@ class AIModule extends BaseModule {
 
     canvas.selection = true;
     canvas.defaultCursor = 'default';
-    // 保持未锁定图层可选中：抠图作用于用户选中的图片图层
+    // 保持未锁定图层可选中：AI 编辑作用于用户选中的图片图层
     this._enableEditableLayerInteractivity();
   }
 
@@ -270,47 +261,12 @@ class AIModule extends BaseModule {
   }
 
   /**
-   * 渲染单个能力区块（按表的 entry 形态派生：action 或 prompt）
+   * 渲染单个能力区块（当前能力均为 prompt 形态，直接走提示词工程面板）
    * @param {object} capability AI_CAPABILITIES 表项
    * @returns {string}
    */
   _getCapabilityHTML(capability) {
-    if (capability.entry === 'prompt') {
-      return this._getPromptCapabilityHTML(capability);
-    }
-    const target = this._getTargetImage();
-    if (!target) {
-      return `
-        <div class="property-section-title">${capability.label}</div>
-        <div class="ai-note ai-note--muted">${capability.description}</div>
-        <div class="property-empty">选中图片图层后使用（背景图也可以）</div>
-      `;
-    }
-
-    const outputMode = this._getOutputMode(capability.id);
-    const outputOptions = [
-      { value: 'transparent', label: '透明背景' },
-      { value: 'white', label: '白色背景' }
-    ].map((item) => (
-      `<option value="${item.value}" ${item.value === outputMode ? 'selected' : ''}>${item.label}</option>`
-    )).join('');
-
-    return `
-      <div class="property-section-title">${capability.label}</div>
-      <div class="ai-note ai-note--muted">${capability.description}</div>
-      <div class="ai-note">目标图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>
-      <div class="property-item">
-        <label>输出</label>
-        <select class="property-select" data-module-prop="${capability.id}:outputMode">
-          ${outputOptions}
-        </select>
-      </div>
-      <div class="property-item property-item--wide property-item--actions">
-        <button type="button" class="property-btn property-btn--primary"
-                data-module-action="${capability.id}:run">开始${capability.label}</button>
-      </div>
-      <div class="ai-note ai-note--muted">首次使用需加载本地模型（约 5 MB），之后自动复用。推理全程在本机完成，图片不会上传。</div>
-    `;
+    return this._getPromptCapabilityHTML(capability);
   }
 
   /**
@@ -406,10 +362,6 @@ class AIModule extends BaseModule {
     if (!getAiCapability(capabilityId)) {
       return false;
     }
-    if (key === 'outputMode') {
-      this.options[`${capabilityId}:outputMode`] = OUTPUT_BACKGROUND[value] !== undefined ? value : 'transparent';
-      return true;
-    }
     // 模型切换：值形如 "providerId|modelName"，保存为当前执行目标。
     // 需要刷新面板，让状态行显示新选中的模型。
     if (key === 'model') {
@@ -468,15 +420,12 @@ class AIModule extends BaseModule {
 
     if (capability.provider === AI_PROVIDER_IDS.OPENAI_COMPAT) {
       this._executePromptCapability(capability);
-      return;
     }
-    this._executeCapability(capability);
   }
 
   /**
    * 提示词链路：取图层缩略图 + 提示词 → 服务商返回指令 JSON → 白名单执行。
-   * 指令顺序固定为「先抠图（生成新图层）→ 再把其余指令应用到新图层」，
-   * 保证滤镜作用在最终图层上且撤销一步到位。
+   * 指令按模型返回顺序应用到当前图层，撤销一步到位。
    * @param {object} capability AI_CAPABILITIES 表项
    */
   async _executePromptCapability(capability) {
@@ -538,25 +487,15 @@ class AIModule extends BaseModule {
         return;
       }
 
-      const background = instruction.actions.find((item) => item.type === 'background');
-      const rest = instruction.actions.filter((item) => item.type !== 'background');
-
       // 「编辑当前图层」直接在源图层上改（不复制、不留第二个图层）。
       // 修改前先抓一张「原图快照」，配合确认条的「查看原图 / 查看更改」
       // 做前后对比；用户不选择而继续其它操作时视为同意修改后的结果。
-      let appliedTo = source;
-      let beforeSnapshot = null;
-      if (background) {
-        // 抠图本身就产新图层（3.1 上线）
-        appliedTo = await this._runCutoutToLayer(source, background.mode);
-      } else {
-        // 必须在应用指令之前抓：before = 修改前的调色与变换状态
-        beforeSnapshot = this._captureLayerSnapshot(source);
-      }
+      const actions = instruction.actions;
+      const beforeSnapshot = this._captureLayerSnapshot(source);
 
-      let count = rest.length;
-      if (rest.length > 0) {
-        count = applyActionsToImage(appliedTo, rest, {
+      let count = 0;
+      if (actions.length > 0) {
+        count = applyActionsToImage(source, actions, {
           setFilter,
           applyFilterPreset,
           // 模型可能给中文名（label）也可能给内部 id（preset），两者都接受
@@ -571,7 +510,7 @@ class AIModule extends BaseModule {
       // 带操作名入历史：面板里显示「AI 修图」而不是默认的「编辑」
       this.history?.saveState?.('AI 修图');
 
-      const producedLayer = appliedTo !== source;
+      const producedLayer = false;
       const rejectedNote = instruction.rejected.length
         ? `（${instruction.rejected.length} 条超出可用能力已忽略）`
         : '';
@@ -604,7 +543,7 @@ class AIModule extends BaseModule {
       eventBus.emit('ai:taskFinished', {
         capability: capability.id,
         provider: capability.provider,
-        applied: count + (background ? 1 : 0),
+        applied: count,
         notes: instruction.notes
       });
     } catch (err) {
@@ -660,129 +599,6 @@ class AIModule extends BaseModule {
     }
   }
 
-  /**
-   * 执行一个本地 AI 能力：取选中图层 → 本地推理 → 新图层入画布并入历史。
-   * @param {object} capability AI_CAPABILITIES 表项
-   */
-  async _executeCapability(capability) {
-    const target = this._getTargetImage();
-    if (!target) {
-      eventBus.emit('toast:show', { message: '请先选中要处理的图片图层', type: 'error' });
-      return;
-    }
-    const outputMode = this._getOutputMode(capability.id);
-
-    this._running = true;
-    eventBus.emit('ai:taskStarted', { capability: capability.id });
-    eventBus.emit('toast:show', { message: `正在${capability.label}（本地推理中）…`, type: 'info' });
-
-    try {
-      const result = await this._runLocalCutout(target, outputMode);
-      this._applyResultAsLayer(target, result.output, capability);
-      eventBus.emit('ai:taskFinished', {
-        capability: capability.id,
-        timingMs: result.timingMs,
-        executionProvider: result.executionProvider
-      });
-    } catch (err) {
-      this._reportFailure(capability, err);
-    } finally {
-      this._running = false;
-    }
-  }
-
-  /**
-   * 本地抠图内核（一键抠图按钮与提示词链路的 background 指令共用）。
-   * 只负责「源图层 → 推理 → 结果 ImageData」，入画布由调用方决定，
-   * 以便提示词链路能把抠图结果继续叠上其它指令后再统一入历史。
-   * @param {fabric.Image} source 源图层
-   * @param {string} outputMode 'transparent' | 'white'
-   * @returns {Promise<{ output: ImageData }>}
-   */
-  async _runLocalCutout(source, outputMode) {
-    const element = source.getElement ? source.getElement() : source._element;
-    const width = element ? (element.naturalWidth || element.width) : 0;
-    const height = element ? (element.naturalHeight || element.height) : 0;
-    if (!width || !height) {
-      throw new Error('图层不含可处理的像素');
-    }
-    if (width > MAX_INPUT_EDGE || height > MAX_INPUT_EDGE) {
-      throw new Error(`图层尺寸过大（上限 ${MAX_INPUT_EDGE}px），请缩小后再试`);
-    }
-
-    const surface = createCanvas2D(width, height);
-    if (!surface) {
-      throw new Error('当前环境不支持画布处理');
-    }
-
-    surface.ctx.drawImage(element, 0, 0);
-    const imageData = surface.ctx.getImageData(0, 0, width, height);
-    const result = await runCapability(imageData, 'removeBackground', {
-      backgroundColor: OUTPUT_BACKGROUND[outputMode] ?? null
-    });
-    return { output: result.output, timingMs: result.timingMs, executionProvider: result.executionProvider };
-  }
-
-  /**
-   * 提示词链路的抠图：静默生成新图层并返回，供后续指令继续叠加。
-   * @param {fabric.Image} source 源图层
-   * @param {string} outputMode 'transparent' | 'white'
-   * @returns {Promise<fabric.Image>} 新图层
-   */
-  async _runCutoutToLayer(source, outputMode) {
-    const result = await this._runLocalCutout(source, outputMode);
-    // 图层名固定用「抠图」：提示词能力的 label 是「AI 指令编辑」，
-    // 直接拼会生成「AI AI 指令编辑」这种别扭的图层名
-    const layer = this._applyResultAsLayer(source, result.output, { label: '抠图' }, { silent: true });
-    if (!layer) {
-      throw new Error('画布不可用，无法生成新图层');
-    }
-    return layer;
-  }
-
-  /**
-   * 把推理输出写为新图层：继承源图层位置/缩放/角度，置于最上层。
-   * @param {fabric.Image} source 源图层
-   * @param {ImageData} output 抠图结果像素
-   * @param {object} capability 能力定义
-   * @param {object} [options]
-   * @param {boolean} [options.silent] 不单独入历史与弹提示（提示词链路要
-   *   把抠图与后续指令合成一次可撤销的操作，由调用方统一收尾）
-   * @returns {fabric.Image|null} 新图层
-   */
-  _applyResultAsLayer(source, output, capability, options = {}) {
-    const canvas = this.canvasManager.canvas;
-    if (!canvas) {
-      return null;
-    }
-
-    const surface = createCanvas2D(output.width, output.height);
-    if (!surface) {
-      throw new Error('结果画布创建失败');
-    }
-    surface.ctx.putImageData(output, 0, 0);
-
-    const layer = new fabric.Image(surface.canvas, {
-      left: source.left,
-      top: source.top,
-      scaleX: source.scaleX,
-      scaleY: source.scaleY,
-      angle: source.angle || 0,
-      flipX: !!source.flipX,
-      flipY: !!source.flipY,
-      originX: source.originX,
-      originY: source.originY
-    });
-    layer.set({ _layerName: `AI ${capability.label}`, _layerNameAuto: false });
-
-    this.canvasManager.addObject(layer);
-    if (!options.silent) {
-      this.history?.saveState?.();
-      eventBus.emit('toast:show', { message: `${capability.label}完成，已生成为新图层`, type: 'success' });
-    }
-    return layer;
-  }
-
   // ── 工具方法 ──
 
   /**
@@ -799,7 +615,7 @@ class AIModule extends BaseModule {
   }
 
   /**
-   * 取抠图目标：当前选中的图片图层（排除辅助对象）。
+   * 取编辑目标：当前选中的图片图层（排除辅助对象）。
    * @returns {fabric.Image|null}
    */
   _getTargetImage() {
@@ -816,15 +632,6 @@ class AIModule extends BaseModule {
     }
     const element = active.getElement ? active.getElement() : active._element;
     return element ? active : null;
-  }
-
-  /**
-   * 读取能力输出模式（默认透明背景）。
-   * @param {string} capabilityId
-   * @returns {string}
-   */
-  _getOutputMode(capabilityId) {
-    return this.options[`${capabilityId}:outputMode`] || 'transparent';
   }
 
   /**
