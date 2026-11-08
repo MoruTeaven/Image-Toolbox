@@ -92,8 +92,62 @@ class AIModule extends BaseModule {
   }
 
   /**
+   * 用一份基像素复制出全新的 element。
+   *
+   * 为什么必须复制：fabric 5 的 `image.applyFilters()` 对同一个 element
+   * 只有第一次可靠生效，之后再调用会静默复用上一次的滤镜结果（浏览器实测：
+   * 第一次 128→179，第二次仍 179）。所以每次「应用滤镜」都必须配一个新的
+   * element 当基座，否则用户看到的画面根本不会更新。
+   *
+   * @param {object} base 基像素（原 element 或之前的烘焙结果）
+   * @returns {object|null} 新的 canvas element
+   */
+  _cloneBaseElement(base) {
+    if (!base) {
+      return null;
+    }
+    const width = base.naturalWidth || base.width || 0;
+    const height = base.naturalHeight || base.height || 0;
+    if (!width || !height) {
+      return null;
+    }
+    const surface = createCanvas2D(width, height);
+    if (!surface) {
+      return null;
+    }
+    surface.ctx.drawImage(base, 0, 0);
+    return surface.canvas;
+  }
+
+  /**
+   * 把图层当前视觉状态烘焙成新的干净基座（filters 清空）。
+   *
+   * AI 应用指令前调用：让接下来的 applyFilters 是这块基像素的「第一次」，
+   * 从而保证效果一定可见。旧滤镜的效果已经画进像素里，清空 filters 不会
+   * 让画面变化。
+   *
+   * @param {fabric.Image} image
+   * @returns {object|null} 新的基座 element
+   */
+  _bakeLayerElement(image) {
+    const fresh = this._cloneBaseElement(image.getElement ? image.getElement() : image._element);
+    if (!fresh) {
+      return null;
+    }
+    if (typeof image.setElement === 'function') {
+      image.setElement(fresh);
+    } else {
+      image._element = fresh;
+    }
+    image.filters = [];
+    image.dirty = true;
+    return fresh;
+  }
+
+  /**
    * 把快照写回图层（用于查看原图 / 查看更改的来回切换）。
-   * 幂等：每次都从快照记下的基像素重新应用滤镜，不做增量叠加。
+   * 幂等：每次都从快照的基像素复制出新 element 再应用滤镜——既避免
+   * 「同一 element 二次 applyFilters 失效」，也避免滤镜层层叠加。
    * @param {object} snapshot _captureLayerSnapshot 的产物
    */
   _applyLayerSnapshot(snapshot) {
@@ -101,11 +155,12 @@ class AIModule extends BaseModule {
     if (!target || !snapshot) {
       return;
     }
-    if (snapshot.base) {
+    const fresh = this._cloneBaseElement(snapshot.base);
+    if (fresh) {
       if (typeof target.setElement === 'function') {
-        target.setElement(snapshot.base);
+        target.setElement(fresh);
       } else {
-        target._element = snapshot.base;
+        target._element = fresh;
       }
     }
     target.filters = snapshot.filters.slice();
@@ -524,12 +579,20 @@ class AIModule extends BaseModule {
       // 做前后对比；用户不选择而继续其它操作时视为同意修改后的结果。
       let appliedTo = source;
       let beforeSnapshot = null;
+      let bakedBase = null;
       if (background) {
         // 抠图本身就产新图层（3.1 上线）
         appliedTo = await this._runCutoutToLayer(source, background.mode);
       } else {
         // 必须在应用指令之前抓：before = 修改前的调色与变换状态
         beforeSnapshot = this._captureLayerSnapshot(source);
+        // before 是「视觉快照」：它的 base 像素里已经烘焙了用户此前的调色效果
+        // （fabric 应用滤镜后会替换 element），filters 再留一份就会双重叠加。
+        beforeSnapshot.filters = [];
+        // 烘焙一份干净基座：保证下面 setFilter 触发的 applyFilters 是这块
+        // 像素的「第一次」。fabric 对同一 element 的第二次 applyFilters
+        // 会静默失效——用户之前若已调过色，AI 效果就会完全看不到。
+        bakedBase = this._bakeLayerElement(source);
       }
 
       let count = rest.length;
@@ -559,9 +622,9 @@ class AIModule extends BaseModule {
         // 就地修改：进入「应用 / 查看原图 / 撤销」对比确认，不做选择而
         // 进行其它操作视为同意修改后的结果。
         const afterSnapshot = this._captureLayerSnapshot(source);
-        // 两份快照必须共用同一基像素：应用滤镜后 fabric 会把结果烘焙进
-        // element，若 after 记下的是烘焙后的元素，来回切换就会层层叠加滤镜。
-        afterSnapshot.base = beforeSnapshot.base;
+        // after 的基座是「烘焙后的干净基像素」：回放时从它复制新元素再
+        // 套滤镜，既幂等又不会把已烘焙的像素二次叠加滤镜。
+        afterSnapshot.base = bakedBase || beforeSnapshot.base;
         this._aiReview = {
           target: source,
           before: beforeSnapshot,
