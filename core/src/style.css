@@ -2400,7 +2400,6 @@ html, body {
 .property-empty,
 .property-actions,
 .ai-note,
-.ai-preview-banner,
 .filter-categories,
 .filter-presets {
   grid-column: 1 / -1;
@@ -2511,32 +2510,6 @@ html, body {
 
 .ai-note__btn:hover {
   background: var(--bg-hover);
-}
-
-/* 「编辑当前图层」的预览确认横幅：副本是预览，应用后才替换原图 */
-.ai-preview-banner {
-  margin-bottom: 8px;
-  padding: 8px 10px;
-  border: 1px solid rgba(47, 127, 134, 0.35);
-  border-radius: 6px;
-  background: rgba(47, 127, 134, 0.1);
-}
-
-.ai-preview-banner__title {
-  color: var(--bg-active);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.ai-preview-banner__desc {
-  margin-top: 2px;
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.ai-preview-actions {
-  gap: 8px;
 }
 
 /* AI 提示词输入区（属性面板内） */

@@ -37,6 +37,99 @@ class AIModule extends BaseModule {
     // 此模块接管属性面板（与调色模块一致）：即使有选中对象也显示 AI 控件
     this.overridePropertyPanel = true;
     this._running = false;
+    // 就地修改后的对比查看态：{ target, before, after, viewing } | null。
+    // before/after 是 { filters, angle, flipX, flipY, opacity } 快照。
+    // 确认条三按钮：应用（正式保留）/ 查看原图↔查看更改 / 撤销（回退）。
+    // 用户不做选择而进行了其它画布操作 → 视为默认同意（EditorShell 收起
+    // 提示条时 emit 'toast:action:dismiss'，这里把画面恢复到「更改后」）。
+    this._aiReview = null;
+    this._bindReviewEvents();
+  }
+
+  /**
+   * 对比查看的事件接线（模块生命周期 = 插件生命周期，处理函数对
+   * _aiReview 为空时直接返回，因此常驻订阅是安全的）。
+   */
+  _bindReviewEvents() {
+    eventBus.on('ai:review:showBefore', () => this._showReviewSnapshot('before'));
+    eventBus.on('ai:review:showAfter', () => this._showReviewSnapshot('after'));
+    eventBus.on('ai:review:apply', () => this._endReview());
+    eventBus.on('toast:action:dismiss', () => {
+      // 自动同意 / 用户点了按钮后：若画面停在「查看原图」，先恢复到
+      // 更改后——默认同意的对象是修改后的结果，不能让画布停在旧画面。
+      if (this._aiReview && this._aiReview.viewing === 'before') {
+        this._applyReviewSnapshot('after');
+      }
+      this._endReview();
+    });
+  }
+
+  /**
+   * 捕获图层的可回放快照（调色滤镜 + 旋转翻转 + 不透明度）。
+   * @param {fabric.Image} image
+   * @returns {object}
+   */
+  _captureLayerSnapshot(image) {
+    const filters = (image.get ? image.get('filters') : image.filters) || [];
+    return {
+      filters: filters.map((filter) => fabric.util.object.clone(filter)),
+      angle: image.angle || 0,
+      flipX: !!image.flipX,
+      flipY: !!image.flipY,
+      opacity: typeof image.opacity === 'number' ? image.opacity : 1
+    };
+  }
+
+  /**
+   * 把快照写回图层（用于查看原图 / 查看更改的来回切换）。
+   * @param {object} snapshot _captureLayerSnapshot 的产物
+   */
+  _applyLayerSnapshot(snapshot) {
+    const target = this._aiReview?.target;
+    if (!target || !snapshot) {
+      return;
+    }
+    target.filters = snapshot.filters.map((filter) => fabric.util.object.clone(filter));
+    target.set({
+      angle: snapshot.angle,
+      flipX: snapshot.flipX,
+      flipY: snapshot.flipY,
+      opacity: snapshot.opacity
+    });
+    target.applyFilters?.();
+    this.canvasManager.canvas?.requestRenderAll?.();
+  }
+
+  /**
+   * 查看原图 / 查看更改：按 viewing 目标切换画面并同步确认条按钮文案。
+   * @param {'before'|'after'} which
+   */
+  _showReviewSnapshot(which) {
+    if (!this._aiReview) {
+      return;
+    }
+    this._aiReview.viewing = which;
+    this._applyReviewSnapshot(which);
+
+    const isBefore = which === 'before';
+    eventBus.emit('toast:action:update', {
+      message: isBefore
+        ? '正在查看原图（修改前），点「查看更改」回到 AI 效果'
+        : '正在查看 AI 修改后的效果',
+      actions: [
+        { label: isBefore ? '查看更改' : '查看原图', event: isBefore ? 'ai:review:showAfter' : 'ai:review:showBefore', keepOpen: true },
+        { label: '应用', event: 'ai:review:apply', primary: true },
+        { label: '撤销', event: 'history:undo' }
+      ]
+    });
+  }
+
+  /**
+   * 结束对比查看（应用 / 撤销 / 其它操作默认同意后都会走到这里）。
+   */
+  _endReview() {
+    this._aiReview = null;
+    this._refreshPanel();
   }
 
   /**
@@ -404,12 +497,17 @@ class AIModule extends BaseModule {
       const background = instruction.actions.find((item) => item.type === 'background');
       const rest = instruction.actions.filter((item) => item.type !== 'background');
 
-      // 「编辑当前图层」直接在源图层上改（不复制、不留第二个图层）：
-      // 结果一步入历史，用底部确认条的「撤销」回退。
+      // 「编辑当前图层」直接在源图层上改（不复制、不留第二个图层）。
+      // 修改前先抓一张「原图快照」，配合确认条的「查看原图 / 查看更改」
+      // 做前后对比；用户不选择而继续其它操作时视为同意修改后的结果。
       let appliedTo = source;
+      let beforeSnapshot = null;
       if (background) {
         // 抠图本身就产新图层（3.1 上线）
         appliedTo = await this._runCutoutToLayer(source, background.mode);
+      } else {
+        // 必须在应用指令之前抓：before = 修改前的调色与变换状态
+        beforeSnapshot = this._captureLayerSnapshot(source);
       }
 
       let count = rest.length;
@@ -430,17 +528,26 @@ class AIModule extends BaseModule {
       const rejectedNote = instruction.rejected.length
         ? `（${instruction.rejected.length} 条超出可用能力已忽略）`
         : '';
-      const targetName = this._getObjectDisplayName(producedLayer ? appliedTo : source);
       const summary = `${describeActions(instruction.actions)}${rejectedNote}`;
 
       if (producedLayer) {
         eventBus.emit('toast:show', { message: `${summary}，已生成为新图层`, type: 'success' });
       } else {
-        // 就地修改：给一条带「撤销」的确认条，不操作即保留
+        // 就地修改：进入「应用 / 查看原图 / 撤销」对比确认，不做选择而
+        // 进行其它操作视为同意修改后的结果。
+        this._aiReview = {
+          target: source,
+          before: beforeSnapshot,
+          after: this._captureLayerSnapshot(source),
+          viewing: 'after'
+        };
         eventBus.emit('toast:action', {
-          message: `已修改「${targetName}」：${summary}`,
-          actionLabel: '撤销',
-          event: 'history:undo'
+          message: `已修改「${this._getObjectDisplayName(source)}」：${summary}`,
+          actions: [
+            { label: '查看原图', event: 'ai:review:showBefore', keepOpen: true },
+            { label: '应用', event: 'ai:review:apply', primary: true },
+            { label: '撤销', event: 'history:undo' }
+          ]
         });
       }
       eventBus.emit('ai:taskFinished', {

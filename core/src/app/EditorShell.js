@@ -179,21 +179,21 @@ class EditorShell {
   }
 
   /**
-   * 显示一条带操作按钮的提示条（如 AI 就地修改后的「撤销」）。
+   * 显示一条带操作按钮的提示条（如 AI 就地修改后的「应用 / 查看原图 / 撤销」）。
    *
-   * 与 Toast 的区别：不自动依赖动画消失（保留可点击时间），按钮点击后
-   * 通过 EventBus 触发约定的事件；超时未操作视为「保留」，自动收起。
+   * 与 Toast 的区别：不自动消失——直到用户点了某个按钮，或进行了其它画布
+   * 操作（视为默认同意，收起提示条）。按钮点击后通过 EventBus 触发约定的
+   * 事件；收起时 emit 'toast:action:dismiss' 通知发起方做状态清理。
    *
    * @param {object} payload
    * @param {string} payload.message 提示正文
-   * @param {string} [payload.actionLabel] 按钮文案
-   * @param {string} payload.event 按钮点击后 emit 的事件名
-   * @param {number} [payload.timeoutMs] 自动收起时间
+   * @param {Array<{label:string, event:string}>} [payload.actions] 按钮组
+   * @param {number} [payload.timeoutMs] 可选超时（不传则不自动收起）
    */
-  showActionToast({ message, actionLabel = '撤销', event, timeoutMs = 8000 } = {}) {
+  showActionToast({ message, actions = [], timeoutMs = 0 } = {}) {
     const port = getDomPort();
     const body = port?.getBody?.();
-    if (!body || !message || !event) {
+    if (!body || !message || actions.length === 0) {
       return;
     }
 
@@ -206,40 +206,99 @@ class EditorShell {
     }
     bar.className = 'action-toast';
 
-    const textEl = port.createElement?.('span');
-    if (textEl) {
-      textEl.className = 'action-toast__text';
-      textEl.textContent = message;
-      bar.appendChild(textEl);
-    }
-
-    const btnEl = port.createElement?.('button');
-    if (btnEl) {
-      btnEl.type = 'button';
-      btnEl.className = 'action-toast__btn';
-      btnEl.textContent = actionLabel;
-      bar.appendChild(btnEl);
-    }
+    const renderContent = (contentMessage, contentActions) => {
+      bar.innerHTML = '';
+      const textEl = port.createElement?.('span');
+      if (textEl) {
+        textEl.className = 'action-toast__text';
+        textEl.textContent = contentMessage;
+        bar.appendChild(textEl);
+      }
+      contentActions.forEach((action) => {
+        const btnEl = port.createElement?.('button');
+        if (!btnEl) {
+          return;
+        }
+        btnEl.type = 'button';
+        btnEl.className = `action-toast__btn${action.primary ? ' action-toast__btn--primary' : ''}`;
+        btnEl.textContent = action.label;
+        bar.appendChild(btnEl);
+        port.onElement?.(btnEl, 'click', () => {
+          // keepOpen 的按钮（如「查看原图 ↔ 查看更改」切换）只派发事件，
+          // 不收起提示条——它只是切换视图，不代表用户做出了最终决定。
+          if (!action.keepOpen) {
+            dismiss();
+          }
+          eventBus.emit(action.event);
+        });
+      });
+    };
 
     body.appendChild(bar);
+    renderContent(message, actions);
+
+    // 用户进行了其它画布操作（选图层/改东西/切工具/手动撤销重做）——
+    // 视为默认同意当前修改，收起提示条并通知发起方做状态清理。
+    const autoAgreeEvents = [
+      'canvas:selectionCreated',
+      'canvas:selectionUpdated',
+      'canvas:selectionCleared',
+      'canvas:objectModified',
+      'tool:changed',
+      'history:undo',
+      'history:redo'
+    ];
+    let dismissed = false;
+    const unsubs = [];
+    const detachAutoAgree = () => {
+      unsubs.forEach((off) => {
+        if (typeof off === 'function') {
+          off();
+        }
+      });
+      unsubs.length = 0;
+    };
 
     let timer = null;
     const dismiss = () => {
+      if (dismissed) {
+        return;
+      }
+      dismissed = true;
       if (timer) {
         clearTimeout(timer);
       }
+      // 先退订自动同意监听：按钮自身派发的事件（如 history:undo）不应再次触发
+      detachAutoAgree();
+      this._actionToastUpdate = null;
       if (bar.parentNode) {
         bar.parentNode.removeChild(bar);
       }
+      eventBus.emit('toast:action:dismiss');
     };
 
-    if (btnEl) {
-      port.onElement?.(btnEl, 'click', () => {
-        dismiss();
-        eventBus.emit(event);
-      });
+    if (timeoutMs > 0) {
+      timer = setTimeout(dismiss, timeoutMs);
     }
-    timer = setTimeout(dismiss, timeoutMs);
+
+    // 查看原图/查看更改切换时更新文案与按钮（不重建提示条、不打断状态）
+    autoAgreeEvents.forEach((name) => {
+      unsubs.push(eventBus.on(name, onAutoAgree));
+    });
+    unsubs.push(
+      eventBus.on('toast:action:update', (payload) => {
+        if (dismissed) {
+          return;
+        }
+        if (typeof payload?.message === 'string') {
+          message = payload.message;
+        }
+        if (Array.isArray(payload?.actions) && payload.actions.length > 0) {
+          actions = payload.actions;
+        }
+        renderContent(message, actions);
+      })
+    );
   }
 
   // ── 全局事件绑定 ──
