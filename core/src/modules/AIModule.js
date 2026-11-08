@@ -6,7 +6,6 @@ import { requestInstruction } from '../ai/OpenAiCompatProvider.js';
 import { getAiConfig, getAiConfigStatus, setAiConfigField, AI_CONFIG_LIMITS, listProviders, getActiveSelection, setActiveSelection } from '../ai/AI_CONFIG.js';
 import { parseInstruction, describeActions, applyActionsToImage } from '../ai/AI_INSTRUCTION.js';
 import { FILTER_PRESETS, setFilter, applyFilterPreset } from '../utils/filters.js';
-import { requestRender } from '../utils/helpers.js';
 import { createCanvas2D } from '../ports/CanvasPort.js';
 
 /**
@@ -92,62 +91,32 @@ class AIModule extends BaseModule {
   }
 
   /**
-   * 用一份基像素复制出全新的 element。
+   * 强制同步重绘画布。
    *
-   * 为什么必须复制：fabric 5 的 `image.applyFilters()` 对同一个 element
-   * 只有第一次可靠生效，之后再调用会静默复用上一次的滤镜结果（浏览器实测：
-   * 第一次 128→179，第二次仍 179）。所以每次「应用滤镜」都必须配一个新的
-   * element 当基座，否则用户看到的画面根本不会更新。
-   *
-   * @param {object} base 基像素（原 element 或之前的烘焙结果）
-   * @returns {object|null} 新的 canvas element
+   * 为什么不用 requestRenderAll：它是「下一帧再画」的异步请求
+   * （requestAnimationFrame）。在 uTools/ZTools 的插件窗口里，rAF 会被宿主
+   * 节流，AI 改完滤镜后这一帧迟迟不画，用户看到的就是「没有任何变化」；
+   * 直到下一次交互（点查看原图/查看更改）才顺带刷出来。
+   * 浏览器实测：同一张图连续应用滤镜，同步 renderAll 每次都正确刷新像素
+   * （128→179→255），而异步 requestRenderAll 的第二次不刷新。
    */
-  _cloneBaseElement(base) {
-    if (!base) {
-      return null;
+  _renderNow() {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) {
+      return;
     }
-    const width = base.naturalWidth || base.width || 0;
-    const height = base.naturalHeight || base.height || 0;
-    if (!width || !height) {
-      return null;
-    }
-    const surface = createCanvas2D(width, height);
-    if (!surface) {
-      return null;
-    }
-    surface.ctx.drawImage(base, 0, 0);
-    return surface.canvas;
-  }
-
-  /**
-   * 把图层当前视觉状态烘焙成新的干净基座（filters 清空）。
-   *
-   * AI 应用指令前调用：让接下来的 applyFilters 是这块基像素的「第一次」，
-   * 从而保证效果一定可见。旧滤镜的效果已经画进像素里，清空 filters 不会
-   * 让画面变化。
-   *
-   * @param {fabric.Image} image
-   * @returns {object|null} 新的基座 element
-   */
-  _bakeLayerElement(image) {
-    const fresh = this._cloneBaseElement(image.getElement ? image.getElement() : image._element);
-    if (!fresh) {
-      return null;
-    }
-    if (typeof image.setElement === 'function') {
-      image.setElement(fresh);
+    if (typeof canvas.renderAll === 'function') {
+      canvas.renderAll();
     } else {
-      image._element = fresh;
+      canvas.requestRenderAll?.();
     }
-    image.filters = [];
-    image.dirty = true;
-    return fresh;
   }
 
   /**
    * 把快照写回图层（用于查看原图 / 查看更改的来回切换）。
-   * 幂等：每次都从快照的基像素复制出新 element 再应用滤镜——既避免
-   * 「同一 element 二次 applyFilters 失效」，也避免滤镜层层叠加。
+   *
+   * 直接复用快照记下的 element 与滤镜：fabric 每次 applyFilters 都从
+   * `_originalElement` 重新计算，不会叠加；配合同步重绘即时可见。
    * @param {object} snapshot _captureLayerSnapshot 的产物
    */
   _applyLayerSnapshot(snapshot) {
@@ -155,12 +124,11 @@ class AIModule extends BaseModule {
     if (!target || !snapshot) {
       return;
     }
-    const fresh = this._cloneBaseElement(snapshot.base);
-    if (fresh) {
+    if (snapshot.base) {
       if (typeof target.setElement === 'function') {
-        target.setElement(fresh);
+        target.setElement(snapshot.base);
       } else {
-        target._element = fresh;
+        target._element = snapshot.base;
       }
     }
     target.filters = snapshot.filters.slice();
@@ -170,10 +138,9 @@ class AIModule extends BaseModule {
       flipY: snapshot.flipY,
       opacity: snapshot.opacity
     });
-    // 与指令应用同一口径：失效渲染缓存，保证回放立刻可见
     target.dirty = true;
     target.applyFilters?.();
-    this.canvasManager.canvas?.requestRenderAll?.();
+    this._renderNow();
   }
 
   /**
@@ -579,20 +546,12 @@ class AIModule extends BaseModule {
       // 做前后对比；用户不选择而继续其它操作时视为同意修改后的结果。
       let appliedTo = source;
       let beforeSnapshot = null;
-      let bakedBase = null;
       if (background) {
         // 抠图本身就产新图层（3.1 上线）
         appliedTo = await this._runCutoutToLayer(source, background.mode);
       } else {
         // 必须在应用指令之前抓：before = 修改前的调色与变换状态
         beforeSnapshot = this._captureLayerSnapshot(source);
-        // before 是「视觉快照」：它的 base 像素里已经烘焙了用户此前的调色效果
-        // （fabric 应用滤镜后会替换 element），filters 再留一份就会双重叠加。
-        beforeSnapshot.filters = [];
-        // 烘焙一份干净基座：保证下面 setFilter 触发的 applyFilters 是这块
-        // 像素的「第一次」。fabric 对同一 element 的第二次 applyFilters
-        // 会静默失效——用户之前若已调过色，AI 效果就会完全看不到。
-        bakedBase = this._bakeLayerElement(source);
       }
 
       let count = rest.length;
@@ -602,11 +561,13 @@ class AIModule extends BaseModule {
           applyFilterPreset,
           // 模型可能给中文名（label）也可能给内部 id（preset），两者都接受
           findPreset: (name) => FILTER_PRESETS.find((preset) => preset.label === name || preset.preset === name) || null,
-          requestRender: () => requestRender(this.canvasManager.canvas)
+          // 同步重绘：异步 requestRenderAll 在插件窗口里会被 rAF 节流，
+          // 导致用户「看不到效果」
+          requestRender: () => this._renderNow()
         });
       }
 
-      this.canvasManager.canvas?.requestRenderAll?.();
+      this._renderNow();
       // 带操作名入历史：面板里显示「AI 修图」而不是默认的「编辑」
       this.history?.saveState?.('AI 修图');
 
@@ -622,9 +583,9 @@ class AIModule extends BaseModule {
         // 就地修改：进入「应用 / 查看原图 / 撤销」对比确认，不做选择而
         // 进行其它操作视为同意修改后的结果。
         const afterSnapshot = this._captureLayerSnapshot(source);
-        // after 的基座是「烘焙后的干净基像素」：回放时从它复制新元素再
-        // 套滤镜，既幂等又不会把已烘焙的像素二次叠加滤镜。
-        afterSnapshot.base = bakedBase || beforeSnapshot.base;
+        // 两份快照共用同一基像素：回放时都用它 + 各自的滤镜列表重新计算，
+        // fabric 每次 applyFilters 都从 _originalElement 出发，不会叠加。
+        afterSnapshot.base = beforeSnapshot.base;
         this._aiReview = {
           target: source,
           before: beforeSnapshot,
