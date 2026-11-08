@@ -115,6 +115,8 @@ class AIModule extends BaseModule {
       flipY: snapshot.flipY,
       opacity: snapshot.opacity
     });
+    // 与指令应用同一口径：失效渲染缓存，保证回放立刻可见
+    target.dirty = true;
     target.applyFilters?.();
     this.canvasManager.canvas?.requestRenderAll?.();
   }

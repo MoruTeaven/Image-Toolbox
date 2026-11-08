@@ -245,6 +245,10 @@ export function applyActionsToImage(image, actions, helpers) {
     // background 由调用方单独处理（需要走推理链，不在此同步应用）
   });
   if (applied > 0) {
+    // 必须显式置 dirty：fabric.Image 默认开启 objectCaching，缓存的是上一次
+    // 渲染结果；只改 filters 而不失效缓存，画面上看不到任何变化（调色模块
+    // 也是靠 _markImagesChanged 置 dirty 才能即时生效）。
+    image.dirty = true;
     image.setCoords?.();
     helpers.requestRender?.();
   }
