@@ -104,6 +104,9 @@ class HistoryManager {
     // 最近一次「状态未变化」的操作名：多数工具在动手前 saveState，
     // 此时快照还是上一步的结果，标签要留到下一次真正入栈时使用。
     this._pendingLabel = null;
+    // 跳转/撤销/重做后指向时间线里的目标条目：期间的画布事件（flush/saveState）
+    // 是恢复动作的回声，不应产生新记录；用户做出新操作后即恢复记账。
+    this._navigationEntryId = null;
   }
 
   /**
@@ -132,6 +135,7 @@ class HistoryManager {
     this._timeline = [];
     this._currentId = null;
     this._pendingLabel = null;
+    this._navigationEntryId = null;
     this._notify();
     return true;
   }
@@ -166,12 +170,13 @@ class HistoryManager {
     }
 
     // ── 时间线：记录「上一步操作完成后的画布状态」 ──
-    const lastRecord = this._timeline[this._timeline.length - 1];
-    const recordChanged = !(lastRecord?.json && this._isSameSnapshot(lastRecord.json, json));
-
-    if (recordChanged) {
-      const entryLabel = this._pendingLabel || label;
-      this._pushTimelineEntry(entryLabel, json, lastRecord?.json || null);
+    // 刚做完跳转/撤销时，画布状态本就来自时间线里的某条记录，不重复入账；
+    // 直到用户做出新的操作（画布发生变化）才恢复记账。
+    let recordChanged = false;
+    if (this._consumeNavigation(json)) {
+      this._currentId = this._navigationEntryId;
+    } else {
+      recordChanged = this._appendTimelineIfChanged(json, label);
     }
 
     // 本次操作名留给「操作完成」时使用；若上一步没有产生画布变化（点击空白等），
@@ -183,6 +188,25 @@ class HistoryManager {
       this._schedulePersist();
     }
     return undoChanged || recordChanged;
+  }
+
+  /**
+   * 消费「跳转标记」：跳转/撤销后画布状态来自时间线，期间的 flush/saveState
+   * 不应把它当成新操作再次入账。
+   * @param {object} json 当前画布快照
+   * @returns {boolean} true = 当前状态就是跳转目标（消费了标记，跳过记账）
+   */
+  _consumeNavigation(json) {
+    if (!this._navigationEntryId) return false;
+
+    const navEntry = this._timeline.find((entry) => entry.id === this._navigationEntryId);
+    if (navEntry?.json && this._isSameSnapshot(navEntry.json, json)) {
+      return true;
+    }
+
+    // 画布已经变化：用户开始新的操作，恢复记账
+    this._navigationEntryId = null;
+    return false;
   }
 
   /**
@@ -206,6 +230,28 @@ class HistoryManager {
     const json = this._cm.toJSON();
     if (!json) return false;
 
+    // 跳转/撤销后的回声：画布状态本就来自时间线，不产生新记录
+    if (this._navigationEntryId) {
+      const navEntry = this._timeline.find((entry) => entry.id === this._navigationEntryId);
+      const navSame = !!(navEntry?.json && this._isSameSnapshot(navEntry.json, json));
+      console.warn('[HistoryManager] flush nav check id=', this._navigationEntryId, 'same=', navSame);
+      if (!navSame && navEntry?.json) {
+        const strip = (value) => JSON.stringify(value, (key, val) => (HISTORY_IGNORED_KEYS.has(key) ? undefined : val));
+        const a = strip(navEntry.json);
+        const b = strip(json);
+        let i = 0;
+        while (i < Math.min(a.length, b.length) && a[i] === b[i]) i++;
+        console.warn('[HistoryManager] nav diff at', i, 'A=', a.slice(Math.max(0, i - 60), i + 80), 'B=', b.slice(Math.max(0, i - 60), i + 80));
+      }
+      if (navSame) {
+        this._currentId = this._navigationEntryId;
+        this._pendingLabel = null;
+        this._notify();
+        return false;
+      }
+      this._navigationEntryId = null;
+    }
+
     const lastRecord = this._timeline[this._timeline.length - 1];
     if (lastRecord?.json && this._isSameSnapshot(lastRecord.json, json)) {
       // 没有实际变化（点击空白、切工具等），不制造空记录
@@ -215,9 +261,27 @@ class HistoryManager {
     const entryLabel = this._pendingLabel || label || '编辑';
     this._pushTimelineEntry(entryLabel, json, lastRecord?.json || null);
     this._pendingLabel = null;
+    this._navigationEntryId = null;
 
     this._notify();
     this._schedulePersist();
+    return true;
+  }
+
+  /**
+   * 时间线记账：当前状态与最后一条不同时追加一条记录。
+   * @param {object} json
+   * @param {string} label
+   * @returns {boolean} 是否新增了记录
+   */
+  _appendTimelineIfChanged(json, label) {
+    const lastRecord = this._timeline[this._timeline.length - 1];
+    if (lastRecord?.json && this._isSameSnapshot(lastRecord.json, json)) {
+      return false;
+    }
+
+    const entryLabel = this._pendingLabel || label;
+    this._pushTimelineEntry(entryLabel, json, lastRecord?.json || null);
     return true;
   }
 
@@ -279,6 +343,8 @@ class HistoryManager {
       console.error('[HistoryManager] undo 失败:', err);
     } finally {
       this._isRestoring = false;
+      this._navigationEntryId = this._currentId;
+      this._pendingLabel = null;
       this._notify();
     }
   }
@@ -307,6 +373,8 @@ class HistoryManager {
       console.error('[HistoryManager] redo 失败:', err);
     } finally {
       this._isRestoring = false;
+      this._navigationEntryId = this._currentId;
+      this._pendingLabel = null;
       this._notify();
     }
   }
@@ -351,6 +419,8 @@ class HistoryManager {
       return false;
     } finally {
       this._isRestoring = false;
+      this._navigationEntryId = this._currentId;
+      this._pendingLabel = null;
       this._notify();
     }
   }
@@ -422,6 +492,7 @@ class HistoryManager {
     this._timeline = [];
     this._currentId = null;
     this._pendingLabel = null;
+    this._navigationEntryId = null;
     this._notify();
   }
 
@@ -436,6 +507,7 @@ class HistoryManager {
     this._timeline = [];
     this._currentId = null;
     this._pendingLabel = null;
+    this._navigationEntryId = null;
     this._archived = [];
 
     const key = this._fileKey;
