@@ -542,7 +542,8 @@ class AIModule extends BaseModule {
       }
 
       this.canvasManager.canvas?.requestRenderAll?.();
-      this.history?.saveState?.();
+      // 带操作名入历史：面板里显示「AI 修图」而不是默认的「编辑」
+      this.history?.saveState?.('AI 修图');
 
       const producedLayer = appliedTo !== source;
       const rejectedNote = instruction.rejected.length
