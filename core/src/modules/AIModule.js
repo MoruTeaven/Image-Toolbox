@@ -58,7 +58,7 @@ class AIModule extends BaseModule {
       // 自动同意 / 用户点了按钮后：若画面停在「查看原图」，先恢复到
       // 更改后——默认同意的对象是修改后的结果，不能让画布停在旧画面。
       if (this._aiReview && this._aiReview.viewing === 'before') {
-        this._applyReviewSnapshot('after');
+        this._applyLayerSnapshot('after');
       }
       this._endReview();
     });
@@ -109,7 +109,7 @@ class AIModule extends BaseModule {
       return;
     }
     this._aiReview.viewing = which;
-    this._applyReviewSnapshot(which);
+    this._applyLayerSnapshot(which);
 
     const isBefore = which === 'before';
     eventBus.emit('toast:action:update', {
