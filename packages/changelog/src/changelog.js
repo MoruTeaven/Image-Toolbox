@@ -50,7 +50,7 @@
  * 修改此处即代表发版意图，其余引用点由构建期校验强制同步。
  * @type {string}
  */
-export const APP_VERSION = '3.0.0-dev';
+export const APP_VERSION = '3.0.0';
 
 /**
  * 版本记录条目结构
@@ -68,23 +68,22 @@ export const APP_VERSION = '3.0.0-dev';
  */
 export const CHANGELOG = [
   {
-    version: '3.0.0-dev',
-    date: '2026-11-01',
+    version: '3.0.0',
+    date: '2026-11-08',
     changes: {
       added: [
         { text: '新增「AI 配置」页，可接入多个 OpenAI 兼容服务商并自由切换模型', platforms: null },
         { text: '新增 AI 指令编辑，用一句话描述想要的效果即可自动调色', platforms: null },
         { text: '新增 PSD (Photoshop) 工程文件导入/导出，支持保留图层', platforms: null },
+        { text: '新增历史记录面板，可查看当前图片每一步的参数变更并回到该步骤', platforms: null },
         { text: '调色新增中间调参数，可单独提亮或压暗画面中间层次', platforms: null },
-        { text: '调色新增通透、浓郁、褪色、日落、青调、暗调、高反差、柔雾滤镜预设', platforms: null },
-        { text: '滤镜预设新增分类（基础/复古/黑白），可按类别切换', platforms: null },
-        { text: '新增 Clarendon、Gingham、Valencia、1977、Inkwell 等 Instagram 风格滤镜预设', platforms: null },
-        { text: '调色新增暖阳、清冷、朦胧、Lomo、Sutro、Nashville、银盐、碳素滤镜预设', platforms: null },
         { text: '调色新增色温参数，可整体调暖或调冷画面', platforms: null },
-        { text: '滤镜预设新增底片效果', platforms: null },
         { text: '调色新增棕褐与灰度强度，可自行控制复古、黑白效果的程度', platforms: null },
-        { text: '新增侧栏底部撤销/重做布局设置，可在紧凑与完整两种样式间切换', platforms: null },
-        { text: '新增历史记录面板，可查看当前图片每一步的参数变更并回到该步骤', platforms: null }
+        { text: '新增基础、复古、黑白滤镜预设分类，并按类别切换', platforms: null },
+        { text: '新增通透、浓郁、褪色、日落、青调、暗调、高反差、柔雾滤镜预设', platforms: null },
+        { text: '新增 Clarendon、Gingham、Valencia、1977、Inkwell 等 Instagram 风格滤镜预设', platforms: null },
+        { text: '新增暖阳、清冷、朦胧、Lomo、Sutro、Nashville、银盐、碳素滤镜预设', platforms: null },
+        { text: '新增底片滤镜预设', platforms: null }
       ],
       fixed: [
         { text: '修复画布缩放或平移后，图层对齐与分布位置偏移的问题', platforms: null },
@@ -93,17 +92,17 @@ export const CHANGELOG = [
         { text: '修复连续裁剪或切换工具后图层被裁掉的问题', platforms: null },
         { text: '修复保存图片或 ORA 工程文件时，默认保存位置可能被带出常用目录的问题', platforms: null },
         { text: '修复 uTools 启动时控制台反复输出报错信息的问题', platforms: null },
-        { text: '修复 AI 配置未填服务地址时，属性面板只提示「尚未配置服务商」的问题', platforms: null },
+        { text: '修复 AI 配置未填服务地址时提示不准确的问题', platforms: null },
         { text: '修复局域网或本机 AI 服务地址无法保存使用的问题', platforms: null },
         { text: '修复「使用中」停在没有模型的服务商上，导致 AI 面板一直提示未配置的问题', platforms: null },
         { text: '修复画布只有一张图片时，AI 新建图层仍要求先手动选中图层的问题', platforms: null }
       ],
       improved: [
         { text: '暖色、鲜艳等滤镜预设改用自然饱和度，颜色更自然', platforms: null },
-        { text: '设置页重新分类：设置项按外观、画板布局、侧栏分组，改为紧凑的行式布局', platforms: null },
+        { text: '设置页重新分类，按外观、画板布局、侧栏分组并改为紧凑的行式布局', platforms: null },
         { text: '优化 AI 配置的缺失项提示，缺什么会直接说明，并可从属性面板打开配置', platforms: null },
         { text: '优化 AI 服务地址相关提示的表述，直接说明该怎么改', platforms: null },
-        { text: '调整「编辑当前图层」：AI 效果先生成预览，确认后才替换原图', platforms: null }
+        { text: '优化 AI「编辑当前图层」：效果先生成预览，确认后才替换原图', platforms: null }
       ],
       adjusted: [],
       removed: []
