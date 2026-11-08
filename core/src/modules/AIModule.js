@@ -79,7 +79,11 @@ class AIModule extends BaseModule {
     const filters = (image.get ? image.get('filters') : image.filters) || [];
     return {
       base: image.getElement ? image.getElement() : image._element,
-      filters: filters.map((filter) => fabric.util.object.clone(filter)),
+      // 只浅拷贝数组、保留 filter 实例：fabric 的滤镜实例带 toObject()，
+      // 用 object.clone 会克隆成普通对象，回放后 canvas.toJSON() 序列化
+      // 滤镜会失败（历史记录因此整条丢失）。滤镜实例只作为配置载体被读取，
+      // 数组浅拷贝即可隔离「谁持有这份列表」。
+      filters: filters.slice(),
       angle: image.angle || 0,
       flipX: !!image.flipX,
       flipY: !!image.flipY,
@@ -104,7 +108,7 @@ class AIModule extends BaseModule {
         target._element = snapshot.base;
       }
     }
-    target.filters = snapshot.filters.map((filter) => fabric.util.object.clone(filter));
+    target.filters = snapshot.filters.slice();
     target.set({
       angle: snapshot.angle,
       flipX: snapshot.flipX,
