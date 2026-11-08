@@ -53,6 +53,13 @@ const HISTORY_IGNORED_KEYS = new Set([
   'transparentCorners',
   'borderColor',
   'perPixelTargetFind',
+  // 图层元数据：恢复（fromJSON）后 syncLayers 会按当前顺序重新自动命名，
+  // 这些字段与画面无关，不能当成「变化」。
+  '_layerName',
+  '_layerNameAuto',
+  '_layerBaseName',
+  '_layerLocked',
+  '_layerKind',
 ]);
 
 /**
@@ -231,25 +238,11 @@ class HistoryManager {
     if (!json) return false;
 
     // 跳转/撤销后的回声：画布状态本就来自时间线，不产生新记录
-    if (this._navigationEntryId) {
-      const navEntry = this._timeline.find((entry) => entry.id === this._navigationEntryId);
-      const navSame = !!(navEntry?.json && this._isSameSnapshot(navEntry.json, json));
-      console.warn('[HistoryManager] flush nav check id=', this._navigationEntryId, 'same=', navSame);
-      if (!navSame && navEntry?.json) {
-        const strip = (value) => JSON.stringify(value, (key, val) => (HISTORY_IGNORED_KEYS.has(key) ? undefined : val));
-        const a = strip(navEntry.json);
-        const b = strip(json);
-        let i = 0;
-        while (i < Math.min(a.length, b.length) && a[i] === b[i]) i++;
-        console.warn('[HistoryManager] nav diff at', i, 'A=', a.slice(Math.max(0, i - 60), i + 80), 'B=', b.slice(Math.max(0, i - 60), i + 80));
-      }
-      if (navSame) {
-        this._currentId = this._navigationEntryId;
-        this._pendingLabel = null;
-        this._notify();
-        return false;
-      }
-      this._navigationEntryId = null;
+    if (this._consumeNavigation(json)) {
+      this._currentId = this._navigationEntryId;
+      this._pendingLabel = null;
+      this._notify();
+      return false;
     }
 
     const lastRecord = this._timeline[this._timeline.length - 1];
@@ -709,7 +702,10 @@ class HistoryManager {
     // 交互属性（selectable / evented / 锁定 / 控制点样式等）会随工具切换变化，
     // 但它们不影响画面，也不该产生「历史记录」或「参数变更」；比较时剔除，
     // 否则每次切工具都会多出一条空记录。
-    return JSON.stringify(json, (key, value) => {
+    //
+    // 对象键先排序再序列化：恢复（fromJSON）后同一对象的属性插入顺序可能不同，
+    // 属性顺序不影响画面，不应被当成「变化」。
+    return JSON.stringify(sortSnapshotKeys(json), (key, value) => {
       if (HISTORY_IGNORED_KEYS.has(key)) return undefined;
 
       if (key === 'src' && typeof value === 'string' && value.length > 64) {
@@ -722,6 +718,27 @@ class HistoryManager {
       return value;
     });
   }
+}
+
+/**
+ * 递归把对象的键按字典序重排（数组顺序保持不变）。
+ * Fabric 恢复（fromJSON）后同一对象的属性插入顺序可能改变，
+ * 序列化字符串随之不同，但属性顺序不影响画面，不能当成「变化」。
+ * @param {*} value
+ * @returns {*}
+ */
+function sortSnapshotKeys(value) {
+  if (Array.isArray(value)) return value.map(sortSnapshotKeys);
+
+  if (value && typeof value === 'object') {
+    const sorted = {};
+    for (const key of Object.keys(value).sort()) {
+      sorted[key] = sortSnapshotKeys(value[key]);
+    }
+    return sorted;
+  }
+
+  return value;
 }
 
 /**

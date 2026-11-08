@@ -80,14 +80,13 @@ const NUMBER_PROPS = [
 /** 布尔属性 */
 const BOOLEAN_PROPS = [
   ['visible', '可见'],
-  ['_layerLocked', '锁定'],
   ['linethrough', '删除线'],
   ['underline', '下划线'],
   ['flipX', '水平翻转'],
   ['flipY', '垂直翻转'],
 ];
 
-/** 文本 / 颜色类属性 */
+/** 文本 / 颜色类属性（_layerName 属图层元数据，恢复后会被自动命名重写，不参与对比） */
 const TEXT_PROPS = [
   ['fill', '颜色'],
   ['stroke', '描边颜色'],
@@ -96,7 +95,6 @@ const TEXT_PROPS = [
   ['fontWeight', '字重'],
   ['fontStyle', '字形'],
   ['textAlign', '对齐'],
-  ['_layerName', '图层名称'],
 ];
 
 /** 打码参数 */
