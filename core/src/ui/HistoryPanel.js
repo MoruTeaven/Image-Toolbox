@@ -60,7 +60,7 @@ class HistoryPanel {
             <span>暂无历史记录</span>
           </div>
         </div>
-        <div class="history-panel__footer" id="history-footer">仅跟随当前文件 · 点击查看参数变更</div>
+        <div class="history-panel__footer" id="history-footer">仅记录当前图片的编辑 · 点击查看参数变更</div>
       </div>
     `;
   }

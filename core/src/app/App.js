@@ -38,7 +38,6 @@ import AccountPage, {
   TOOLBAR_COLLAPSED
 } from '../ui/AccountPage.js';
 import { initTheme } from '../utils/theme.js';
-import { buildFileKey } from '../utils/fileKey.js';
 
 import EditorShell from './EditorShell.js';
 
@@ -271,8 +270,7 @@ class App {
       eventBus.on('ora:import', async (file) => {
         if (file instanceof Blob) {
           this.shell.setEditorVisible(true);
-          // 历史记录跟随文件：先切到该文件，再清空本次会话时间线（同类文件重新导入）
-          this.historyManager?.setFileKey?.(buildFileKey(file));
+          // 历史记录只属于当前图片：导入新工程时清零
           this.historyManager?.reset?.();
           await importORA(file, this.canvasManager, this.layerManager, this.historyManager);
           this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
@@ -293,8 +291,7 @@ class App {
       eventBus.on('psd:import', async (file) => {
         if (file instanceof Blob) {
           this.shell.setEditorVisible(true);
-          // 历史记录跟随文件：先切到该文件，再清空本次会话时间线（同类文件重新导入）
-          this.historyManager?.setFileKey?.(buildFileKey(file));
+          // 历史记录只属于当前图片：导入新工程时清零
           this.historyManager?.reset?.();
           await importPSD(file, this.canvasManager, this.layerManager, this.historyManager);
           this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
@@ -574,7 +571,6 @@ class App {
     ].forEach(component => component?.destroy?.());
 
     this.toolManager?.destroy?.();
-    this.historyManager?.destroy?.();
     this.canvasManager?.destroy?.();
   }
 
@@ -611,8 +607,8 @@ class App {
 
       this.layerManager.syncLayers();
 
-      // 历史记录跟随当前文件：换文件时清空并载入该文件自己的历史存档
-      this.historyManager.setFileKey(buildFileKey(source));
+      // 历史记录只属于当前图片：打开新图片时全部清零，不展示之前的历史
+      this.historyManager.reset();
       this.historyManager.saveState('打开图片');
 
       this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
@@ -649,8 +645,6 @@ class App {
       eventBus.emit('toast:show', { message: '文件为空', type: 'error' });
       return;
     }
-    // 给 Blob 补上文件路径：历史记录据此与工程文件绑定
-    blob.name = filePath;
     this.shell.setEditorVisible(true);
     eventBus.emit(`${kind}:import`, blob);
   }
