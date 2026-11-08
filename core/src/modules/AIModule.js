@@ -58,20 +58,27 @@ class AIModule extends BaseModule {
       // 自动同意 / 用户点了按钮后：若画面停在「查看原图」，先恢复到
       // 更改后——默认同意的对象是修改后的结果，不能让画布停在旧画面。
       if (this._aiReview && this._aiReview.viewing === 'before') {
-        this._applyLayerSnapshot('after');
+        this._applyLayerSnapshot(this._aiReview.after);
       }
       this._endReview();
     });
   }
 
   /**
-   * 捕获图层的可回放快照（调色滤镜 + 旋转翻转 + 不透明度）。
+   * 捕获图层的可回放快照。
+   *
+   * 关键点：同时记下 element 引用（base）。fabric 应用滤镜时会把结果写回
+   * 自己的 element（破坏性），因此回放不能只换 filters —— 必须先把 element
+   * 恢复成同一份「基像素」再重新应用滤镜，否则反复切换会层层叠加滤镜，
+   * 画面越切越亮/越糊。
+   *
    * @param {fabric.Image} image
    * @returns {object}
    */
   _captureLayerSnapshot(image) {
     const filters = (image.get ? image.get('filters') : image.filters) || [];
     return {
+      base: image.getElement ? image.getElement() : image._element,
       filters: filters.map((filter) => fabric.util.object.clone(filter)),
       angle: image.angle || 0,
       flipX: !!image.flipX,
@@ -82,12 +89,20 @@ class AIModule extends BaseModule {
 
   /**
    * 把快照写回图层（用于查看原图 / 查看更改的来回切换）。
+   * 幂等：每次都从快照记下的基像素重新应用滤镜，不做增量叠加。
    * @param {object} snapshot _captureLayerSnapshot 的产物
    */
   _applyLayerSnapshot(snapshot) {
     const target = this._aiReview?.target;
     if (!target || !snapshot) {
       return;
+    }
+    if (snapshot.base) {
+      if (typeof target.setElement === 'function') {
+        target.setElement(snapshot.base);
+      } else {
+        target._element = snapshot.base;
+      }
     }
     target.filters = snapshot.filters.map((filter) => fabric.util.object.clone(filter));
     target.set({
@@ -109,7 +124,8 @@ class AIModule extends BaseModule {
       return;
     }
     this._aiReview.viewing = which;
-    this._applyLayerSnapshot(which);
+    // 快照对象由 viewing 键取出：before / after 两份状态各自回放
+    this._applyLayerSnapshot(this._aiReview[which]);
 
     const isBefore = which === 'before';
     eventBus.emit('toast:action:update', {
@@ -535,10 +551,14 @@ class AIModule extends BaseModule {
       } else {
         // 就地修改：进入「应用 / 查看原图 / 撤销」对比确认，不做选择而
         // 进行其它操作视为同意修改后的结果。
+        const afterSnapshot = this._captureLayerSnapshot(source);
+        // 两份快照必须共用同一基像素：应用滤镜后 fabric 会把结果烘焙进
+        // element，若 after 记下的是烘焙后的元素，来回切换就会层层叠加滤镜。
+        afterSnapshot.base = beforeSnapshot.base;
         this._aiReview = {
           target: source,
           before: beforeSnapshot,
-          after: this._captureLayerSnapshot(source),
+          after: afterSnapshot,
           viewing: 'after'
         };
         eventBus.emit('toast:action', {
