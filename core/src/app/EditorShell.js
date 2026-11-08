@@ -237,20 +237,15 @@ class EditorShell {
     body.appendChild(bar);
     renderContent(message, actions);
 
-    // 用户进行了其它画布操作（选图层/改东西/切工具/手动撤销重做）——
-    // 视为默认同意当前修改，收起提示条并通知发起方做状态清理。
-    const autoAgreeEvents = [
-      'canvas:selectionCreated',
-      'canvas:selectionUpdated',
-      'canvas:selectionCleared',
-      'canvas:objectModified',
-      'tool:changed',
-      'history:undo',
-      'history:redo'
-    ];
-    let dismissed = false;
+    // 「用户进行了其它操作」的判定信号：确认条以外的任何手势（点击画布/
+    // 图层面板/工具栏、键盘快捷键）。刻意不用 canvas:objectModified 这类
+    // 画布事件——AI 应用指令自身会触发异步的滤镜重算等事件回声，把监听
+    // 挂在那里会在确认条出现的瞬间就被误触发，导致查看原图状态被提前清空。
+    // pointerdown 走捕获阶段：先于画布交互处理，保证查看原图态下点其它
+    // 位置时先把画面恢复到更改后（默认同意的对象是修改后的结果）。
     const unsubs = [];
-    const detachAutoAgree = () => {
+    let dismissed = false;
+    const detachGesture = () => {
       unsubs.forEach((off) => {
         if (typeof off === 'function') {
           off();
@@ -268,8 +263,8 @@ class EditorShell {
       if (timer) {
         clearTimeout(timer);
       }
-      // 先退订自动同意监听：按钮自身派发的事件（如 history:undo）不应再次触发
-      detachAutoAgree();
+      detachGesture();
+      detachPointer();
       this._actionToastUpdate = null;
       if (bar.parentNode) {
         bar.parentNode.removeChild(bar);
@@ -277,14 +272,28 @@ class EditorShell {
       eventBus.emit('toast:action:dismiss');
     };
 
+    // 确认条以内的点击不算其它操作（查看原图/查看更改切换、应用、撤销）
+    const onOutsidePointerDown = (e) => {
+      if (e.target?.closest?.('.action-toast')) {
+        return;
+      }
+      dismiss();
+    };
+    port.onElement?.(body, 'pointerdown', onOutsidePointerDown, true);
+    const detachPointer = () => {
+      port.offElement?.(body, 'pointerdown', onOutsidePointerDown);
+    };
+
+    // 无手势的键盘路径：切工具、Ctrl+Z / Ctrl+Y（手势路径的补充）
+    ['tool:changed', 'history:undo', 'history:redo'].forEach((name) => {
+      unsubs.push(eventBus.on(name, dismiss));
+    });
+
     if (timeoutMs > 0) {
       timer = setTimeout(dismiss, timeoutMs);
     }
 
     // 查看原图/查看更改切换时更新文案与按钮（不重建提示条、不打断状态）
-    autoAgreeEvents.forEach((name) => {
-      unsubs.push(eventBus.on(name, onAutoAgree));
-    });
     unsubs.push(
       eventBus.on('toast:action:update', (payload) => {
         if (dismissed) {
