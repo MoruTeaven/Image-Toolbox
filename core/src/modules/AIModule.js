@@ -23,23 +23,13 @@ const OUTPUT_BACKGROUND = {
 };
 
 /**
- * 应用方式映射：面板取值 → 行为。
- *   new-layer  先把当前图层复制一份（独立像素与滤镜副本），指令只作用于副本，
- *              原始图层保持不动 —— 默认值，与「AI 结果一律新图层」的既有纪律一致；
- *   in-place   直接修改当前选中的图层，不改动其它图层。
- */
-const APPLY_MODES = {
-  newLayer: 'new-layer',
-  inPlace: 'in-place'
-};
-
-/**
  * AI 修图模块 — 左侧工具栏「AI」工具
  *
  * 面板由 AI_PROVIDERS 注册表派生：能力清单、描述、执行路由全部来自表，
  * 新增 AI 能力只改注册表与对应 Provider，不改本模块结构。
- * 结果一律生成为新图片图层（继承源图层变换），经 HistoryManager 快照
- * 纳入撤销链路；源图层保持不动，由用户决定去留。
+ * AI 指令编辑直接作用于当前选中的图层（一步历史快照，可撤销），不再有
+ * 「新建图层/编辑当前图层」两种应用方式；「生成一张全新的图」属于生图
+ * 能力，由 AI_PROVIDERS 阶段开关决定是否上线。
  */
 class AIModule extends BaseModule {
   constructor(canvasManager, historyManager, defaultOptions = {}, host = null) {
@@ -214,30 +204,13 @@ class AIModule extends BaseModule {
     // 提示词预设只出现在顶部预设栏（getOptionsBarHTML）。属性面板
     // 不再重复渲染同一批 chips —— 同一批快捷入口放两处，点哪一处都要
     // 重新决策，且会挤占文本输入区的垂直空间。
-    // 应用方式用下拉、放在提示词框下方（紧挨执行按钮）：选项文案自带
-    // 「应用到…」语义，不需要额外的字段标签。
-    const applyMode = this._getApplyMode(capability.id);
-    const applyModeOptions = [
-      { value: APPLY_MODES.newLayer, label: '应用到新图层' },
-      { value: APPLY_MODES.inPlace, label: '应用到当前图层' }
-    ].map((item) => (
-      `<option value="${item.value}" ${item.value === applyMode ? 'selected' : ''}>${item.label}</option>`
-    )).join('');
-
-    // 选中状态行：有目标图层时显示图层名；「编辑当前图层」但未选中时
-    // 抬头提示要选图层；「新建图层」模式不显示该提示（副本模式对用户的
-    // 心智是「以选中的图为源」，不该再催他去选一个已有图层）。
+    // 选中状态行：未选中图层时提示要先选（就地编辑必须有明确的源图层）。
     const targetLine = target
-      ? `<div class="ai-note">源图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>`
-      : (applyMode === APPLY_MODES.inPlace
-        ? '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>'
-        : '<div class="ai-note ai-note--muted">未选中图层：画布上只有一张图片时会自动作为源，多张图片请先选中一张。</div>');
+      ? `<div class="ai-note">当前图层：${this._escapeHtml(this._getObjectDisplayName(target))}</div>`
+      : '<div class="property-empty">选中图片图层后使用（背景图也可以）</div>';
 
-    // 执行按钮文案随应用方式变化：新建图层模式下「编辑当前图层」是错的
-    // 描述（原图层保持不变），会让人以为点下去会改掉原图。
-    const runLabel = this._running
-      ? 'AI 处理中…'
-      : (applyMode === APPLY_MODES.inPlace ? '让 AI 编辑当前图层' : '让 AI 生成新图层');
+    // 执行按钮
+    const runLabel = this._running ? 'AI 处理中…' : '让 AI 编辑当前图层';
 
     // 模型选择器：按提供商分组列出全部已配置模型，选中即切换执行目标。
     // 只在「已配置过提供商」时出现；一个模型都没有时由 statusLine 提示去配置。
@@ -261,7 +234,7 @@ class AIModule extends BaseModule {
       `
       : '';
 
-    // 执行按钮：一次点击 → 一次结果（就地改原图层，或生成新图层）
+    // 执行按钮：一次点击 → 一次结果（就地改当前图层）
     const actionButtons = `
         <button type="button" class="property-btn property-btn--primary"
                 data-module-action="${capability.id}:run"${this._running ? ' disabled' : ''}>${runLabel}</button>`;
@@ -274,12 +247,6 @@ class AIModule extends BaseModule {
         <textarea class="ai-prompt-box" rows="4"
                   data-module-prop="${capability.id}:draft"
                   placeholder="例如：整体偏冷一点，提高对比度并压暗高光，主体更突出">${this._escapeHtml(draft)}</textarea>
-      </div>
-      <div class="property-item">
-        <label>应用方式</label>
-        <select class="property-select" data-module-prop="${capability.id}:applyMode">
-          ${applyModeOptions}
-        </select>
       </div>
       ${targetLine}
       <div class="property-item property-item--wide property-item--actions">
@@ -304,11 +271,6 @@ class AIModule extends BaseModule {
     }
     if (key === 'outputMode') {
       this.options[`${capabilityId}:outputMode`] = OUTPUT_BACKGROUND[value] !== undefined ? value : 'transparent';
-      return true;
-    }
-    if (key === 'applyMode') {
-      const valid = Object.values(APPLY_MODES);
-      this.options[`${capabilityId}:applyMode`] = valid.includes(value) ? value : APPLY_MODES.newLayer;
       return true;
     }
     // 模型切换：值形如 "providerId|modelName"，保存为当前执行目标。
@@ -388,10 +350,8 @@ class AIModule extends BaseModule {
       return;
     }
 
-    // 源图层解析：显式选中优先；「新建图层」模式在画布只有一张图片时
-    // 自动把它作为源——AI 编辑总要有一张源图，但不应逼用户先去点一下画布。
-    const applyMode = this._getApplyMode(capability.id);
-    const resolved = this._resolveSourceLayer(applyMode);
+    // 源图层解析：AI 指令编辑直接作用于显式选中的图片图层。
+    const resolved = this._resolveSourceLayer();
     if (!resolved.source) {
       eventBus.emit('toast:show', { message: resolved.note, type: 'error' });
       return;
@@ -445,15 +405,11 @@ class AIModule extends BaseModule {
       const rest = instruction.actions.filter((item) => item.type !== 'background');
 
       // 「编辑当前图层」直接在源图层上改（不复制、不留第二个图层）：
-      // 结果一步入历史，用底部确认条的「撤销」回退，不做预览副本。
+      // 结果一步入历史，用底部确认条的「撤销」回退。
       let appliedTo = source;
       if (background) {
-        // 抠图本身就产新图层，不再额外复制
+        // 抠图本身就产新图层（3.1 上线）
         appliedTo = await this._runCutoutToLayer(source, background.mode);
-      } else if (applyMode === APPLY_MODES.newLayer) {
-        // 复制副本只在指令确认可执行之后才创建：请求失败或全被拒绝时
-        // 不会在画布上留下一个没有改动的幽灵副本。
-        appliedTo = this._cloneAsNewLayer(source);
       }
 
       let count = rest.length;
@@ -610,64 +566,6 @@ class AIModule extends BaseModule {
   }
 
   /**
-   * 把源图层复制成独立的新图层（应用方式 = 新建图层）。
-   *
-   * 为什么复制像素而不是共享 element：fabric.Image 应用调色滤镜时会替换
-   * 自己的 element，两个对象共享同一个 HTMLImageElement 会让滤镜互相污染。
-   * 这里把源 element 画到独立画布上作为副本像素，并把滤镜配置深拷贝过来
-   * 重新应用，副本的观感与源图层一致但完全独立。
-   *
-   * @param {fabric.Image} source 源图层
-   * @returns {fabric.Image} 新图层（已加入画布，未入历史，由调用方统一 saveState）
-   */
-  _cloneAsNewLayer(source) {
-    const canvas = this.canvasManager.canvas;
-    if (!canvas) {
-      throw new Error('画布不可用，无法新建图层');
-    }
-
-    const element = source.getElement ? source.getElement() : source._element;
-    const width = element ? (element.naturalWidth || element.width) : 0;
-    const height = element ? (element.naturalHeight || element.height) : 0;
-    if (!width || !height) {
-      throw new Error('图层不含可处理的像素');
-    }
-
-    const surface = createCanvas2D(width, height);
-    if (!surface) {
-      throw new Error('当前环境不支持画布处理');
-    }
-    surface.ctx.drawImage(element, 0, 0);
-
-    const layer = new fabric.Image(surface.canvas, {
-      left: source.left,
-      top: source.top,
-      scaleX: source.scaleX,
-      scaleY: source.scaleY,
-      angle: source.angle || 0,
-      flipX: !!source.flipX,
-      flipY: !!source.flipY,
-      originX: source.originX,
-      originY: source.originY,
-      opacity: source.opacity
-    });
-
-    // 滤镜配置随副本一起带走：副本像素取自原始 element，不重新应用滤镜
-    // 会丢掉源图层已有效果（用户会看到扣了滤镜的副本）。
-    const filters = source.get ? source.get('filters') : source.filters;
-    if (Array.isArray(filters) && filters.length > 0) {
-      layer.filters = filters.map((filter) => fabric.util.object.clone(filter));
-      layer.applyFilters?.();
-    }
-
-    const sourceName = this._getObjectDisplayName(source);
-    layer.set({ _layerName: `${sourceName} 副本`, _layerNameAuto: false });
-
-    this.canvasManager.addObject(layer);
-    return layer;
-  }
-
-  /**
    * 提示词链路的抠图：静默生成新图层并返回，供后续指令继续叠加。
    * @param {fabric.Image} source 源图层
    * @param {string} outputMode 'transparent' | 'white'
@@ -730,51 +628,16 @@ class AIModule extends BaseModule {
   // ── 工具方法 ──
 
   /**
-   * 画布上可作为 AI 源的图片图层（可见、非辅助对象）。
-   * @returns {fabric.Image[]}
-   */
-  _listImageLayers() {
-    const canvas = this.canvasManager && this.canvasManager.canvas;
-    if (!canvas || typeof canvas.getObjects !== 'function') {
-      return [];
-    }
-    return canvas.getObjects().filter((obj) => (
-      obj.type === 'image'
-      && !obj.excludeFromLayer
-      && !obj.excludeFromHistory
-      && obj.visible !== false
-    ));
-  }
-
-  /**
-   * 解析本次 AI 编辑的源图层。
-   *
-   * 规则：显式选中的图片图层优先；「新建图层」模式对未选中更宽容——画布
-   * 只有唯一图片图层时直接用它（用户的心智是「让 AI 出一张新图」，多一步
-   * 「先点一下画布」是纯粹的拦路），多张图片才要求先选中；「编辑当前图层」
-   * 改的是哪个图层必须无歧义，仍然要求显式选中。
-   * @param {string} applyMode APPLY_MODES 的取值
+   * 解析本次 AI 编辑的源图层：必须是显式选中的图片图层——就地编辑改的是
+   * 哪一层必须无歧义，不能替用户猜。
    * @returns {{source: fabric.Image|null, note: string}} note 为空表示无需提示
    */
-  _resolveSourceLayer(applyMode) {
+  _resolveSourceLayer() {
     const selected = this._getTargetImage();
     if (selected) {
       return { source: selected, note: '' };
     }
-    if (applyMode !== APPLY_MODES.newLayer) {
-      return { source: null, note: '请先选中要编辑的图片图层' };
-    }
-    const candidates = this._listImageLayers();
-    if (candidates.length === 0) {
-      return { source: null, note: '请先打开一张图片再使用 AI 编辑' };
-    }
-    if (candidates.length > 1) {
-      return { source: null, note: '画布上有多张图片：请先选中要作为源的那一张' };
-    }
-    return {
-      source: candidates[0],
-      note: `未手动选中图层，已使用「${this._getObjectDisplayName(candidates[0])}」作为源`
-    };
+    return { source: null, note: '请先选中要编辑的图片图层' };
   }
 
   /**
@@ -804,16 +667,6 @@ class AIModule extends BaseModule {
    */
   _getOutputMode(capabilityId) {
     return this.options[`${capabilityId}:outputMode`] || 'transparent';
-  }
-
-  /**
-   * 读取指令应用方式（默认新建图层）。
-   * @param {string} capabilityId
-   * @returns {string} APPLY_MODES 的取值
-   */
-  _getApplyMode(capabilityId) {
-    const value = this.options[`${capabilityId}:applyMode`];
-    return Object.values(APPLY_MODES).includes(value) ? value : APPLY_MODES.newLayer;
   }
 
   /**

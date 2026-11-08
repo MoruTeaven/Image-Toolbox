@@ -159,7 +159,7 @@ class ToolManager {
       icon: 'ai',
       group: 'adjust',
       module: AIModule,
-      defaultOptions: { 'removeBackground:outputMode': 'transparent', 'promptEdit:applyMode': 'new-layer' }
+      defaultOptions: { 'removeBackground:outputMode': 'transparent' }
     });
   }
 
