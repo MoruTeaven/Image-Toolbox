@@ -83,7 +83,7 @@ export const CHANGELOG = [
         { text: '修复选择滤镜后其它滤镜预览效果不准确的问题', platforms: null },
         { text: '修复裁剪后撤销异常，及切换工具后图层被裁掉的问题', platforms: null },
         { text: '修复保存图片或 ORA 工程文件时，默认保存位置可能带出常用目录的问题', platforms: null },
-        { text: '修复 uTools 启动时控制台反复报错的问题', platforms: null },
+        { text: '修复 uTools 启动时控制台反复报错的问题', platforms: ['utools'] },
         { text: '修复 AI 配置未填地址提示不准、本机或局域网地址无法保存、空模型服务商误报未配置、单图层仍需手动选中的问题', platforms: null }
       ],
       improved: [
