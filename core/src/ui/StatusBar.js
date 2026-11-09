@@ -45,7 +45,7 @@ class StatusBar {
         <span class="statusbar__item">Fabric.js 5.x</span>
       </div>
       <div class="statusbar__right">
-        <button class="statusbar__btn" id="status-open-file" title="打开图片或 ORA 工程文件">打开</button>
+        <button class="statusbar__btn" id="status-open-file" title="打开图片或工程文件">打开</button>
         <button class="statusbar__btn statusbar__btn--primary" id="status-save" title="保存文件">保存</button>
         <button class="statusbar__btn" id="status-clipboard">复制到剪贴板</button>
       </div>
@@ -102,8 +102,9 @@ class StatusBar {
       const result = window.showOpenDialog({
         properties: ['openFile'],
         filters: [
-          { name: '图片和工程文件', extensions: ['ora', 'png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'svg'] },
+          { name: '图片和工程文件', extensions: ['ora', 'psd', 'png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'svg'] },
           { name: 'OpenRaster 工程文件', extensions: ['ora'] },
+          { name: 'Photoshop 工程文件', extensions: ['psd'] },
           { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'svg'] },
         ],
       });
@@ -117,7 +118,7 @@ class StatusBar {
     // 降级：浏览器 file input
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.ora,.png,.jpg,.jpeg,.webp,.bmp,.gif,.svg,image/*,application/zip';
+    input.accept = '.ora,.psd,.png,.jpg,.jpeg,.webp,.bmp,.gif,.svg,image/*,application/zip';
     input.onchange = (e) => {
       const file = e.target.files?.[0];
       if (file) {
@@ -143,6 +144,32 @@ class StatusBar {
    */
   _loadFileFromPath(filePath) {
     const isOra = filePath.toLowerCase().endsWith('.ora');
+    const isPsd = filePath.toLowerCase().endsWith('.psd');
+
+    if (isPsd) {
+      // PSD 工程文件 — 同 ORA，readImageFile → dataURL → Blob → psd:import
+      if (typeof window.readImageFile === 'function') {
+        const dataURL = window.readImageFile(filePath);
+        if (dataURL) {
+          const blob = _dataURLToBlob(dataURL);
+          if (blob && blob.size > 0) {
+            eventBus.emit('psd:import', blob);
+          } else {
+            eventBus.emit('toast:show', { message: 'PSD 文件解析失败', type: 'error' });
+          }
+        } else {
+          eventBus.emit('toast:show', { message: 'PSD 文件读取失败', type: 'error' });
+        }
+      } else {
+        fetch(`file://${filePath}`)
+          .then(r => r.blob())
+          .then(blob => eventBus.emit('psd:import', blob))
+          .catch(() => {
+            eventBus.emit('toast:show', { message: 'PSD 文件读取失败', type: 'error' });
+          });
+      }
+      return;
+    }
 
     if (isOra) {
       // ORA 工程文件 — 通过 readImageFile 读取为 dataURL，再转 Blob
@@ -201,6 +228,8 @@ class StatusBar {
     const name = file.name?.toLowerCase() || '';
     if (name.endsWith('.ora')) {
       eventBus.emit('ora:import', file);
+    } else if (name.endsWith('.psd')) {
+      eventBus.emit('psd:import', file);
     } else {
       // 图片文件转 dataURL
       const reader = new FileReader();
@@ -237,6 +266,20 @@ class StatusBar {
             <div class="save-dialog__option-info">
               <div class="save-dialog__option-name">ORA 工程文件</div>
               <div class="save-dialog__option-desc">保留所有图层并栅格化，可再次编辑</div>
+            </div>
+          </button>
+          <button class="save-dialog__option" data-format="psd">
+            <div class="save-dialog__option-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="9" y1="13" x2="15" y2="13"/>
+                <line x1="9" y1="17" x2="13" y2="17"/>
+              </svg>
+            </div>
+            <div class="save-dialog__option-info">
+              <div class="save-dialog__option-name">PSD 工程文件</div>
+              <div class="save-dialog__option-desc">Photoshop 格式，保留所有图层</div>
             </div>
           </button>
           <button class="save-dialog__option" data-format="png">
@@ -306,6 +349,8 @@ class StatusBar {
   _executeSave(format) {
     if (format === 'ora') {
       eventBus.emit('ora:export');
+    } else if (format === 'psd') {
+      eventBus.emit('psd:export');
     } else {
       eventBus.emit('export:requested', { type: 'file', format });
     }

@@ -9,7 +9,7 @@
  * - uTools 一键登录（loginWithUTools）
  */
 
-import { TeavenIdentityClient, createWebStorage, MemoryTokenStorage } from '../lib/identity-sdk/index.js';
+import { TeavenIdentityClient, createWebStorage, MemoryTokenStorage } from '@moruteaven/identity-sdk';
 import { getDomPort } from '../ports/DomPort.js';
 
 const DEFAULT_IDENTITY_BASE = 'https://identity.moruteaven.com';

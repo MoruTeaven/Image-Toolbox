@@ -4,6 +4,7 @@ import { requestRender as _requestRender } from '../utils/helpers.js';
 import {
   getUiFilterItems,
   FILTER_PRESETS,
+  FILTER_CATEGORIES,
   getFilterUiValue,
   getPresetFilterValues,
   setFilter,
@@ -11,7 +12,7 @@ import {
   applyFilterPreset,
   isPresetActive,
 } from '../utils/filters.js';
-import { createFilterPreviewDataURL, disposeFilterPreview, getPreviewSize } from '../utils/filterPreview.js';
+import { createFilterPreviewDataURL, disposeFilterPreview, getPreviewSize, getPreviewSourceKey } from '../utils/filterPreview.js';
 
 /**
  * 预览对象标识种子
@@ -39,6 +40,7 @@ class ColorModule extends BaseModule {
     this._previewCache = new Map();
     this._previewCacheKey = null;
     this._previewSource = null;
+    this._filterCategory = FILTER_CATEGORIES[0];
   }
 
   activate(options = {}) {
@@ -103,13 +105,17 @@ class ColorModule extends BaseModule {
   }
 
   /**
-   * 预览缓存的判定键：图片对象 + 源图地址，二者变化时重建缩略图
+   * 预览缓存的判定键：图片对象 + 原图地址，二者变化时重建缩略图
+   *
+   * 地址取原图元素（getPreviewSourceKey）而非 getElement()：图层套上滤镜后
+   * getElement() 会变成无 src 的 canvas，键值抖动会把缓存反复清空重建。
+   * 注意：滤镜变化不在此键内——缩略图一律从原图独立计算，与当前滤镜无关。
+   *
    * @param {fabric.Image} reference
    * @returns {string}
    */
   _getPreviewCacheKey(reference) {
-    const src = reference?.getElement?.()?.src || '';
-    return `${this._objectId(reference)}|${src}`;
+    return `${this._objectId(reference)}|${getPreviewSourceKey(reference)}`;
   }
 
   _objectId(obj) {
@@ -140,22 +146,29 @@ class ColorModule extends BaseModule {
     // 卡片宽度按源图宽高比动态计算，避免固定宽度导致横图被裁、竖图留白
     const { aspect } = getPreviewSize(reference);
 
-    const presets = FILTER_PRESETS.map(preset => {
-      const isActive = this._getFilterScope() === 'all'
-        ? targets.every(image => isPresetActive(image, preset.preset))
-        : isPresetActive(reference, preset.preset);
-      const previewURL = previews.get(preset.preset);
-      const preview = previewURL
-        ? `<img class="filter-preset-btn__preview" src="${previewURL}" alt="" draggable="false" />`
-        : `<span class="filter-preset-btn__preview filter-preset-btn__preview--empty"></span>`;
-      return `<button type="button" class="filter-preset-btn ${isActive ? 'active' : ''}" data-preset="${preset.preset}" title="${preset.label}">${preview}<span class="filter-preset-btn__label">${preset.label}</span></button>`;
+    const categoryTabs = FILTER_CATEGORIES.map(cat => {
+      const isActiveCat = cat === this._filterCategory ? 'active' : '';
+      return `<button type="button" class="filter-category-tab ${isActiveCat}" data-category="${cat}">${cat}</button>`;
     }).join('');
+
+    const presets = FILTER_PRESETS
+      .filter(preset => preset.category === this._filterCategory)
+      .map(preset => {
+        const isActive = this._getFilterScope() === 'all'
+          ? targets.every(image => isPresetActive(image, preset.preset))
+          : isPresetActive(reference, preset.preset);
+        const previewURL = previews.get(preset.preset);
+        const preview = previewURL
+          ? `<img class="filter-preset-btn__preview" src="${previewURL}" alt="" draggable="false" />`
+          : `<span class="filter-preset-btn__preview filter-preset-btn__preview--empty"></span>`;
+        return `<button type="button" class="filter-preset-btn ${isActive ? 'active' : ''}" data-preset="${preset.preset}" title="${preset.label}">${preview}<span class="filter-preset-btn__label">${preset.label}</span></button>`;
+      }).join('');
 
     const scopeHint = this._getFilterScope() === 'all'
       ? `<span class="options-hint">全部图片图层 (${targets.length})</span>`
       : '<span class="options-hint">当前图层</span>';
 
-    return `<div class="options-group options-group--filter" style="--preset-aspect: ${aspect}">${scopeHint}<div class="filter-preset-scroll">${presets}</div></div>`;
+    return `<div class="options-group options-group--filter" style="--preset-aspect: ${aspect}">${scopeHint}<div class="filter-categories">${categoryTabs}</div><div class="filter-preset-scroll">${presets}</div></div>`;
   }
 
   /**
@@ -208,6 +221,12 @@ class ColorModule extends BaseModule {
         <button type="button" class="property-btn" data-module-action="filter-reset">重置调色</button>
       </div>
     `;
+  }
+
+  // ── 滤镜分类切换 ──
+  setFilterCategory(category) {
+    if (!FILTER_CATEGORIES.includes(category)) return;
+    this._filterCategory = category;
   }
 
   // ── 滤镜预设点击（顶部预设栏） ──

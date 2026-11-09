@@ -104,7 +104,7 @@ class StubElement {
 
 const ELEMENT_IDS = [
   'fabric-canvas', 'canvas-area', 'toolbar', 'optionsbar', 'panel-area',
-  'property-panel', 'layer-panel', 'statusbar', 'account-page', 'app',
+  'property-panel', 'layer-panel', 'history-panel', 'statusbar', 'account-page', 'app',
   'welcome', 'welcome-btn', 'welcome-drop', 'canvas-container', 'zoom-control',
   'zoom-in', 'zoom-out', 'zoom-value', 'toast',
 ];

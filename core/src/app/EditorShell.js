@@ -23,6 +23,7 @@
  */
 
 import { getDomPort } from '../ports/DomPort.js';
+import { eventBus } from '../index.js';
 
 /** 界面元素 id 清单 —— 与各端 index.html 的约定，集中一处便于核对 */
 export const ELEMENT_IDS = {
@@ -31,6 +32,7 @@ export const ELEMENT_IDS = {
   PANEL_AREA: 'panel-area',
   PROPERTY_PANEL: 'property-panel',
   LAYER_PANEL: 'layer-panel',
+  HISTORY_PANEL: 'history-panel',
   STATUS_BAR: 'statusbar',
   ACCOUNT_PAGE: 'account-page',
   APP_ROOT: 'app',
@@ -42,12 +44,12 @@ export const ELEMENT_IDS = {
   ZOOM_CONTROL: 'zoom-control',
   ZOOM_IN: 'zoom-in',
   ZOOM_OUT: 'zoom-out',
-  ZOOM_VALUE: 'zoom-value',
+  ZOOM_VALUE: 'zoom-value'
 };
 
 const TOAST_ICONS = {
   success: '<svg class="toast__icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  error: '<svg class="toast__icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v4M8 11h0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  error: '<svg class="toast__icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v4M8 11h0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'
 };
 
 class EditorShell {
@@ -70,7 +72,7 @@ class EditorShell {
       sidePanel: this.el(ELEMENT_IDS.PANEL_AREA),
       statusBar: this.el(ELEMENT_IDS.STATUS_BAR),
       accountPage: this.el(ELEMENT_IDS.ACCOUNT_PAGE),
-      appRoot: this.el(ELEMENT_IDS.APP_ROOT),
+      appRoot: this.el(ELEMENT_IDS.APP_ROOT)
     };
   }
 
@@ -83,6 +85,7 @@ class EditorShell {
     return {
       propertyPanel: this.el(ELEMENT_IDS.PROPERTY_PANEL),
       layerPanel: this.el(ELEMENT_IDS.LAYER_PANEL),
+      historyPanel: this.el(ELEMENT_IDS.HISTORY_PANEL)
     };
   }
 
@@ -129,7 +132,9 @@ class EditorShell {
    */
   showFatalError(html) {
     const body = getDomPort()?.getBody?.();
-    if (body) body.innerHTML = html;
+    if (body) {
+      body.innerHTML = html;
+    }
   }
 
   // ── Toast ──
@@ -142,14 +147,18 @@ class EditorShell {
   showToast(message, type = 'success') {
     const port = getDomPort();
     const body = port?.getBody?.();
-    if (!body) return;
+    if (!body) {
+      return;
+    }
 
     // 同时只保留一条，避免叠字
     const existing = port.querySelector?.('.toast');
     existing?.remove?.();
 
     const toast = port.createElement?.('div');
-    if (!toast) return;
+    if (!toast) {
+      return;
+    }
 
     toast.className = `toast toast--${type}`;
     toast.innerHTML = TOAST_ICONS[type] || '';
@@ -163,8 +172,142 @@ class EditorShell {
     body.appendChild(toast);
 
     port.onElement?.(toast, 'animationend', () => {
-      if (toast.parentNode) toast.parentNode.removeChild(toast);
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
     });
+  }
+
+  /**
+   * 显示一条带操作按钮的提示条（如 AI 就地修改后的「应用 / 查看原图 / 撤销」）。
+   *
+   * 与 Toast 的区别：不自动消失——直到用户点了某个按钮，或进行了其它画布
+   * 操作（视为默认同意，收起提示条）。按钮点击后通过 EventBus 触发约定的
+   * 事件；收起时 emit 'toast:action:dismiss' 通知发起方做状态清理。
+   *
+   * @param {object} payload
+   * @param {string} payload.message 提示正文
+   * @param {Array<{label:string, event:string}>} [payload.actions] 按钮组
+   * @param {number} [payload.timeoutMs] 可选超时（不传则不自动收起）
+   */
+  showActionToast({ message, actions = [], timeoutMs = 0 } = {}) {
+    const port = getDomPort();
+    const body = port?.getBody?.();
+    if (!body || !message || actions.length === 0) {
+      return;
+    }
+
+    // 同时只保留一条，避免叠字
+    port.querySelector?.('.action-toast')?.remove?.();
+
+    const bar = port.createElement?.('div');
+    if (!bar) {
+      return;
+    }
+    bar.className = 'action-toast';
+
+    const renderContent = (contentMessage, contentActions) => {
+      bar.innerHTML = '';
+      const textEl = port.createElement?.('span');
+      if (textEl) {
+        textEl.className = 'action-toast__text';
+        textEl.textContent = contentMessage;
+        bar.appendChild(textEl);
+      }
+      contentActions.forEach((action) => {
+        const btnEl = port.createElement?.('button');
+        if (!btnEl) {
+          return;
+        }
+        btnEl.type = 'button';
+        btnEl.className = `action-toast__btn${action.primary ? ' action-toast__btn--primary' : ''}`;
+        btnEl.textContent = action.label;
+        bar.appendChild(btnEl);
+        port.onElement?.(btnEl, 'click', () => {
+          // keepOpen 的按钮（如「查看原图 ↔ 查看更改」切换）只派发事件，
+          // 不收起提示条——它只是切换视图，不代表用户做出了最终决定。
+          if (!action.keepOpen) {
+            dismiss();
+          }
+          eventBus.emit(action.event);
+        });
+      });
+    };
+
+    body.appendChild(bar);
+    renderContent(message, actions);
+
+    // 「用户进行了其它操作」的判定信号：确认条以外的任何手势（点击画布/
+    // 图层面板/工具栏、键盘快捷键）。刻意不用 canvas:objectModified 这类
+    // 画布事件——AI 应用指令自身会触发异步的滤镜重算等事件回声，把监听
+    // 挂在那里会在确认条出现的瞬间就被误触发，导致查看原图状态被提前清空。
+    // pointerdown 走捕获阶段：先于画布交互处理，保证查看原图态下点其它
+    // 位置时先把画面恢复到更改后（默认同意的对象是修改后的结果）。
+    const unsubs = [];
+    let dismissed = false;
+    const detachGesture = () => {
+      unsubs.forEach((off) => {
+        if (typeof off === 'function') {
+          off();
+        }
+      });
+      unsubs.length = 0;
+    };
+
+    let timer = null;
+    const dismiss = () => {
+      if (dismissed) {
+        return;
+      }
+      dismissed = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      detachGesture();
+      detachPointer();
+      this._actionToastUpdate = null;
+      if (bar.parentNode) {
+        bar.parentNode.removeChild(bar);
+      }
+      eventBus.emit('toast:action:dismiss');
+    };
+
+    // 确认条以内的点击不算其它操作（查看原图/查看更改切换、应用、撤销）
+    const onOutsidePointerDown = (e) => {
+      if (e.target?.closest?.('.action-toast')) {
+        return;
+      }
+      dismiss();
+    };
+    port.onElement?.(body, 'pointerdown', onOutsidePointerDown, true);
+    const detachPointer = () => {
+      port.offElement?.(body, 'pointerdown', onOutsidePointerDown);
+    };
+
+    // 无手势的键盘路径：切工具、Ctrl+Z / Ctrl+Y（手势路径的补充）
+    ['tool:changed', 'history:undo', 'history:redo'].forEach((name) => {
+      unsubs.push(eventBus.on(name, dismiss));
+    });
+
+    if (timeoutMs > 0) {
+      timer = setTimeout(dismiss, timeoutMs);
+    }
+
+    // 查看原图/查看更改切换时更新文案与按钮（不重建提示条、不打断状态）
+    unsubs.push(
+      eventBus.on('toast:action:update', (payload) => {
+        if (dismissed) {
+          return;
+        }
+        if (typeof payload?.message === 'string') {
+          message = payload.message;
+        }
+        if (Array.isArray(payload?.actions) && payload.actions.length > 0) {
+          actions = payload.actions;
+        }
+        renderContent(message, actions);
+      })
+    );
   }
 
   // ── 全局事件绑定 ──
@@ -187,6 +330,7 @@ class EditorShell {
     const port = getDomPort();
 
     const isOra = (name) => String(name || '').toLowerCase().endsWith('.ora');
+    const isPsd = (name) => String(name || '').toLowerCase().endsWith('.psd');
 
     const onDragOver = (e) => {
       e.preventDefault();
@@ -198,10 +342,16 @@ class EditorShell {
       e.stopPropagation();
 
       const file = e.dataTransfer?.files?.[0];
-      if (!file) return;
+      if (!file) {
+        return;
+      }
 
       if (isOra(file.name)) {
         handlers.onOraFile?.(file);
+        return;
+      }
+      if (isPsd(file.name)) {
+        handlers.onPsdFile?.(file);
         return;
       }
       if (file.type?.startsWith('image/')) {
@@ -211,12 +361,16 @@ class EditorShell {
 
     const onPaste = (e) => {
       const items = e.clipboardData?.items;
-      if (!items) return;
+      if (!items) {
+        return;
+      }
 
       for (const item of items) {
         if (item.type?.startsWith('image/')) {
           const file = item.getAsFile?.();
-          if (file) handlers.onImageFile?.(file);
+          if (file) {
+            handlers.onImageFile?.(file);
+          }
           break;
         }
       }
@@ -267,7 +421,7 @@ class EditorShell {
       onDragOver, onDrop, onPaste, onKeyDown, onWheel,
       onWelcomeClick, onWelcomeDropClick,
       onZoomInClick, onZoomOutClick, onZoomValueClick,
-      welcomeBtn, welcomeDrop, zoomIn, zoomOut, zoomValue, canvasArea,
+      welcomeBtn, welcomeDrop, zoomIn, zoomOut, zoomValue, canvasArea
     };
 
     return this._bound;
@@ -276,7 +430,9 @@ class EditorShell {
   /** 解绑 bindGlobalEvents 注册的全部监听器 */
   unbindGlobalEvents() {
     const b = this._bound;
-    if (!b) return;
+    if (!b) {
+      return;
+    }
 
     const port = getDomPort();
     port?.offDocument?.('dragover', b.onDragOver);
@@ -302,10 +458,14 @@ class EditorShell {
    */
   isTextInputFocused() {
     const el = getDomPort()?.getActiveElement?.();
-    if (!el) return false;
+    if (!el) {
+      return false;
+    }
 
     const tagName = el.tagName?.toUpperCase?.();
-    if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return true;
+    if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') {
+      return true;
+    }
     return !!el.isContentEditable;
   }
 
@@ -318,13 +478,17 @@ class EditorShell {
   openFilePicker(accept, onPick) {
     const port = getDomPort();
     const input = port?.createElement?.('input');
-    if (!input) return false;
+    if (!input) {
+      return false;
+    }
 
     input.type = 'file';
     input.accept = accept;
     input.onchange = (e) => {
       const file = e.target?.files?.[0];
-      if (file) onPick?.(file);
+      if (file) {
+        onPick?.(file);
+      }
     };
     input.click?.();
     return true;

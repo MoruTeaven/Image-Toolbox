@@ -1,5 +1,5 @@
 /**
- * verify-artifact.mjs — esbuild metafile 断言（build.ps1 调用的构建门禁）
+ * verify-artifact.mjs — esbuild metafile 断言（scripts/build.mjs 调用的构建门禁）
  *
  * metafile 是 esbuild 对「这次构建到底读进来什么、写出什么」的自述，比事后
  * 扫描产物字符串更可靠：意外把 node_modules、仓库外文件卷进 bundle，第一时间
@@ -54,7 +54,9 @@ function resolveMetaPath(p) {
 const allowedRoots = [
   path.join(root, 'core', 'src'),
   path.join(root, 'clients'),
-  path.join(root, 'scripts')
+  path.join(root, 'scripts'),
+  path.join(root, 'packages'),
+  path.join(root, 'node_modules')
 ];
 if (staging) { allowedRoots.push(path.resolve(staging)); }
 

@@ -1,7 +1,7 @@
 # verify-web-deploy.ps1 — 端到端验证 Web 部署产物（dist/web/）
 #
 # 用途：在没有外网出口的机器上用本地静态服务器 + 无头浏览器复现「从站点根加载」
-# 的真实场景。与 build.ps1 的静态断言互补：静态断言看的是文件是否存在，
+# 的真实场景。与构建期门禁的静态断言互补：静态断言看的是文件是否存在，
 # 这里看的是浏览器实际发出的每个请求是否命中 200、以及应用是否真的挂载起来。
 #
 # Usage: powershell -ExecutionPolicy Bypass -File .\scripts\verify-web-deploy.ps1
@@ -17,7 +17,7 @@ $root = Split-Path $PSScriptRoot -Parent
 $siteRoot = Join-Path $root "dist\web"
 
 if (-not (Test-Path (Join-Path $siteRoot "index.html"))) {
-    Write-Host "dist/web/index.html 不存在，请先执行 build.ps1" -ForegroundColor Red
+    Write-Host "dist/web/index.html 不存在，请先执行 pnpm build" -ForegroundColor Red
     exit 1
 }
 

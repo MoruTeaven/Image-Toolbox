@@ -1,14 +1,14 @@
 /**
- * prepare-build.mjs — esbuild 构建的暂存准备（由 build.ps1 调用）
+ * prepare-build.mjs — esbuild 构建的暂存准备（由 scripts/build.mjs 调用）
  *
  * 为指定平台生成三样东西到 dist/.build/<platform>/：
- *   1. vendor/fabric.js、vendor/jszip.js —— classic-script 全局库的 ES 包装
+ *   1. vendor/fabric.js —— classic-script 全局库的 ES 包装
  *   2. entry.js —— bundle 入口：两个 vendor 副作用导入 + 真实平台入口
  *      （clients/<platform>/src/index.js 原样引用，#core/ 由 esbuild 原生解析，
  *        不复制、不改写源码逻辑，避免原型期「手工搬 boot 代码」的漂移风险）
  *   3. index.html —— 页面改写：库 <script> 移除、style.css/入口指向打包产物
  *
- * 打包本身由 build.ps1 调 esbuild CLI 完成（见 build.ps1 的说明）。
+ * 打包本身由 scripts/build.mjs 调 esbuild CLI 完成。
  *
  * Usage: node scripts/prepare-build.mjs --platform <web|utools|ztools>
  */
@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readVendorSource, wrapFabric, wrapJSZip } from './lib/vendor-wrapper.mjs';
+import { readVendorSource, wrapFabric } from './lib/vendor-wrapper.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -34,7 +34,7 @@ const platform = (() => {
 const clientSrc = path.join(root, 'clients', platform, 'src');
 // 暂存区落在系统临时目录，而不是 dist/ 下：
 //   1. 它是构建中间物，不该出现在产物目录里被误当作交付内容；
-//   2. dist/ 会被 build.ps1 清理，中间物混在里面既冗余又容易被删到一半；
+//   2. dist/ 会被 scripts/build.mjs 清理，中间物混在里面既冗余又容易被删到一半；
 //   3. 个别受限宿主对 dist 下旧文件有句柄锁，导致重建时 EPERM（本次踩到）。
 // 需要排查中间物时用环境变量 IMG_TOOLBOX_BUILD_DIR 指定即可。
 const buildDir = process.env.IMG_TOOLBOX_BUILD_DIR
@@ -56,7 +56,6 @@ fs.mkdirSync(vendorDir, { recursive: true });
 // 1. vendor 包装
 const vendor = readVendorSource(root);
 fs.writeFileSync(path.join(vendorDir, 'fabric.js'), wrapFabric(vendor.fabric), 'utf8');
-fs.writeFileSync(path.join(vendorDir, 'jszip.js'), wrapJSZip(vendor.jszip), 'utf8');
 
 // 2. bundle 入口。绝对路径用 posix 分隔符，Windows 反斜杠在字符串字面量里是转义符。
 const realEntry = path.join(clientSrc, 'index.js');
@@ -68,7 +67,6 @@ const entry = [
   '// 构建期生成：vendor 全局库先行加载（与页面原先的 <script> 顺序一致），',
   '// 再引入平台真实入口。逻辑零改动 —— 入口内容始终来自 clients/ 源码。',
   "import './vendor/fabric.js';",
-  "import './vendor/jszip.js';",
   `import '${realEntry.split(path.sep).join('/')}';`,
   ''
 ].join('\n');
@@ -98,7 +96,7 @@ const problems = [];
 if (original.includes('#core/style.css') && !html.includes('./index.css')) {
   problems.push('style.css 引用未被改写为 ./index.css');
 }
-for (const lib of ['fabric.min.js', 'jszip.min.js']) {
+for (const lib of ['fabric.min.js']) {
   if (original.includes(`#core/lib/${lib}`) && html.includes(lib)) {
     problems.push(`${lib} 的 <script> 未被移除`);
   }

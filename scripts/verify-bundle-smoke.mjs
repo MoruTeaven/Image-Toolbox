@@ -3,12 +3,12 @@
  *
  * 深度与仓库安全门禁一致：Node + scripts/test-env.mjs 的 DOM 桩件，
  * 真实执行 bundle 本身（不是重新 import 源码）。验证：
- *   1. bundle 顶层副作用跑通：真 fabric / JSZip 被挂到 globalThis
+ *   1. bundle 顶层副作用跑通：真 fabric 被挂到 globalThis
  *   2. 顶层无未解析引用（#core/、裸 require jsdom、jsdom 分支已消除）
  *   3. App / WebHostAdapter / EventBus 从 bundle 内可用
  *
  * 用法：node scripts/verify-bundle-smoke.mjs <bundle.mjs>
- * 由 build.ps1 调用：page bundle 复制为临时 .mjs 后传入，退出码非 0 即构建失败。
+ * 由 scripts/build.mjs 调用：page bundle 复制为临时 .mjs 后传入，退出码非 0 即构建失败。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,8 +44,6 @@ check('bundle 顶层执行完成', true);
 check('真 fabric 已挂到 globalThis（版本 5.3.0）',
   globalThis.fabric && globalThis.fabric.version === '5.3.0',
   'version=' + (globalThis.fabric && globalThis.fabric.version));
-check('JSZip 已挂到 globalThis',
-  typeof globalThis.JSZip === 'function');
 
 const smoke = globalThis.__smoke || {};
 if (smoke.App) {
@@ -63,7 +61,7 @@ if (smoke.App) {
   }
 } else {
   // 浏览器产物（app.js）：入口没有导出 __smoke，只验证顶层副作用跑通。
-  // 上面的 fabric/JSZip 断言已覆盖「bundle 在假 DOM 下完整执行」。
+  // 上面的 fabric 断言已覆盖「bundle 在假 DOM 下完整执行」。
   check('浏览器 bundle 无模块级异常（顶层副作用执行完成）', true);
 }
 

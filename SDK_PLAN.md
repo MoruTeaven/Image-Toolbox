@@ -259,10 +259,12 @@ self.addEventListener('activate', async (event) => {
 
 | 交付物 | 说明 |
 |--------|------|
-| EMBED_PROTOCOL.md | iframe 双向消息协议规范 |
-| version.json 规范 | 版本接口契约 |
+| [EMBED_PROTOCOL.md](EMBED_PROTOCOL.md) | iframe 双向消息协议规范（协议版本 1，已冻结） |
+| [VERSION_SPEC.md](VERSION_SPEC.md) | version.json 与版本化资源/缓存契约（已冻结） |
 
 **验收标准：** 协议文档完整，消息类型、载荷格式、错误码、时序图齐全。
+
+> 阶段 0 已完成协议冻结：后续阶段 1/2 的接口实现以这两份文档为准；需要改动协议时按 EMBED_PROTOCOL.md §9 的兼容性规则走版本升级，不得静默改语义。
 
 ---
 
@@ -298,7 +300,7 @@ self.addEventListener('activate', async (event) => {
 
 | 维度 | v1.0（npm SDK 包） | v2.0（iframe + 缓存） |
 |-----|-------------------|---------------------|
-| **集成方式** | `npm i @img-toolbox/core` | `<script src="...">` |
+| **集成方式** | `npm i @moruteaven/img-toolbox_core` | `<script src="...">` |
 | **宿主下载体积** | 160-250 KB gzip | **0 KB** |
 | **缓存命中时** | 依赖宿主缓存 | **0 网络请求** |
 | **版本更新** | 需宿主升级依赖 | **自动（版本接口检查）** |

@@ -16,16 +16,18 @@ import {
   CanvasManager,
   LayerManager,
   HistoryManager,
-  ToolManager,
+  ToolManager
 } from '../runtime/fabric.js';
 
-import { exportORA, importORA } from '../utils/ora.js';
+import { exportORA, importORA } from '@moruteaven/img-toolbox_ora';
+import { exportPSD, importPSD } from '@moruteaven/img-toolbox_psd';
 
 import Toolbar from '../ui/Toolbar.js';
 import OptionsBar from '../ui/OptionsBar.js';
 import SidePanelTabs from '../ui/SidePanelTabs.js';
 import PropertyPanel from '../ui/PropertyPanel.js';
 import LayerPanel from '../ui/LayerPanel.js';
+import HistoryPanel from '../ui/HistoryPanel.js';
 import StatusBar from '../ui/StatusBar.js';
 import AccountPage, {
   EDITOR_BARS_LAYOUT_KEY,
@@ -33,7 +35,7 @@ import AccountPage, {
   EDITOR_SIDE_PANEL_POSITION_KEY,
   EDITOR_SIDE_PANEL_POSITIONS,
   TOOLBAR_COLLAPSED_KEY,
-  TOOLBAR_COLLAPSED,
+  TOOLBAR_COLLAPSED
 } from '../ui/AccountPage.js';
 import { initTheme } from '../utils/theme.js';
 
@@ -45,7 +47,7 @@ import { setClipboardHost } from '../ports/ClipboardPort.js';
 import { setFontHost } from '../ports/FontPort.js';
 import { setColorHost } from '../ports/ColorPort.js';
 
-const IMAGE_ACCEPT = '.ora,.png,.jpg,.jpeg,.webp,.bmp,.gif,.svg,image/*,application/zip';
+const IMAGE_ACCEPT = '.ora,.psd,.png,.jpg,.jpeg,.webp,.bmp,.gif,.svg,image/*,application/zip';
 const EDITOR_WINDOW_HEIGHT = 560;
 
 class App {
@@ -63,6 +65,7 @@ class App {
     this.sidePanelTabs = null;
     this.propertyPanel = null;
     this.layerPanel = null;
+    this.historyPanel = null;
     this.statusBar = null;
     this.accountPage = null;
     this.hostAdapter = null;
@@ -71,6 +74,8 @@ class App {
     this._externalSourceTimer = null;
     this._externalSourceFallbackTimer = null;
     this._saveTimer = null;
+    this._historyFlushTimer = null;
+    this._historyFlushLabel = null;
     this._onPluginEnterCallback = null;
 
     this._init();
@@ -103,7 +108,7 @@ class App {
         preserveObjectStacking: true,
         selection: true,
         stopContextMenu: true,
-        fireRightClick: true,
+        fireRightClick: true
       });
 
       // 2. 初始化图层管理器
@@ -118,7 +123,7 @@ class App {
 
       // 5. 初始化工具管理器（注入 host adapter）
       this.toolManager = new ToolManager(this.canvasManager, this.historyManager, {
-        host: this.hostAdapter,
+        host: this.hostAdapter
       });
 
       // 6. 初始化 UI 组件 —— 挂载点由 shell 统一解析
@@ -128,7 +133,7 @@ class App {
       this.optionsBar = new OptionsBar(mounts.optionsBar, this.toolManager);
       // SidePanelTabs._render() 会动态写入 #property-panel / #layer-panel，
       // 这两个挂载点必须在它构造之后才能取到。
-      this.sidePanelTabs = new SidePanelTabs(mounts.sidePanel, this.layerManager);
+      this.sidePanelTabs = new SidePanelTabs(mounts.sidePanel, this.layerManager, this.historyManager);
       const panelMounts = this.shell.getPanelMountPoints();
       this.propertyPanel = new PropertyPanel(
         panelMounts.propertyPanel,
@@ -137,6 +142,7 @@ class App {
         this.layerManager
       );
       this.layerPanel = new LayerPanel(panelMounts.layerPanel, this.layerManager, this.historyManager);
+      this.historyPanel = new HistoryPanel(panelMounts.historyPanel, this.historyManager);
       this.statusBar = new StatusBar(mounts.statusBar, this.canvasManager, this.layerManager);
       this.accountPage = new AccountPage(
         mounts.accountPage,
@@ -179,6 +185,7 @@ class App {
     this.shell.bindGlobalEvents({
       onImageFile: (file) => this._loadImage(file),
       onOraFile: (file) => eventBus.emit('ora:import', file),
+      onPsdFile: (file) => eventBus.emit('psd:import', file),
 
       onPickImage: () => this._handlePickImage(),
 
@@ -197,12 +204,14 @@ class App {
 
       onWheelZoom: (delta) => {
         const canvas = this.canvasManager?.canvas;
-        if (!canvas) return;
+        if (!canvas) {
+          return;
+        }
         this.canvasManager.zoomIn(delta);
         this._updateZoomLabel();
       },
 
-      onKeyDown: (e) => this._handleKeyDown(e),
+      onKeyDown: (e) => this._handleKeyDown(e)
     });
 
     // ═══ EventBus 订阅 ═══
@@ -261,7 +270,30 @@ class App {
       eventBus.on('ora:import', async (file) => {
         if (file instanceof Blob) {
           this.shell.setEditorVisible(true);
+          // 历史记录只属于当前图片：导入新工程时清零
+          this.historyManager?.reset?.();
           await importORA(file, this.canvasManager, this.layerManager, this.historyManager);
+          this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
+        }
+      })
+    );
+
+    // ═══ PSD 导出/导入 ═══
+    this._eventBusUnsubscribers.push(
+      eventBus.on('psd:export', async () => {
+        if (!this.canvasManager?.originalImage) {
+          eventBus.emit('toast:show', { message: '请先加载图片', type: 'error' });
+          return;
+        }
+        await exportPSD(this.canvasManager, this.layerManager, this.hostAdapter);
+      }),
+
+      eventBus.on('psd:import', async (file) => {
+        if (file instanceof Blob) {
+          this.shell.setEditorVisible(true);
+          // 历史记录只属于当前图片：导入新工程时清零
+          this.historyManager?.reset?.();
+          await importPSD(file, this.canvasManager, this.layerManager, this.historyManager);
           this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
         }
       })
@@ -299,17 +331,32 @@ class App {
     // ═══ 画布操作后自动保存历史 ═══
     this._eventBusUnsubscribers.push(
       eventBus.on('canvas:objectModified', (target) => {
-        if (target?.excludeFromHistory) return;
+        if (target?.excludeFromHistory) {
+          return;
+        }
 
-        if (this._saveTimer) clearTimeout(this._saveTimer);
+        // 操作完成后补一条时间线记录（最后一次操作没有后续 saveState）
+        this._scheduleHistoryFlush('移动/变换');
+
+        if (this._saveTimer) {
+          clearTimeout(this._saveTimer);
+        }
         this._saveTimer = setTimeout(() => {
-          this.historyManager?.saveState();
+          this.historyManager?.saveState('移动/变换');
         }, 300);
       }),
 
       eventBus.on('layer:reorderWillChange', () => {
-        this.historyManager?.saveState();
+        this.historyManager?.saveState('图层排序');
+        this._scheduleHistoryFlush('图层排序');
       }),
+
+      // ═══ 操作结束：把「操作完成后」的画面补进历史时间线 ═══
+      eventBus.on('canvas:mouseUp', () => this._scheduleHistoryFlush()),
+      eventBus.on('canvas:objectAdded', () => this._scheduleHistoryFlush()),
+      eventBus.on('canvas:textEditingExited', () => this._scheduleHistoryFlush('文字')),
+      eventBus.on('crop:applied', () => this._scheduleHistoryFlush('裁剪')),
+      eventBus.on('ai:taskFinished', () => this._scheduleHistoryFlush('AI 修图')),
 
       // ═══ 工具自动切换 ═══
       eventBus.on('tool:requestChange', (toolName) => {
@@ -319,6 +366,11 @@ class App {
       // ═══ Toast ═══
       eventBus.on('toast:show', ({ message, type }) => {
         this.shell.showToast(message, type);
+      }),
+
+      // ═══ 带操作按钮的提示条（如 AI 就地修改后的「撤销」）═══
+      eventBus.on('toast:action', (payload) => {
+        this.shell.showActionToast(payload);
       })
     );
 
@@ -327,7 +379,23 @@ class App {
     // 交给宿主适配器暂存，由此处的回调拾取。此处理后续进入的情况。
     this._onPluginEnterCallback = ({ code, type, payload, from }) => {
       console.log('[App] onPluginEnter:', { code, type, from, payload });
-      if (code !== 'image-edit') return;
+      if (code !== 'image-edit') {
+        return;
+      }
+
+      // PSD/ORA 工程文件从文件路径直接导入，不走图片加载
+      if (type === 'file' || type === 'files') {
+        const files = Array.isArray(payload) ? payload : [payload];
+        const fileInfo = files.find(item => item && item.path);
+        if (fileInfo?.path) {
+          const lower = String(fileInfo.path).toLowerCase();
+          if (lower.endsWith('.psd') || lower.endsWith('.ora')) {
+            this._importProjectFile(fileInfo.path, lower.endsWith('.psd') ? 'psd' : 'ora');
+            this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
+            return;
+          }
+        }
+      }
 
       const source = this._getExternalImageSource(type, payload);
       console.log('[App] 外部图片源:', source ? 'ok' : 'empty', { type, from });
@@ -337,7 +405,9 @@ class App {
         this._loadImage(source);
       } else if (type === 'img') {
         const fallbackSource = this._consumePendingSource();
-        if (fallbackSource) this._loadImage(fallbackSource);
+        if (fallbackSource) {
+          this._loadImage(fallbackSource);
+        }
       }
 
       this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
@@ -358,6 +428,10 @@ class App {
     this.shell.openFilePicker(IMAGE_ACCEPT, (file) => {
       if (String(file.name).toLowerCase().endsWith('.ora')) {
         eventBus.emit('ora:import', file);
+        return;
+      }
+      if (String(file.name).toLowerCase().endsWith('.psd')) {
+        eventBus.emit('psd:import', file);
         return;
       }
       this._loadImage(file);
@@ -386,36 +460,56 @@ class App {
     // Delete 删除选中物件
     if (e.key === 'Delete' || e.key === 'Backspace') {
       const active = this.canvasManager?.getActiveObject();
-      if (active && active.isEditing) return;
-      if (active && active.excludeFromHistory) return;
-      this.historyManager?.saveState();
+      if (active && active.isEditing) {
+        return;
+      }
+      if (active && active.excludeFromHistory) {
+        return;
+      }
+      this.historyManager?.saveState('删除图层');
       this.canvasManager?.removeActiveObject();
+      this._scheduleHistoryFlush('删除图层');
       return;
     }
 
     // Ctrl+D（mac: Cmd+D）复制当前选中图层
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'd' || e.key === 'D')) {
       const active = this.canvasManager?.getActiveObject();
-      if (!active) return;
-      if (active.isEditing) return;                  // 文字编辑中，不拦截
-      if (active.excludeFromHistory) return;         // 裁剪框等辅助对象不可复制
-      if (active.type === 'activeSelection') return; // 多选暂不支持整体复制
+      if (!active) {
+        return;
+      }
+      if (active.isEditing) {
+        return;
+      }                  // 文字编辑中，不拦截
+      if (active.excludeFromHistory) {
+        return;
+      }         // 裁剪框等辅助对象不可复制
+      if (active.type === 'activeSelection') {
+        return;
+      } // 多选暂不支持整体复制
 
       const meta = this.layerManager?.getLayerByObject(active);
-      if (!meta) return;
+      if (!meta) {
+        return;
+      }
 
       e.preventDefault();
-      this.historyManager?.saveState();
+      this.historyManager?.saveState('复制图层');
       this.layerManager.duplicateLayer(meta.id);
+      this._scheduleHistoryFlush('复制图层');
       return;
     }
 
     // 工具快捷键：在输入控件里打字时不抢键
     if (!e.ctrlKey && !e.metaKey) {
-      if (this.shell.isTextInputFocused()) return;
+      if (this.shell.isTextInputFocused()) {
+        return;
+      }
 
       const active = this.canvasManager?.getActiveObject();
-      if (active && active.isEditing) return;
+      if (active && active.isEditing) {
+        return;
+      }
 
       const key = e.key.toUpperCase();
       const tools = this.toolManager?.getTools() || [];
@@ -428,12 +522,20 @@ class App {
   }
 
   destroy() {
-    if (this._destroyed) return;
+    if (this._destroyed) {
+      return;
+    }
     this._destroyed = true;
 
     if (this._saveTimer) {
       clearTimeout(this._saveTimer);
       this._saveTimer = null;
+    }
+
+    if (this._historyFlushTimer) {
+      clearTimeout(this._historyFlushTimer);
+      this._historyFlushTimer = null;
+      this._historyFlushLabel = null;
     }
 
     if (this._externalSourceTimer) {
@@ -464,11 +566,36 @@ class App {
       this.sidePanelTabs,
       this.propertyPanel,
       this.layerPanel,
-      this.statusBar,
+      this.historyPanel,
+      this.statusBar
     ].forEach(component => component?.destroy?.());
 
     this.toolManager?.destroy?.();
     this.canvasManager?.destroy?.();
+  }
+
+  /**
+   * 安排一次「操作完成后」的历史记录补录。
+   *
+   * 多个事件（mouseup / objectModified / textEditingExited …）可能在同一操作里
+   * 连续触发，这里用防抖合并成一次 flush；标签取最先到达的具体操作名，
+   * 避免「文字」被随后的 objectModified 覆盖成「移动/变换」。
+   * @param {string} [label]
+   */
+  _scheduleHistoryFlush(label = null) {
+    if (label && !this._historyFlushLabel) {
+      this._historyFlushLabel = label;
+    }
+    if (this._historyFlushTimer) {
+      return;
+    }
+
+    this._historyFlushTimer = setTimeout(() => {
+      this._historyFlushTimer = null;
+      const flushLabel = this._historyFlushLabel;
+      this._historyFlushLabel = null;
+      this.historyManager?.flush?.(flushLabel);
+    }, 250);
   }
 
   async _loadImage(source) {
@@ -480,8 +607,9 @@ class App {
 
       this.layerManager.syncLayers();
 
-      this.historyManager.clear();
-      this.historyManager.saveState();
+      // 历史记录只属于当前图片：打开新图片时全部清零，不展示之前的历史
+      this.historyManager.reset();
+      this.historyManager.saveState('打开图片');
 
       this.hostAdapter?.window?.setHeight?.(EDITOR_WINDOW_HEIGHT);
     } catch (err) {
@@ -492,6 +620,36 @@ class App {
   }
 
   /**
+   * 导入 PSD/ORA 工程文件（从 onPluginEnter 的文件路径）
+   * @param {string} filePath
+   * @param {'psd'|'ora'} kind
+   */
+  _importProjectFile(filePath, kind) {
+    const dataURL = this.hostAdapter?.file?.readImageFile?.(filePath);
+    if (!dataURL) {
+      eventBus.emit('toast:show', { message: '文件读取失败', type: 'error' });
+      return;
+    }
+    const match = dataURL.match(/^data:([^;]+);base64,(.+)$/i);
+    if (!match) {
+      eventBus.emit('toast:show', { message: '文件解析失败', type: 'error' });
+      return;
+    }
+    const binary = atob(match[2]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: match[1] });
+    if (blob.size === 0) {
+      eventBus.emit('toast:show', { message: '文件为空', type: 'error' });
+      return;
+    }
+    this.shell.setEditorVisible(true);
+    eventBus.emit(`${kind}:import`, blob);
+  }
+
+  /**
    * 解析插件传入的外部图片源。
    * @param {string} type
    * @param {*} payload
@@ -499,13 +657,19 @@ class App {
    */
   _getExternalImageSource(type, payload) {
     const bridged = this.hostAdapter?.getImageSourceFromPayload?.(type, payload);
-    if (bridged) return bridged;
+    if (bridged) {
+      return bridged;
+    }
 
-    if (type !== 'file' && type !== 'files') return null;
+    if (type !== 'file' && type !== 'files') {
+      return null;
+    }
 
     const files = Array.isArray(payload) ? payload : [payload];
     const fileInfo = files.find(item => item && item.path);
-    if (!fileInfo) return null;
+    if (!fileInfo) {
+      return null;
+    }
 
     try {
       return this.hostAdapter?.file?.readImageFile?.(fileInfo.path) ?? null;
@@ -522,7 +686,9 @@ class App {
    */
   _consumePendingSource(expected) {
     const pending = this.hostAdapter?.consumePendingImageSource?.();
-    if (!pending) return null;
+    if (!pending) {
+      return null;
+    }
 
     if (expected !== undefined && pending !== expected) {
       // 不匹配：放回，交给下一次进入处理

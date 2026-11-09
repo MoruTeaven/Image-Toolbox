@@ -1,15 +1,14 @@
-// 把 classic-script 的 fabric.min.js / jszip.min.js 包装成可被 esbuild 打包的 ES 模块。
+// 把 classic-script 的 fabric.min.js 包装成可被 esbuild 打包的 ES 模块。
 //
-// 源码页面里这两个库以 <script> 全局方式加载（core/src/lib/*.min.js），
-// 其余模块裸用全局 fabric / JSZip。打包后没有 <script> 标签，
+// 源码页面里 fabric 以 <script> 全局方式加载（core/src/lib/fabric.min.js），
+// 其余模块裸用全局 fabric。打包后没有 <script> 标签，
 // 所以用本模块生成「副作用导入」包装，让库在 bundle 顶层自行挂到 globalThis。
 import fs from 'node:fs';
 import path from 'node:path';
 
 export function readVendorSource(root) {
   return {
-    fabric: fs.readFileSync(path.join(root, 'core', 'src', 'lib', 'fabric.min.js'), 'utf8'),
-    jszip: fs.readFileSync(path.join(root, 'core', 'src', 'lib', 'jszip.min.js'), 'utf8')
+    fabric: fs.readFileSync(path.join(root, 'core', 'src', 'lib', 'fabric.min.js'), 'utf8')
   };
 }
 
@@ -33,24 +32,6 @@ export function wrapFabric(source) {
     'globalThis.fabric = exports.fabric;',
     "if (!globalThis.fabric) { throw new Error('fabric 未能注册到 globalThis'); }",
     'export default globalThis.fabric;',
-    ''
-  ].join('\n');
-}
-
-// jszip.min.js 是 Browserify 风格 UMD：
-//   typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = f()
-// module.exports 本身就是 JSZip 类（不是 exports.JSZip）。
-export function wrapJSZip(source) {
-  return [
-    '// 构建期生成：classic-script 全局库 → ES 副作用模块。勿手改。',
-    'const module = { exports: {} };',
-    'const exports = module.exports;',
-    '(function () {',
-    source,
-    '})();',
-    'globalThis.JSZip = module.exports;',
-    "if (typeof globalThis.JSZip !== 'function') { throw new Error('JSZip 未能注册到 globalThis'); }",
-    'export default globalThis.JSZip;',
     ''
   ].join('\n');
 }

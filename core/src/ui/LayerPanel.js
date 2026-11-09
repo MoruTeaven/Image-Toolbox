@@ -239,8 +239,9 @@ class LayerPanel {
 
     if (action === 'delete') {
       if (meta.isBackground || meta.locked) return;
-      this._hm?.saveState();
+      this._hm?.saveState('删除图层');
       this._lm.deleteLayer(layerId);
+      this._hm?.flush?.('删除图层');
       this._selectedLayerId = null;
       this._activeLayerIds = [];
     }
@@ -254,8 +255,9 @@ class LayerPanel {
     const meta = this._lm.getLayerById(layerId);
     if (!meta) return;
 
-    this._hm?.saveState();
+    this._hm?.saveState('复制图层');
     const newMeta = await this._lm.duplicateLayer(layerId);
+    this._hm?.flush?.('复制图层');
     if (newMeta) {
       this._selectedLayerId = newMeta.id;
       this._activeLayerIds = [newMeta.id];
@@ -438,8 +440,9 @@ class LayerPanel {
     if (target.id === 'layer-delete') {
       const selected = this._getSelectedLayerId();
       if (selected !== null) {
-        this._hm?.saveState();
+        this._hm?.saveState('删除图层');
         this._lm.deleteLayer(selected);
+        this._hm?.flush?.('删除图层');
       }
       return;
     }
@@ -533,7 +536,7 @@ class LayerPanel {
       'textbox': 'T',
       'rect': '+',
       'circle': 'O',
-      'image': '🖼',
+      'image': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
       'group': '+',
       'path': '~',
       'triangle': '^',

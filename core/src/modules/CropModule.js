@@ -2,6 +2,7 @@ import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { clamp, requestRender as _requestRender, createClipPathFromSource } from '../utils/helpers.js';
 import { CROP_RATIOS } from '../utils/constants.js';
+import { acquireClipPathSession, releaseClipPathSession } from '../utils/ClipPathSession.js';
 
 // 将 CROP_RATIOS 映射为 id → ratio 的快速查找表
 const CROP_RATIO_MAP = {};
@@ -23,9 +24,12 @@ class CropModule extends BaseModule {
 
     this._cropRect = null;
     this._maskRect = null;
-    this._detachedCanvasClipPath = null;
-    this._clipPathDetached = false;
-    this._objectClipPathBackups = null;
+    // 画布级 clipPath 的换入换出统一走共享会话。此前这里各自缓存
+    // _detachedCanvasClipPath / _objectClipPathBackups，与 MosaicModule 的
+    // 两份状态操作同一份画布全局，恢复时会把对方的临时 clipPath 当成原始值
+    // 写回，图层被永久裁掉。收敛成一份后这个交叉不可能发生（见
+    // core/src/utils/ClipPathSession.js 与 scripts/verify-clip-path-session.mjs）。
+    this._clipPathSession = null;
     this._applyingCrop = false;
     this._isAdjusting = false;
     this._boundMouseDown = this._onMouseDown.bind(this);
@@ -136,16 +140,16 @@ class CropModule extends BaseModule {
     if (!this._cropRect) return;
     const canvas = this.canvasManager.canvas;
     const clipRect = this._createClipPathFromSource(this._cropRect);
-    if (this._detachedCanvasClipPath) {
-      clipRect.clipPath = this._createClipPathFromSource(this._detachedCanvasClipPath);
+    const detached = this._getDetachedCanvasClipPath();
+    if (detached) {
+      clipRect.clipPath = this._createClipPathFromSource(detached);
     }
 
     this._saveStateBeforeCrop(canvas);
-    this._clearTemporaryObjectClipPaths(false);
+    // 旧的裁剪结果要接管画布级 clipPath，临时挂载到此为止。
+    this._restoreDetachedCanvasClipPath(false);
 
     canvas.clipPath = clipRect;
-    this._detachedCanvasClipPath = null;
-    this._clipPathDetached = false;
     this._applyingCrop = true;
     this._removeCropOverlay();
     canvas.renderAll();
@@ -561,78 +565,69 @@ class CropModule extends BaseModule {
     return createClipPathFromSource(source);
   }
 
+  /** 本模块参与的辅助对象：排除出「临时挂载 clipPath」之外。 */
+  _clipPathExclusions() {
+    return [this._cropRect, this._maskRect].filter(Boolean);
+  }
+
+  /**
+   * 取得（或复用）本画布上的画布级 clipPath 会话。
+   * 共享会话保证同一画布同时只有一个持有者——这正是当年两个模块各自缓存
+   * 备份、互相覆盖导致图层被永久裁掉的成因。
+   */
+  _ensureClipPathSession() {
+    if (this._clipPathSession) return this._clipPathSession;
+    const canvas = this.canvasManager.canvas;
+    this._clipPathSession = acquireClipPathSession(canvas, {
+      exclude: this._clipPathExclusions(),
+      onRender: () => this._requestRender(),
+    });
+    return this._clipPathSession;
+  }
+
   _detachCanvasClipPath() {
     const canvas = this.canvasManager.canvas;
     if (!canvas?.clipPath) return;
 
-    this._detachedCanvasClipPath = canvas.clipPath;
-    this._clipPathDetached = true;
-    canvas.clipPath = null;
-    this._applyTemporaryObjectClipPaths(this._detachedCanvasClipPath, false);
-    this._requestRender();
+    const session = this._ensureClipPathSession();
+    session.detach();
   }
 
-  _applyTemporaryObjectClipPaths(clipPath, render = true) {
-    const canvas = this.canvasManager.canvas;
-    if (!canvas || !clipPath) return;
-
-    this._clearTemporaryObjectClipPaths(false);
-    this._objectClipPathBackups = canvas.getObjects()
-      .filter(obj => obj !== this._cropRect && obj !== this._maskRect)
-      .map(obj => ({ obj, clipPath: obj.clipPath || null }));
-
-    this._objectClipPathBackups.forEach(({ obj }) => {
-      obj.set('clipPath', this._createClipPathFromSource(clipPath));
-      obj.dirty = true;
-    });
-
-    if (render) this._requestRender();
-  }
-
-  _clearTemporaryObjectClipPaths(render = true) {
-    if (!this._objectClipPathBackups) return;
-
-    this._objectClipPathBackups.forEach(({ obj, clipPath }) => {
-      obj.set('clipPath', clipPath || null);
-      obj.dirty = true;
-    });
-    this._objectClipPathBackups = null;
-
-    if (render) this._requestRender();
+  _getDetachedCanvasClipPath() {
+    return (this._clipPathSession && this._clipPathSession.getDetached())
+      || this.canvasManager.canvas?.clipPath
+      || null;
   }
 
   _restoreDetachedCanvasClipPath(render = true) {
-    const canvas = this.canvasManager.canvas;
-    if (!canvas) return;
-
-    this._clearTemporaryObjectClipPaths(false);
-    if (this._clipPathDetached) {
-      canvas.clipPath = this._detachedCanvasClipPath;
-    }
-    this._detachedCanvasClipPath = null;
-    this._clipPathDetached = false;
-
+    const session = this._clipPathSession;
+    if (!session) return;
+    session.release();
+    this._clipPathSession = null;
     if (render) this._requestRender();
   }
 
   _discardDetachedCanvasClipPath(render = true) {
-    this._clearTemporaryObjectClipPaths(false);
-    this._detachedCanvasClipPath = null;
-    this._clipPathDetached = false;
-
+    // 丢弃与恢复的差别只是「不再写回画布级 clipPath」；会话本身已把对象级
+    // 原值逐个还原。画布级 clipPath 保持摘除状态，由后续挂载逻辑接管。
+    const canvas = this.canvasManager.canvas;
+    const detached = this._clipPathSession && this._clipPathSession.getDetached();
+    this._restoreDetachedCanvasClipPath(false);
+    if (canvas && detached) {
+      canvas.clipPath = detached;
+    }
     if (render) this._requestRender();
   }
 
-  _saveStateBeforeCrop(canvas) {
-    const currentClipPath = canvas.clipPath;
-    this._clearTemporaryObjectClipPaths(false);
-
-    if (this._clipPathDetached) {
-      canvas.clipPath = this._detachedCanvasClipPath;
+  _saveStateBeforeCrop() {
+    const session = this._clipPathSession;
+    if (session) {
+      // 暂存时需要看到未裁剪的画布：借会话的 withCanvasClipPath 包住 saveState，
+      // 不用手动配对「写回旧值 / 再挂回临时值」。
+      session.withCanvasClipPath(() => this.history.saveState('裁剪'));
+      return;
     }
-
-    this.history.saveState();
-    canvas.clipPath = currentClipPath;
+    this.history.saveState('裁剪');
   }
 
   _requestRender() {

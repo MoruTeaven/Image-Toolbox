@@ -8,9 +8,9 @@
  * 本脚本不启动浏览器，只按这三条规则在磁盘上复算每个请求的最终路径并断言存在，
  * 因此可在无头浏览器不可用的环境（如受限沙箱）中作为构建后的验收依据。
  *
- * 与 build.ps1 的 Test-WebIndex 的区别：Test-WebIndex 是构建期门禁（故意保守，
- * 不跟随 import 里的 ../，以免误判磁盘布局）；本脚本是产物侧验收，严格按浏览器
- * 的 URL 解析规则复算，包括允许在站点根内部向上回退的路径。
+ * 构建期已按同一规则跑过一次（scripts/build.mjs 的第 4 项门禁）；本脚本供部署前
+ * 或排查时从磁盘单独复算，严格按浏览器的 URL 解析规则，包括允许在站点根内部
+ * 向上回退的路径。
  *
  * Usage: node scripts/verify-web-root-load.mjs [dist/web]
  */
@@ -22,7 +22,7 @@ const siteRoot = path.resolve(process.argv[2] ?? 'dist/web');
 const entryPath = path.join(siteRoot, 'index.html');
 
 if (!fs.existsSync(entryPath)) {
-  console.error(`FAIL  找不到 ${entryPath}，请先执行 build.ps1`);
+  console.error(`FAIL  找不到 ${entryPath}，请先执行 pnpm build`);
   process.exit(1);
 }
 
@@ -64,7 +64,7 @@ for (const raw of refs) {
   if (!ref) { continue; }
   if (/^(data:|https?:|mailto:|tel:|javascript:|blob:|\/\/|#)/i.test(ref)) { continue; }
 
-  // 站点根页面：非绝对路径的引用同样以 "/" 为基准（与 build.ps1 生成的根页面一致）。
+  // 站点根页面：非绝对路径的引用同样以 "/" 为基准（与构建期生成的根页面一致）。
   const urlPath = ref.startsWith('/') ? ref : '/' + ref;
   const disk = resolveUrlPath(urlPath);
   requests.push(urlPath);
@@ -126,7 +126,7 @@ while (queue.length > 0) {
 console.log(`站点根: ${siteRoot}`);
 console.log(`入口脚本: ${entryScripts.map((f) => '/' + path.relative(siteRoot, f).split(path.sep).join('/')).join(', ')}`);
 console.log(`首屏请求: ${requests.length} 个；磁盘确认存在: ${checked.length} 个；模块图: ${visited.size} 个脚本`);
-console.log(`关键资源: ${checked.filter((p) => /style\.css|fabric\.min\.js|jszip\.min\.js/.test(p)).join(', ')}`);
+console.log(`关键资源: ${checked.filter((p) => /style\.css|fabric\.min\.js/.test(p)).join(', ')}`);
 
 if (problems.length > 0) {
   console.error(`\nFAIL  发现 ${problems.length} 个会 404 的请求：`);

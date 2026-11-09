@@ -93,7 +93,7 @@ class TextModule extends BaseModule {
       id: 'text_' + Date.now(),
     });
 
-    this.history.saveState();
+    this.history.saveState('文字');
 
     canvas.add(textObj);
     canvas.setActiveObject(textObj);

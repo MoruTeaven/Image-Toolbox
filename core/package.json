@@ -1,5 +1,5 @@
 {
-  "name": "@img-toolbox/core",
+  "name": "@moruteaven/img-toolbox_core",
   "version": "0.1.0",
   "type": "module",
   "description": "图片工具箱共享编辑核心：公共入口保持平台无关，Fabric/browser 运行时单独导出",
@@ -8,5 +8,10 @@
     ".": "./src/index.js",
     "./fabric": "./src/runtime/fabric.js",
     "./runtime/fabric": "./src/runtime/fabric.js"
+  },
+  "dependencies": {
+    "@moruteaven/img-toolbox_ora": "workspace:*",
+    "@moruteaven/img-toolbox_psd": "workspace:*",
+    "@moruteaven/img-toolbox_changelog": "workspace:*"
   }
 }

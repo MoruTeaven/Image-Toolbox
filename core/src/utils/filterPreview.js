@@ -8,6 +8,7 @@
  */
 
 import { createCanvas as createOffscreenCanvas } from '../ports/CanvasPort.js';
+import { installIntensityFilters } from './filters.js';
 
 /**
  * 预览缩略图的渲染高度（CSS 像素）
@@ -50,15 +51,48 @@ const MAX_SOURCE_SIDE = 320;
 const PREVIEW_STATE_KEY = '__colorPreviewState';
 
 /**
+ * 取图片的「原始未套滤镜」元素
+ *
+ * fabric.Image 持有两个元素引用：
+ *   _originalElement — 始终指向原始像素（HTMLImageElement / Canvas），applyFilters 不会改它
+ *   _element         — 一旦 applyFilters 就被替换为「已套滤镜」的 canvas（_filteredEl）
+ *
+ * getElement() 返回的是 _element。若图层已应用滤镜（用户点过一次预设），
+ * 拿它当预览底图就会把已有滤镜烘焙进每一张缩略图，使所有预览互相叠加，
+ * 与「点击后作用于原图」的真实结果不符。预览底图必须取 _originalElement，
+ * 保证每个预设都从原图独立计算。
+ *
+ * @param {fabric.Image} image
+ * @returns {HTMLImageElement|HTMLCanvasElement|null}
+ */
+function getOriginalElement(image) {
+  return image?._originalElement || image?.getElement?.() || null;
+}
+
+/**
  * 获取图片的原始尺寸（不含图层缩放）
  * @param {fabric.Image} image
  * @returns {{width: number, height: number}}
  */
 function getSourceSize(image) {
-  const el = image?.getElement?.();
+  const el = getOriginalElement(image);
   const width = (el && (el.naturalWidth || el.width)) || image?.width || 0;
   const height = (el && (el.naturalHeight || el.height)) || image?.height || 0;
   return { width: Math.round(width), height: Math.round(height) };
+}
+
+/**
+ * 预览缓存的判定键：源图身份 + 原图地址
+ * 供调用方判断「换图」是否需要重建缩略图。
+ * 用原图地址而非 getElement()——后者在图层套滤镜后会变成 canvas（无 src），
+ * 导致键值抖动、缓存被反复清空重建。
+ *
+ * @param {fabric.Image} image
+ * @returns {string}
+ */
+export function getPreviewSourceKey(image) {
+  const el = getOriginalElement(image);
+  return String(el?.currentSrc || el?.src || '');
 }
 
 /**
@@ -70,7 +104,7 @@ function buildPreviewSource(image) {
   const { width: srcW, height: srcH } = getSourceSize(image);
   if (!srcW || !srcH) return null;
 
-  const el = image.getElement();
+  const el = getOriginalElement(image);
   if (!el) return null;
 
   // 先按比例绘制到普通 2D 画布：后续交给 fabric 时无需再处理跨源与异步解码
@@ -102,7 +136,7 @@ function buildPreviewSource(image) {
  * @returns {object|null} { canvas, sourceImage, size }
  */
 function getPreviewEntry(image) {
-  const el = image?.getElement?.();
+  const el = getOriginalElement(image);
   if (!el) return null;
 
   const cacheKey = String(el.currentSrc || el.src || '');
@@ -177,6 +211,9 @@ export function createFilterPreviewDataURL(image, filters) {
   if (!entry) return null;
 
   const { canvas, sourceImage } = entry;
+
+  // 缩略图与画面必须用同一套滤镜类：棕褐/灰度是自定义强度滤镜，这里同样要装好
+  installIntensityFilters();
 
   sourceImage.filters = filters.map(({ type, attr, value }) => {
     const FilterClass = fabric.Image.filters[type];
