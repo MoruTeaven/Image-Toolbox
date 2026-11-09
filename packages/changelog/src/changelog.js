@@ -50,7 +50,7 @@
  * 修改此处即代表发版意图，其余引用点由构建期校验强制同步。
  * @type {string}
  */
-export const APP_VERSION = '3.0.0';
+export const APP_VERSION = '3.0.1-dev';
 
 /**
  * 版本记录条目结构
@@ -67,6 +67,19 @@ export const APP_VERSION = '3.0.0';
  * @type {ChangelogRecord[]}
  */
 export const CHANGELOG = [
+  {
+    version: '3.0.1-dev',
+    date: '2026-11-09',
+    changes: {
+      added: [],
+      fixed: [
+        { text: '修复保存或复制图片后分辨率与原图不一致的问题', platforms: null }
+      ],
+      improved: [],
+      adjusted: [],
+      removed: []
+    }
+  },
   {
     version: '3.0.0',
     date: '2026-11-08',

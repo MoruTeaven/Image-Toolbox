@@ -9,6 +9,10 @@ import { writeImage as writeImageToClipboard } from '../ports/ClipboardPort.js';
  *
  * 接受可选 host adapter 注入。未注入时降级到浏览器原生行为。
  */
+
+// 浏览器画布边长硬上限（Chrome/Firefox 约 16384px，即 2^14）：
+// 导出画布超过该尺寸会静默产出空白文件，倍率补偿时按此截断
+const MAX_EXPORT_EDGE_PX = 16384;
 class ExportModule extends BaseModule {
   /**
    * @param {import('../CanvasManager.js').default} canvasManager
@@ -133,9 +137,17 @@ class ExportModule extends BaseModule {
 
   /**
    * 获取 DataURL
+   *
+   * 分辨率还原：图片加载后按 fitToCanvas 缩放显示（scale ≤ 1），画布尺寸跟随
+   * 窗口容器——直接按画布尺寸导出会把输出分辨率绑死在窗口大小上（用户反馈的
+   * 「导出后分辨率被更改」）。导出时按原图显示缩放反向补偿 multiplier，让输出
+   * 分辨率回到图片资源的原始像素（裁剪场景 = 裁剪区域的原始像素）。
+   *
    * @param {string} [format] - 'png' | 'jpeg' | 'webp'
    * @param {number} [quality] - 0~1
    * @param {object} [options]
+   * @param {boolean} [options.trimToImage=true] - 按图片/裁剪边界导出，画布空白边距不进入结果
+   * @param {number} [options.multiplier] - 显式倍率（传入正值时跳过自动补偿）
    * @returns {string|null}
    */
   exportToDataURL(format, quality, options = {}) {
@@ -144,23 +156,68 @@ class ExportModule extends BaseModule {
 
     const fmt = format || 'png';
     const q = quality ?? 1;
+
+    const trimToImage = options.trimToImage !== false;
+    let bounds = null;
+    if (trimToImage) {
+      bounds = this._getImageExportBounds();
+    }
+
     const dataURLOptions = {
       format: fmt,
       quality: q,
-      multiplier: this.options.multiplier || 1,
+      // 输出分辨率与设备像素比解耦：不同 DPR 的屏幕导出同一结果
+      enableRetinaScaling: false
     };
 
-    if (options.trimToImage) {
-      const bounds = this._getImageExportBounds();
-      if (bounds) {
-        Object.assign(dataURLOptions, bounds);
-      }
+    // 显式倍率优先；未指定时自动按原图显示缩放补偿（见 _getExportMultiplier）
+    const explicitMultiplier = Number(options.multiplier);
+    dataURLOptions.multiplier = (Number.isFinite(explicitMultiplier) && explicitMultiplier > 0)
+      ? explicitMultiplier
+      : this._getExportMultiplier();
+
+    if (bounds) {
+      Object.assign(dataURLOptions, bounds);
+    }
+
+    // 浏览器画布边长硬上限（Chrome ~16384px）：超出会静默产出空白导出文件。
+    // 巨图补偿倍率过线时按上限截断，宁可降分辨率也不输出空白文件。
+    const exportEdge = Math.max(
+      bounds ? bounds.width : canvas.width,
+      bounds ? bounds.height : canvas.height
+    );
+    if (dataURLOptions.multiplier * exportEdge > MAX_EXPORT_EDGE_PX) {
+      dataURLOptions.multiplier = MAX_EXPORT_EDGE_PX / exportEdge;
     }
 
     return this._toDataURL(dataURLOptions, {
-      resetViewport: !!options.trimToImage,
-      transparentBackground: !!options.trimToImage,
+      // 视口缩放/平移只影响屏幕显示，不应改变导出内容与尺寸
+      resetViewport: true,
+      // 裁剪导出时保留图片透明像素；JPEG 无透明通道，保留背景色避免黑底
+      transparentBackground: !!bounds && fmt !== 'jpeg'
     });
+  }
+
+  /**
+   * 计算导出补偿倍率：把「画布显示坐标」还原成「图片原始像素坐标」。
+   *
+   * 图片按 fit 缩放显示（scaleX = scaleY ≤ 1），fabric.toDataURL 的 multiplier
+   * 作用于整个画布，乘以 1/scale 后：导出像素数 = 显示边界 × (1/scale) =
+   * 图片坐标系中的像素数。裁剪（clipPath）场景同样成立：裁剪边界显示尺寸 ÷
+   * scale = 裁剪区域的原始像素数。
+   *
+   * fabric 的 multiplier 是单一标量，非等比手动变形（scaleX ≠ scaleY）与
+   * 旋转场景按等比近似（以宽度方向为准）。
+   * @returns {number}
+   */
+  _getExportMultiplier() {
+    const img = this.canvasManager.originalImage;
+    if (!img) return 1;
+
+    const scale = Math.abs(Number(img.scaleX));
+    if (!Number.isFinite(scale) || scale <= 0) return 1;
+
+    return 1 / scale;
   }
 
   /**

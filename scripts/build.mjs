@@ -73,6 +73,14 @@
  *      directions: every scripts/ path the docs name must exist, and every
  *      script this file spawns must be named in README (and in AGENTS.md when
  *      that local-only file is present). Carries its own falsifiability check.
+ *  11. verify-export-resolution.mjs - export resolution restoration: the image
+ *      is displayed fit-scaled (scale <= 1) on a container-sized canvas, so
+ *      exporting with multiplier=1 pinned the output resolution to the window
+ *      size (the "exported image resolution changed" user report). Asserts the
+ *      1/scale multiplier compensation, image/clipPath export bounds, PNG
+ *      transparency vs JPEG background, viewport reset, enableRetinaScaling
+ *      off, and the 16384px browser canvas edge clamp, plus a mutation
+ *      self-check.
  */
 
 import fs from 'node:fs';
@@ -587,6 +595,15 @@ if (fs.existsSync(bomReport)) {
 // ---------------------------------------------------------------------------
 log(c.cyan('Checking documentation references ...'));
 node('verify-doc-refs.mjs');
+
+// ---------------------------------------------------------------------------
+// Gate 11 - export resolution restoration. The image is displayed fit-scaled
+// on a container-sized canvas; exporting with a flat multiplier=1 pinned the
+// output resolution to the window size (a real user report). The gate asserts
+// the compensation arithmetic itself and carries a mutation self-check.
+// ---------------------------------------------------------------------------
+log(c.cyan('Checking export resolution restoration ...'));
+node('verify-export-resolution.mjs');
 
 if (!allOk) {
   log(c.red('Build failed!'));
