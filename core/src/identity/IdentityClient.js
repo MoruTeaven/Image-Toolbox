@@ -7,6 +7,11 @@
  * 登录方式：
  * - Magic Link（requestMagicLink + verifyMagicLink）
  * - uTools 一键登录（loginWithUTools）
+ *
+ * 自动登录：
+ * - token 由 SDK 持久化在宿主 dbStorage / localStorage，重启后仍在；
+ * - ensureSession() 在启动时主动恢复会话（含过期续期与失败分类），
+ *   UI 层（AccountPage / Toolbar）一律经 getSharedIdentity() 共享同一实例。
  */
 
 import { TeavenIdentityClient, createWebStorage, MemoryTokenStorage } from '@moruteaven/identity-sdk';
@@ -15,6 +20,54 @@ import { getDomPort } from '../ports/DomPort.js';
 const DEFAULT_IDENTITY_BASE = 'https://identity.moruteaven.com';
 const DEFAULT_API_BASE = 'https://api.image-toolbox.moruteaven.com';
 const DEFAULT_CLIENT_ID = 'image-toolbox';
+
+/**
+ * 会话自动恢复（ensureSession）的结果状态。
+ *
+ * 恢复不是布尔题：同样的「当前不可用」，有的是本地凭证彻底失效（要用户重新登录），
+ * 有的只是网络或服务器暂时故障（必须保留凭证，否则一次离线启动就把用户登出）。
+ * 调用方据此决定提示文案与 UI 走向。
+ * @type {Readonly<{GUEST: string, OK: string, REFRESHED: string, OFFLINE: string, EXPIRED: string}>}
+ */
+export const SESSION_STATUS = {
+  /** 本地无任何 token：从未登录过 */
+  GUEST: 'guest',
+  /** 已登录且 access token 仍有效 */
+  OK: 'ok',
+  /** access token 已过期，已用 refresh token 静默续期 */
+  REFRESHED: 'refreshed',
+  /** 续期请求因网络 / 服务器暂时故障失败，凭证已保留，待下次重试 */
+  OFFLINE: 'offline',
+  /** refresh token 已被服务端拒绝或本地无法续期，凭证已清除，需要重新登录 */
+  EXPIRED: 'expired'
+};
+
+// 模块级共享实例。
+// AccountPage 与 Toolbar 都需要身份会话；若各自 new 一个 IdentityClient，
+// 就会存在两份互不相通的 token 内存态——一个实例刷新了 token，另一个仍持旧值，
+// 服务端启用刷新轮换时旧 refresh token 再刷会被拒，直接把用户登出。
+// 全部消费方一律经 getSharedIdentity() 取同一实例。
+let _sharedInstance = null;
+
+/**
+ * 取共享的 IdentityClient 实例（惰性创建）。
+ * @param {object} [options] 仅在首次创建时生效，后续调用忽略
+ * @returns {IdentityClient}
+ */
+export function getSharedIdentity(options = {}) {
+  if (!_sharedInstance) {
+    _sharedInstance = new IdentityClient(options);
+  }
+  return _sharedInstance;
+}
+
+/**
+ * 重置共享实例（仅供测试脚本使用）。
+ * @returns {void}
+ */
+export function resetSharedIdentity() {
+  _sharedInstance = null;
+}
 
 // 旧版 localStorage token key，用于迁移
 const LEGACY_TOKEN_KEY = 'image_toolbox_tokens';
@@ -72,6 +125,8 @@ class IdentityClient {
     // 初始化标记 — init() 需要异步调用
     this._initialized = false;
     this._initPromise = null;
+    // 会话自动恢复的单飞 Promise：同一时刻的多次 ensureSession 共享一次评估
+    this._sessionPromise = null;
   }
 
   /**
@@ -105,6 +160,98 @@ class IdentityClient {
         this._tokenStorage.removeItem(LEGACY_TOKEN_KEY);
       }
     } catch {}
+  }
+
+  // ═══════════════════════════════════════
+  // 会话自动恢复（自动登录）
+  // ═══════════════════════════════════════
+
+  /**
+   * 恢复本地登录会话（自动登录入口）。
+   *
+   * SDK 只在「业务请求收到 401」时才刷新 token；若启动后不发请求，过期的
+   * access token 会一直躺在存储里，UI 用同步 isAuthenticated() 判定又会把
+   * 「token 存在」误当「已登录」。本方法在启动时主动把会话恢复到可用状态：
+   *
+   *   - access token 有效 → 直接可用（ok）；
+   *   - access token 过期但有 refresh token → 主动续期（refreshed）；
+   *   - 续期遇到网络 / 服务器暂时故障 → 保留凭证等下次（offline），绝不登出；
+   *   - refresh token 被服务端拒绝 → 清除凭证，提示重新登录（expired）。
+   *
+   * 并发安全：同一时刻的多次调用共享同一次评估（单飞），评估完成后再次调用
+   * 会重新评估（轻量本地检查，必要时才会再发网络请求）。
+   * @returns {Promise<{status: string}>} 见 SESSION_STATUS
+   */
+  ensureSession() {
+    if (!this._sessionPromise) {
+      this._sessionPromise = this._ensureSessionInner().finally(() => {
+        this._sessionPromise = null;
+      });
+    }
+    return this._sessionPromise;
+  }
+
+  /** ensureSession 的实际执行体。 */
+  async _ensureSessionInner() {
+    await this.init();
+
+    const hasAccess = Boolean(this._sdk.getAccessToken());
+    const hasRefresh = Boolean(this._sdk.getRefreshToken());
+    if (!hasAccess && !hasRefresh) {
+      return { status: SESSION_STATUS.GUEST };
+    }
+
+    // SDK 的 isAuthenticated() 会核对存储中的过期时间（含 5 秒时钟余量）
+    if (hasAccess && await this._sdk.isAuthenticated()) {
+      return { status: SESSION_STATUS.OK };
+    }
+
+    if (!hasRefresh) {
+      // 只剩一个已过期的 access token，无续期能力：清掉残留，等同未登录
+      await this._sdk.clearTokens?.();
+      return { status: SESSION_STATUS.EXPIRED };
+    }
+
+    try {
+      await this._sdk.refreshAccessToken();
+      return { status: SESSION_STATUS.REFRESHED };
+    } catch (e) {
+      if (this._isTransientError(e)) {
+        // 网络 / 服务器暂时故障：保留凭证，下次启动再试。
+        // 误清凭证的代价（用户被登出）远大于误保留（多试一次刷新）。
+        console.warn('[IdentityClient] 会话续期暂不可用，已保留登录凭证:', e?.code || e);
+        return { status: SESSION_STATUS.OFFLINE };
+      }
+      await this._sdk.clearTokens?.();
+      console.warn('[IdentityClient] 登录会话已过期且无法续期:', e?.code || e);
+      return { status: SESSION_STATUS.EXPIRED };
+    }
+  }
+
+  /**
+   * 判断刷新失败是否属于「暂时故障」（网络中断、服务器 5xx 等）。
+   *
+   * 依据 SDK 的错误形态（TeavenIdentityError 的 code / status）：
+   *   - 不带业务码的错误不是 TeavenIdentityError：只可能来自请求适配器层
+   *     （doRefreshToken 直接调用适配器，fetch 网络失败的原生异常会原样
+   *     冒泡、没有 code），按暂时故障保守保留凭证；
+   *   - NETWORK_ERROR / REQUEST_TIMEOUT：请求根本没到达服务端或超时；
+   *   - status >= 500：服务端明确报错（包括统一码表把不认识的错误码兜底成
+   *     HTTP 500 的情形，如网关返回 HTML 错误页时 SDK 合成的 REFRESH_FAILED）；
+   *   - 服务端用 4xx 业务码明确拒绝（会话过期 / 被吊销）不属于暂时故障。
+   * @param {*} e 捕获到的错误
+   * @returns {boolean}
+   */
+  _isTransientError(e) {
+    const code = e?.code;
+    if (!code) {
+      return true;
+    }
+    const text = String(code);
+    if (text === 'NETWORK_ERROR' || text === 'REQUEST_TIMEOUT') {
+      return true;
+    }
+    return Number(e?.status || 0) >= 500;
   }
 
   // ═══════════════════════════════════════

@@ -651,6 +651,11 @@ html, body {
   opacity: 0.7;
 }
 
+.account-page__hint--error {
+  opacity: 1;
+  color: var(--color-danger);
+}
+
 .account-card__value {
   margin-top: 5px;
   font-size: 16px;

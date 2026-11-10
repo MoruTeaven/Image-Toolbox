@@ -1,7 +1,7 @@
 import { eventBus } from '../index.js';
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
 import { TOOLBAR_LABELS_VISIBLE_KEY, TOOLBAR_LABELS_VISIBLE, TOOLBAR_COLLAPSED_KEY, TOOLBAR_COLLAPSED, TOOLBAR_TOGGLE_VISIBLE_KEY, TOOLBAR_TOGGLE_VISIBLE, TOOLBAR_HISTORY_LAYOUT_KEY, TOOLBAR_HISTORY_LAYOUT } from './AccountPage.js';
-import IdentityClient from '../identity/IdentityClient.js';
+import { getSharedIdentity } from '../identity/IdentityClient.js';
 
 /**
  * Toolbar UI component.
@@ -14,17 +14,18 @@ class Toolbar {
     this._host = host;
     this._currentTool = 'select';
     this._user = this._getHostUser();
-    this._identity = new IdentityClient();
+    // 共享身份实例：与 AccountPage 持有同一个会话，token 刷新彼此可见
+    this._identity = getSharedIdentity();
     this._profile = null;
     this._profileLoading = false;
     this._eventBusUnsubscribers = [];
 
-    // 初始化 SDK（异步，不阻塞渲染）
-    this._identity.init().then(() => {
-      // 初始化后重新检查认证状态
+    // 自动登录：启动时恢复本地会话（含过期续期），随后按登录态刷新头像。
+    // 凭证失效（expired）的提示由 AccountPage 统一负责，这里静默回退。
+    this._identity.ensureSession().then(() => {
       this._loadProfileIfAuthenticated();
     }).catch((e) => {
-      console.warn('[Toolbar] Identity SDK 初始化失败:', e);
+      console.warn('[Toolbar] 登录状态恢复失败:', e);
     });
 
     // SVG 图标模板
@@ -316,8 +317,8 @@ class Toolbar {
    * 平台已登录时拉取用户档案，用于侧栏头像展示。
    */
   async _loadProfileIfAuthenticated() {
-    // 确保 SDK 已初始化
-    await this._identity.init().catch(() => {});
+    // ensureSession 含 init，并会在凭证过期时就地续期（自动登录）
+    await this._identity.ensureSession().catch(() => null);
     if (!this._identity.isAuthenticated()) {
       // 退出登录后清空平台档案，回退到宿主用户头像
       if (this._profile) {

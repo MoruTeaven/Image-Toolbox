@@ -69,9 +69,11 @@ export const APP_VERSION = '3.0.1-dev';
 export const CHANGELOG = [
   {
     version: '3.0.1-dev',
-    date: '2026-11-09',
+    date: '2026-11-10',
     changes: {
-      added: [],
+      added: [
+        { text: '新增账号自动登录：打开插件自动恢复登录状态，登录过期自动续期，网络不稳时不再被误登出', platforms: null }
+      ],
       fixed: [
         { text: '修复保存或复制图片后分辨率与原图不一致的问题', platforms: null }
       ],

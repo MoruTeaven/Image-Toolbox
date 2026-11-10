@@ -3,7 +3,7 @@ import { SIDE_PANEL_LAYOUT_KEY, SIDE_PANEL_LAYOUTS } from './SidePanelTabs.js';
 import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../utils/theme.js';
 import { updateCategories, CHANGELOG, PLATFORMS, getAppVersion } from '@moruteaven/img-toolbox_changelog';
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
-import IdentityClient from '../identity/IdentityClient.js';
+import { getSharedIdentity, SESSION_STATUS } from '../identity/IdentityClient.js';
 import {
   AI_CONFIG_FIELDS,
   AI_CONFIG_STATUS,
@@ -141,24 +141,29 @@ class AccountPage {
     this._activeSection = 'mine';
     this._user = this._getHostUser();
     this._eventBusUnsubscribers = [];
-    this._identity = new IdentityClient();
+    // 共享身份实例：与 Toolbar 持有同一个会话，token 刷新彼此可见
+    this._identity = getSharedIdentity();
     this._profile = null;
     this._profileLoading = false;
+    this._profileError = false;
     this._nicknameEditing = false;
     this._magicLinkEmail = '';
     this._magicLinkSending = false;
     // AI 配置页当前正在编辑的提供商（master-detail 左侧选中项）
     this._aiProviderId = null;
 
-    // 初始化 SDK（异步，不阻塞渲染）
-    this._identity.init().then(() => {
+    // 自动登录：恢复本地会话（含过期续期），完成后刷新登录态展示。
+    // 失败的分支语义见 IdentityClient.ensureSession —— 凭证被清（expired）
+    // 才提示重新登录；网络暂时故障（offline）保留凭证，不打扰用户。
+    this._identity.ensureSession().then((session) => {
+      this._notifySessionExpired(session);
       // 初始化后重新渲染，更新登录状态
       this._render();
       if (this._identity.isAuthenticated() && !this._profile) {
         this._loadProfile();
       }
     }).catch((e) => {
-      console.warn('[AccountPage] Identity SDK 初始化失败:', e);
+      console.warn('[AccountPage] 登录状态恢复失败:', e);
     });
 
     this._render();
@@ -182,8 +187,10 @@ class AccountPage {
     this._render();
     this._editorEl?.classList.add('hidden');
     this._el?.classList.remove('hidden');
-    // 打开时尝试加载档案（SDK 初始化后）
-    this._identity.init().then(() => {
+    // 打开时再评估一次会话：构造时若遇网络故障（offline），此刻网络恢复
+    // 即可就地续期；凭证在构造时已被清（expired → guest）则不会重复提示。
+    this._identity.ensureSession().then((session) => {
+      this._notifySessionExpired(session);
       if (this._identity.isAuthenticated() && !this._profile) {
         this._loadProfile();
       }
@@ -401,6 +408,10 @@ class AccountPage {
         this._handleLogout();
         return;
       }
+      if (accountAction === 'retry-profile') {
+        this._loadProfile();
+        return;
+      }
       if (accountAction === 'edit-nickname') {
         this._nicknameEditing = true;
         this._render();
@@ -609,6 +620,10 @@ class AccountPage {
             ${nicknameRow}
             <p>UID：${this._escapeHTML(uid)}</p>
             <p class="account-page__hint">昵称和头像将同步到所有已登录的设备。</p>
+            ${this._profileError ? `
+              <p class="account-page__hint account-page__hint--error">账号档案加载失败，可能是网络暂时不可用。</p>
+              <button class="account-page__btn account-page__btn--small" type="button" data-action="retry-profile">重新加载</button>
+            ` : ''}
             <button class="account-page__btn" type="button" data-action="logout">退出登录</button>
           </div>
           <input type="file" id="avatar-file-input" accept="image/png,image/jpeg,image/webp" data-avatar-input hidden>
@@ -1622,14 +1637,35 @@ class AccountPage {
   // 账户异步操作
   // ═══════════════════════════════════════
 
+  /**
+   * 会话恢复结果为「凭证已失效」时提示用户重新登录。
+   * offline（网络暂时故障）刻意静默：凭证已保留，不应吓到用户。
+   * @param {{status: string}|null} session ensureSession 的结果
+   */
+  _notifySessionExpired(session) {
+    if (session && session.status === SESSION_STATUS.EXPIRED) {
+      eventBus.emit('toast:show', { message: '登录已过期，请重新登录', type: 'error' });
+    }
+  }
+
   async _loadProfile() {
     this._profileLoading = true;
+    this._profileError = false;
     this._render();
     try {
-      this._profile = await this._identity.getProfile();
+      const profile = await this._identity.getProfile();
+      if (profile) {
+        this._profile = profile;
+      } else if (this._identity.isAuthenticated()) {
+        // 已登录却拿不到档案：多为网络问题，标记后交给「我的」页重试，
+        // 不清登录态（那会误导用户以为被登出）。
+        this._profileError = true;
+      }
     } catch (e) {
       console.warn('[AccountPage] 加载用户档案失败:', e);
-      this._profile = null;
+      if (this._identity.isAuthenticated()) {
+        this._profileError = true;
+      }
     }
     this._profileLoading = false;
     this._render();
@@ -1674,6 +1710,7 @@ class AccountPage {
       await this._identity.logout();
     } catch {}
     this._profile = null;
+    this._profileError = false;
     this._nicknameEditing = false;
     this._render();
     eventBus.emit('toast:show', { message: '已退出登录', type: 'success' });
