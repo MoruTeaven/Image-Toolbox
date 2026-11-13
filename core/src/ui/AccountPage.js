@@ -119,7 +119,7 @@ export const TOOLBAR_HISTORY_LAYOUT = {
 };
 
 /** 账户中心的全部分区（导航项与 `account:open` 直达目标共用）。 */
-const ACCOUNT_SECTIONS = ['mine', 'settings', 'ai', 'updates', 'about'];
+const ACCOUNT_SECTIONS = ['mine', 'credits', 'settings', 'ai', 'updates', 'about'];
 
 const VALID_EDITOR_BARS_LAYOUTS = new Set(Object.values(EDITOR_BARS_LAYOUTS));
 const VALID_EDITOR_SIDE_PANEL_POSITIONS = new Set(Object.values(EDITOR_SIDE_PANEL_POSITIONS));
@@ -151,6 +151,14 @@ class AccountPage {
     this._magicLinkSending = false;
     // AI 配置页当前正在编辑的提供商（master-detail 左侧选中项）
     this._aiProviderId = null;
+
+    // 积分页状态
+    this._credits = null;
+    this._creditsLoading = false;
+    this._creditsError = false;
+    this._txItems = [];
+    this._txCursor = null;
+    this._txHasMore = false;
 
     // 自动登录：恢复本地会话（含过期续期），完成后刷新登录态展示。
     // 失败的分支语义见 IdentityClient.ensureSession —— 凭证被清（expired）
@@ -194,6 +202,10 @@ class AccountPage {
       if (this._identity.isAuthenticated() && !this._profile) {
         this._loadProfile();
       }
+      // 直达积分分区时拉取积分数据（概览接口会顺带发放今日额度）
+      if (this._activeSection === 'credits' && this._identity.isAuthenticated() && !this._credits) {
+        this._loadCredits();
+      }
     }).catch(() => {});
   }
 
@@ -227,6 +239,7 @@ class AccountPage {
 
           <nav class="account-page__nav" aria-label="账户导航">
             ${this._renderNavItem('mine', '我的')}
+            ${this._renderNavItem('credits', '积分')}
             ${this._renderNavItem('settings', '设置')}
             ${this._renderNavItem('ai', 'AI 配置')}
             ${this._renderNavItem('updates', '更新记录')}
@@ -271,6 +284,9 @@ class AccountPage {
         this._activeSection = navItem.getAttribute('data-section');
         this._nicknameEditing = false;
         this._render();
+        if (this._activeSection === 'credits' && this._identity.isAuthenticated() && !this._credits) {
+          this._loadCredits();
+        }
         return;
       }
 
@@ -434,6 +450,14 @@ class AccountPage {
         this._el?.querySelector('[data-avatar-input]')?.click();
         return;
       }
+      if (accountAction === 'refresh-credits') {
+        this._loadCredits();
+        return;
+      }
+      if (accountAction === 'load-more-tx') {
+        this._loadMoreTx();
+        return;
+      }
 
       // ── 登录弹窗操作 ──
       const modalAction = this._closest(e.target, '[data-modal-action]')?.getAttribute('data-modal-action');
@@ -546,6 +570,9 @@ class AccountPage {
     if (this._activeSection === 'settings') {
       return this._renderSettings();
     }
+    if (this._activeSection === 'credits') {
+      return this._renderCredits();
+    }
     if (this._activeSection === 'ai') {
       return this._renderAiConfig();
     }
@@ -632,6 +659,186 @@ class AccountPage {
     }
 
     return identityCard;
+  }
+
+  // ═══════════════════════════════════════
+  // 积分页
+  // ═══════════════════════════════════════
+
+  /** 积分来源 → 展示文案（与后端 credit_ledger.source 对应） */
+  _creditSourceLabel(source) {
+    const labels = {
+      signup: '注册赠送',
+      daily_grant: '每日免费额度',
+      daily_login: '每日登录',
+      admin_grant: '管理员发放',
+      ai_consume: 'AI 修图消耗',
+      purchase: '购买',
+      refund: '退款',
+      adjust: '调整',
+      expiry: '过期收回'
+    };
+    return labels[source] || source || '—';
+  }
+
+  /** 未登录时的积分页引导 */
+  _renderCreditsLoginPrompt() {
+    return `
+      <div class="account-card">
+        <div class="account-card__label">积分</div>
+        <div class="account-card__body">
+          <h2>登录后查看积分</h2>
+          <p>登录后可以查看积分余额与流水，每天还可领取 7 积分免费额度（UTC 零点重置）。</p>
+          <button class="account-page__btn account-page__btn--primary" type="button" data-action="login">登录 / 注册</button>
+        </div>
+      </div>
+    `;
+  }
+
+  _renderCredits() {
+    if (!this._identity.isAuthenticated()) {
+      return this._renderCreditsLoginPrompt();
+    }
+
+    if (this._creditsLoading && !this._credits) {
+      return `
+        <div class="account-card">
+          <div class="account-page__loading">加载中…</div>
+        </div>
+      `;
+    }
+
+    if (this._creditsError && !this._credits) {
+      return `
+        <div class="account-card">
+          <div class="account-card__body">
+            <h2>积分加载失败</h2>
+            <p>可能是网络暂时不可用，凭证已保留。</p>
+            <button class="account-page__btn account-page__btn--small" type="button" data-action="refresh-credits">重新加载</button>
+          </div>
+        </div>
+      `;
+    }
+
+    const credits = this._credits || {};
+    const balance = credits.balance || '0.00';
+    const earned = credits.totalEarned || '0.00';
+    const spent = credits.totalSpent || '0.00';
+    const dailyDate = credits.dailyGrantDate || null;
+    const dailyHint = dailyDate
+      ? `今日免费额度已于 ${this._escapeHTML(dailyDate)}（UTC）到账`
+      : '今日免费额度尚未到账，查看后自动发放';
+
+    return `
+      <div class="account-credits">
+        <div class="account-card account-card--credits-hero">
+          <div class="account-card__label">积分余额</div>
+          <div class="account-credits__balance">${this._escapeHTML(balance)}</div>
+          <div class="account-credits__balance-unit">积分</div>
+          <div class="account-credits__daily">${this._escapeHTML(dailyHint)}</div>
+        </div>
+
+        <div class="account-credits__stats">
+          <div class="account-credits__stat">
+            <span class="account-credits__stat-label">累计获得</span>
+            <span class="account-credits__stat-value">${this._escapeHTML(earned)}</span>
+          </div>
+          <div class="account-credits__stat">
+            <span class="account-credits__stat-label">累计消耗</span>
+            <span class="account-credits__stat-value">${this._escapeHTML(spent)}</span>
+          </div>
+        </div>
+
+        <div class="account-card">
+          <div class="account-card__header">
+            <div class="account-card__label">积分流水</div>
+            <button class="account-page__btn account-page__btn--small" type="button" data-action="refresh-credits">刷新</button>
+          </div>
+          ${this._renderCreditsTxList()}
+        </div>
+      </div>
+    `;
+  }
+
+  _renderCreditsTxList() {
+    if (!this._txItems || this._txItems.length === 0) {
+      return '<div class="account-credits__empty">暂无积分流水</div>';
+    }
+
+    return `
+      <div class="account-credits__tx">
+        <table class="account-credits__table">
+          <thead>
+            <tr>
+              <th>类型</th>
+              <th>变动</th>
+              <th>变动后余额</th>
+              <th>时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${this._txItems.map((item) => {
+              const positive = Number(item.delta) > 0;
+              return `
+                <tr>
+                  <td>${this._escapeHTML(this._creditSourceLabel(item.source))}</td>
+                  <td class="account-credits__delta ${positive ? 'account-credits__delta--up' : 'account-credits__delta--down'}">
+                    ${positive ? '+' : ''}${this._escapeHTML(item.delta)}
+                  </td>
+                  <td>${this._escapeHTML(item.balanceAfter)}</td>
+                  <td class="account-credits__time">${this._escapeHTML(this._formatTime(item.createdAt))}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+        ${this._txHasMore
+          ? '<div class="account-credits__more"><button class="account-page__btn account-page__btn--small" type="button" data-action="load-more-tx">加载更多</button></div>'
+          : ''}
+      </div>
+    `;
+  }
+
+  /** 加载积分概览与流水（概览接口会顺带发放今日免费额度） */
+  async _loadCredits() {
+    if (this._creditsLoading) {
+      return;
+    }
+    this._creditsLoading = true;
+    this._creditsError = false;
+    this._render();
+    try {
+      const [credits, tx] = await Promise.all([
+        this._identity.getCredits(),
+        this._identity.getCreditTransactions(null, 20),
+      ]);
+      this._credits = credits;
+      this._txItems = tx?.items || [];
+      this._txCursor = tx?.nextCursor || null;
+      this._txHasMore = Boolean(tx?.nextCursor);
+    } catch (e) {
+      console.warn('[AccountPage] 加载积分失败:', e);
+      this._creditsError = true;
+    }
+    this._creditsLoading = false;
+    this._render();
+  }
+
+  /** 流水游标翻页 */
+  async _loadMoreTx() {
+    if (!this._txCursor) {
+      return;
+    }
+    try {
+      const tx = await this._identity.getCreditTransactions(this._txCursor, 20);
+      this._txItems = [...this._txItems, ...(tx?.items || [])];
+      this._txCursor = tx?.nextCursor || null;
+      this._txHasMore = Boolean(tx?.nextCursor);
+      this._render();
+    } catch (e) {
+      console.warn('[AccountPage] 加载更多流水失败:', e);
+      eventBus.emit('toast:show', { message: '加载更多流水失败', type: 'error' });
+    }
   }
 
   /**
@@ -1330,6 +1537,7 @@ class AccountPage {
   _getSectionTitle(section) {
     const titles = {
       mine: '我的',
+      credits: '积分',
       settings: '设置',
       ai: 'AI 配置',
       updates: '更新记录',

@@ -4067,3 +4067,102 @@ html, body {
 .history-empty[hidden] {
   display: none;
 }
+
+
+/* ========== 账户中心 · 积分 ========== */
+.account-credits__balance {
+  margin-top: 8px;
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--color-accent);
+  line-height: 1.1;
+}
+.account-credits__balance-unit {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+.account-credits__daily {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+.account-credits__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+.account-credits__stat {
+  background: var(--bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.account-credits__stat-label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.account-credits__stat-value {
+  font-size: 20px;
+  font-weight: 700;
+}
+.account-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.account-credits__empty {
+  margin-top: 12px;
+  padding: 24px 0;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+.account-credits__tx {
+  margin-top: 12px;
+  overflow-x: auto;
+}
+.account-credits__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.account-credits__table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.account-credits__table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.account-credits__delta {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.account-credits__delta--up {
+  color: var(--color-accent);
+}
+.account-credits__delta--down {
+  color: var(--color-warning);
+}
+.account-credits__time {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.account-credits__more {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+}

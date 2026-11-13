@@ -426,6 +426,65 @@ class IdentityClient {
   }
 
   // ═══════════════════════════════════════
+  // 积分（业务后端 API）
+  // ═══════════════════════════════════════
+
+  /**
+   * 带鉴权的业务后端请求：401 时刷新 token 后重试一次。
+   * 与 uploadAvatar 的 401 处理同源，供积分等 JSON 接口复用。
+   * @param {string} path 相对 _apiBaseUrl 的路径，如 /api/credits
+   * @param {object} [options] fetch 选项
+   * @returns {Promise<*>} 后端 { code, message, data } 中的 data
+   */
+  async _apiFetch(path, options = {}) {
+    await this.init();
+    const url = new URL(path, this._apiBaseUrl + '/');
+    const send = (token) => {
+      const headers = { ...(options.headers || {}) };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      return fetch(url.toString(), { ...options, headers });
+    };
+
+    let res = await send(this._sdk.getAccessToken());
+
+    if (res.status === 401) {
+      try {
+        await this.refresh();
+        res = await send(this._sdk.getAccessToken());
+      } catch {
+        await this._sdk.clearTokens?.();
+      }
+    }
+
+    const text = await res.text();
+    let data = null;
+    if (text) {
+      try { data = JSON.parse(text); } catch { data = text; }
+    }
+
+    if (!res.ok) {
+      throw data || { code: 'HTTP_ERROR', message: `HTTP ${res.status}`, status: res.status };
+    }
+    if (data && typeof data.code === 'string') {
+      if (data.code !== 'OK') throw data;
+      return data.data;
+    }
+    return data;
+  }
+
+  /** 查询积分概览：余额 / 累计获得 / 累计消耗 / 今日额度发放日期 */
+  async getCredits() {
+    return this._apiFetch('/api/credits');
+  }
+
+  /** 积分流水（keyset 分页） */
+  async getCreditTransactions(cursor = null, limit = 20) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) params.set('cursor', cursor);
+    return this._apiFetch(`/api/credits/transactions?${params.toString()}`);
+  }
+
+  // ═══════════════════════════════════════
   // 工具方法
   // ═══════════════════════════════════════
 

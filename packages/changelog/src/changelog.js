@@ -72,7 +72,8 @@ export const CHANGELOG = [
     date: '2026-11-10',
     changes: {
       added: [
-        { text: '新增账号自动登录：打开插件自动恢复登录状态，登录过期自动续期，网络不稳时不再被误登出', platforms: null }
+        { text: '新增账号自动登录：打开插件自动恢复登录状态，登录过期自动续期，网络不稳时不再被误登出', platforms: null },
+        { text: '新增积分页：查看积分余额、累计获得与消耗，以及积分流水', platforms: null }
       ],
       fixed: [
         { text: '修复保存或复制图片后分辨率与原图不一致的问题', platforms: null }
