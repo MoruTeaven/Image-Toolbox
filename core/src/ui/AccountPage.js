@@ -156,6 +156,8 @@ class AccountPage {
     this._credits = null;
     this._creditsLoading = false;
     this._creditsError = false;
+    // 后端尚无积分路由（如未切流的旧版后端）：展示「即将上线」而非报错
+    this._creditsNotAvailable = false;
     this._txItems = [];
     this._txCursor = null;
     this._txHasMore = false;
@@ -708,6 +710,19 @@ class AccountPage {
       `;
     }
 
+    // 后端尚无积分路由（如未切流的旧版后端）：温和提示，不当作错误
+    if (this._creditsNotAvailable && !this._credits) {
+      return `
+        <div class="account-card">
+          <div class="account-card__label">积分</div>
+          <div class="account-card__body">
+            <h2>积分功能即将上线</h2>
+            <p>积分余额与流水正在准备中，更新后即可查看。每天还可领取 7 积分免费额度。</p>
+          </div>
+        </div>
+      `;
+    }
+
     if (this._creditsError && !this._credits) {
       return `
         <div class="account-card">
@@ -806,6 +821,7 @@ class AccountPage {
     }
     this._creditsLoading = true;
     this._creditsError = false;
+    this._creditsNotAvailable = false;
     this._render();
     try {
       const [credits, tx] = await Promise.all([
@@ -818,7 +834,13 @@ class AccountPage {
       this._txHasMore = Boolean(tx?.nextCursor);
     } catch (e) {
       console.warn('[AccountPage] 加载积分失败:', e);
-      this._creditsError = true;
+      // 404 / NOT_FOUND = 当前后端还没有积分路由（如未切流的旧版后端）：
+      // 展示「即将上线」而不是错误，切流后自动恢复，无需客户端更新。
+      if (e?.code === 'NOT_FOUND' || e?.status === 404) {
+        this._creditsNotAvailable = true;
+      } else {
+        this._creditsError = true;
+      }
     }
     this._creditsLoading = false;
     this._render();
