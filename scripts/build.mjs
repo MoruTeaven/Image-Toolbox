@@ -235,9 +235,12 @@ function esbuildBuild(label, buildArgs) {
 }
 
 // Runs scripts/prepare-build.mjs and returns the staging dir it printed.
-// Staging lives in the OS temp dir on purpose: it is build scratch, and it must
-// stay outside dist/ where Test-BuildOutput would otherwise node --check the
-// ESM stubs as if they were CommonJS products.
+// Staging defaults to dist/.build/<platform>/: the DSH sandbox grants the
+// esbuild child process write access under dist/ but denies %TEMP%, so the
+// metafile esbuild writes must land here. It is scratch, never deployed - the
+// gates that scan dist (Test-BuildOutput, verify-alias-rewrite, bom-report)
+// only look at dist/<platform>/ and dist/ root files, never dist/.build/.
+// Set IMG_TOOLBOX_BUILD_DIR to relocate it when needed.
 function getStagingDir(clientName) {
   const script = path.join(SCRIPTS, 'prepare-build.mjs');
   const out = execFileSync(process.execPath, [script, '--platform', clientName], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -341,8 +344,8 @@ for (const legacy of ['src', 'core', 'plugin.json', 'preload.js', 'logo.png']) {
 // Metafile scratch dir from a previous run (esbuild writes them inside dist
 // because the sandbox may deny %TEMP% writes to the esbuild child process).
 fs.rmSync(path.join(DIST_ROOT, '.meta'), { recursive: true, force: true });
-// dist/.build is where staging used to live before it moved to the temp dir;
-// remove it if present. Best effort: it is inert scratch, never deployed.
+// Staging scratch from a previous run (prepare-build.mjs defaults to
+// dist/.build/<platform>/). Remove it up front so a fresh build starts clean.
 fs.rmSync(path.join(DIST_ROOT, '.build'), { recursive: true, force: true });
 
 // ---------------------------------------------------------------------------
