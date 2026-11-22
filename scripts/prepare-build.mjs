@@ -13,7 +13,6 @@
  * Usage: node scripts/prepare-build.mjs --platform <web|utools|ztools>
  */
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readVendorSource, wrapFabric } from './lib/vendor-wrapper.mjs';
@@ -32,14 +31,16 @@ const platform = (() => {
 })();
 
 const clientSrc = path.join(root, 'clients', platform, 'src');
-// 暂存区落在系统临时目录，而不是 dist/ 下：
-//   1. 它是构建中间物，不该出现在产物目录里被误当作交付内容；
-//   2. dist/ 会被 scripts/build.mjs 清理，中间物混在里面既冗余又容易被删到一半；
-//   3. 个别受限宿主对 dist 下旧文件有句柄锁，导致重建时 EPERM（本次踩到）。
-// 需要排查中间物时用环境变量 IMG_TOOLBOX_BUILD_DIR 指定即可。
+// 暂存区默认落在 dist/.build/<platform>/，而不是系统临时目录。
+// 原因：受限沙箱（DSH）对 esbuild.exe 子进程的写入授权是路径级的——dist/ 被授权，
+// 但系统 temp / os.tmpdir() 未授权给子进程。PowerShell（本脚本的宿主）能写 temp，
+// esbuild 子进程却写不进该目录下的 metafile（Access denied），进而导致 verify-artifact
+// 读不到 metafile 误报失败。dist/ 下新建子目录实测子进程可写，故默认改到这里。
+// 需要排查中间物或换用其它位置时，用环境变量 IMG_TOOLBOX_BUILD_DIR 指定即可；
+// 它是可覆盖的根目录，本平台仍在其下追加 <platform> 子目录。
 const buildDir = process.env.IMG_TOOLBOX_BUILD_DIR
   ? path.resolve(process.env.IMG_TOOLBOX_BUILD_DIR, platform)
-  : path.join(os.tmpdir(), 'img-toolbox-build', platform);
+  : path.join(root, 'dist', '.build', platform);
 const vendorDir = path.join(buildDir, 'vendor');
 
 // 暂存区重置：优先整体删掉重建。个别宿主（受限沙箱 / 杀软句柄）会在
