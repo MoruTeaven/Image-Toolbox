@@ -15,12 +15,14 @@ class BrushModule extends BaseModule {
     });
 
     this._cursorPreview = null;
+    this._lastPointer = null;
+    this._boundUpperCanvasEl = null;
     this._savedBeforeStroke = false;
     this._eventBusUnsubscribers = null;
     this._boundMouseDown = this._onMouseDown.bind(this);
     this._boundMouseMove = this._onMouseMove.bind(this);
-    this._boundMouseOver = this._onMouseOver.bind(this);
-    this._boundMouseOut = this._hideCursorPreview.bind(this);
+    this._boundMouseEnter = this._onMouseEnter.bind(this);
+    this._boundMouseLeave = this._hideCursorPreview.bind(this);
     this._boundPathCreated = this._onPathCreated.bind(this);
     this._boundInvalidateCursorPreview = this._invalidateCursorPreview.bind(this);
   }
@@ -38,32 +40,74 @@ class BrushModule extends BaseModule {
     canvas.freeDrawingCursor = 'none';
     this._ensureBrush();
     this._applyBrushOptions();
-    canvas.on('mouse:down', this._boundMouseDown);
-    canvas.on('mouse:over', this._boundMouseOver);
-    canvas.on('mouse:out', this._boundMouseOut);
-    canvas.on('path:created', this._boundPathCreated);
-    canvas.upperCanvasEl?.addEventListener('mousemove', this._boundMouseMove);
-    canvas.upperCanvasEl?.addEventListener('mouseleave', this._boundMouseOut);
+    // 先清理可能残留的旧监听/订阅（重复 activate 或画布曾被重建时），
+    // 避免同一回调绑定多次、或绑在已被 dispose 的旧 upperCanvasEl 上。
+    this._unbindEvents();
+    this._bindEvents(canvas);
 
     // 画布被重置（撤销/重做、打开新图、导入 ORA）后，旧的光标预览对象
-    // 已被清出画布，需要失效引用以便下次鼠标移动时重建。
+    // 已被清出画布，需要失效引用并尽快重建，避免鼠标静止时指示丢失。
     this._eventBusUnsubscribers = [
       eventBus.on('canvas:restored', this._boundInvalidateCursorPreview),
       eventBus.on('image:loaded', this._boundInvalidateCursorPreview),
+      eventBus.on('canvas:zoomChanged', this._boundInvalidateCursorPreview),
+      eventBus.on('canvas:overlaysCleared', this._boundInvalidateCursorPreview),
     ];
+
+    // 工具切换回画笔且鼠标仍停在画布上时，用上次记录的位置立即恢复光标。
+    if (this._lastPointer) {
+      this._showCursorAt(this._lastPointer);
+    }
 
     eventBus.emit('module:activated', 'brush');
   }
 
-  deactivate() {
+  /**
+   * 绑定光标跟随所需的画布事件与原生 DOM 事件。
+   * @param {fabric.Canvas} canvas
+   */
+  _bindEvents(canvas) {
+    canvas.on('mouse:down', this._boundMouseDown);
+    canvas.on('path:created', this._boundPathCreated);
+    // 光标跟随统一走 upperCanvasEl 的原生 DOM 事件，不用 Fabric 的合成事件：
+    //   1) 绘图模式下 Fabric 走 _onMouseMoveInDrawingMode，会跳过 mouse:over/out
+    //      的合成，唯独 mouse:move 可用，但它派生自同一个原生 mousemove；
+    //   2) mouse:over 还要求 findTarget 为空才触发，鼠标进入时若压在对象上就不发。
+    // 原生 mousemove 无论绘图模式、无论悬停在什么对象上都稳定触发，且 Fabric
+    // 的 capture 阶段监听会先刷新 _absolutePointer，这里 getPointer 拿到的已是最新值。
+    // 记录元素引用，画布重建后也能从旧元素精确解绑。
+    const el = canvas.upperCanvasEl;
+    if (el) {
+      el.addEventListener('mousemove', this._boundMouseMove);
+      el.addEventListener('mouseenter', this._boundMouseEnter);
+      el.addEventListener('mouseleave', this._boundMouseLeave);
+      this._boundUpperCanvasEl = el;
+    }
+  }
+
+  /**
+   * 解绑光标跟随事件。用记录的 upperCanvasEl 引用，避免画布重建后
+   * 只对「当前」元素解绑、旧元素监听残留的问题。
+   */
+  _unbindEvents() {
     const canvas = this.canvasManager.canvas;
     if (canvas) {
       canvas.off('mouse:down', this._boundMouseDown);
-      canvas.off('mouse:over', this._boundMouseOver);
-      canvas.off('mouse:out', this._boundMouseOut);
       canvas.off('path:created', this._boundPathCreated);
-      canvas.upperCanvasEl?.removeEventListener('mousemove', this._boundMouseMove);
-      canvas.upperCanvasEl?.removeEventListener('mouseleave', this._boundMouseOut);
+    }
+    const el = this._boundUpperCanvasEl || canvas?.upperCanvasEl;
+    if (el) {
+      el.removeEventListener('mousemove', this._boundMouseMove);
+      el.removeEventListener('mouseenter', this._boundMouseEnter);
+      el.removeEventListener('mouseleave', this._boundMouseLeave);
+    }
+    this._boundUpperCanvasEl = null;
+  }
+
+  deactivate() {
+    const canvas = this.canvasManager.canvas;
+    this._unbindEvents();
+    if (canvas) {
       this._removeCursorPreview();
       canvas.isDrawingMode = false;
       canvas.freeDrawingCursor = 'crosshair';
@@ -194,10 +238,33 @@ class BrushModule extends BaseModule {
     const canvas = this.canvasManager.canvas;
     if (!canvas) return;
 
+    // 统一用原生 mousemove 事件走 getPointer（无第二参返回已反算 viewportTransform
+    // 的场景坐标）。Fabric 的 capture 阶段监听会先刷新缓存，这里拿到的是最新值。
     const nativeEvent = e?.e || e;
     if (!nativeEvent) return;
+    this._showCursorAt(canvas.getPointer(nativeEvent));
+  }
 
-    const pointer = canvas.getPointer(nativeEvent);
+  _onMouseEnter(e) {
+    // 鼠标进入画布时立即显示光标预览，无需等待 mousemove。
+    const nativeEvent = e?.e || e;
+    if (!nativeEvent) return;
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) return;
+    this._showCursorAt(canvas.getPointer(nativeEvent));
+  }
+
+  /**
+   * 把光标预览移动到画布坐标 (x, y) 并显示，同时记录最后位置。
+   * 撤销/重做、换图后画布对象被重建时可据此立即恢复，不必等鼠标再动一下。
+   * @param {{x: number, y: number}} pointer
+   */
+  _showCursorAt(pointer) {
+    if (!pointer || typeof pointer.x !== 'number' || typeof pointer.y !== 'number') return;
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) return;
+
+    this._lastPointer = { x: pointer.x, y: pointer.y };
     const preview = this._ensureCursorPreview();
     if (!preview) return;
     preview.set({
@@ -205,15 +272,9 @@ class BrushModule extends BaseModule {
       top: pointer.y,
       visible: true,
     });
+    // 每次都置顶，防止绘制出的新 path 覆盖光标预览。
     canvas.bringToFront(preview);
     this._requestRender();
-  }
-
-  _onMouseOver(e) {
-    // 鼠标进入画布时立即显示光标预览，无需等待 mousemove
-    const nativeEvent = e?.e;
-    if (!nativeEvent) return;
-    this._onMouseMove({ e: nativeEvent });
   }
 
   _onPathCreated(e) {
@@ -360,14 +421,19 @@ class BrushModule extends BaseModule {
 
   /**
    * 画布被重置（撤销/重做、打开新图、导入 ORA）后调用，
-   * 移除旧的光标预览引用，待下次鼠标移动时重建。
+   * 移除旧的光标预览引用，并按最后记录的指针位置立即重建。
    */
   _invalidateCursorPreview() {
     const canvas = this.canvasManager.canvas;
-    if (this._cursorPreview && canvas) {
+    if (this._cursorPreview && canvas && canvas.getObjects().includes(this._cursorPreview)) {
       canvas.remove(this._cursorPreview);
     }
     this._cursorPreview = null;
+    // 撤销/重做、换图或导入 ORA 会清空画布并重建对象，旧预览引用随之失效。
+    // 若鼠标此刻停在画布上，立即按最后位置重建，避免光标指示消失到下次移动。
+    if (this.active && this._lastPointer) {
+      this._showCursorAt(this._lastPointer);
+    }
   }
 
   _hideCursorPreview() {
@@ -388,7 +454,17 @@ class BrushModule extends BaseModule {
   }
 
   _requestRender() {
-    _requestRender(this.canvasManager.canvas);
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) return;
+    // 光标跟随必须即时可见：requestRenderAll 走 requestAnimationFrame，在 uTools/
+    // ZTools 插件窗口里 rAF 会被宿主节流，那一帧迟迟不画，用户看到的就是
+    // 「画笔位置不显示/跟不上」。改用同步 renderAll（AIModule._renderNow 同款）；
+    // 绘图模式下 renderAll 不会清空 contextTop 的笔迹，安全。
+    if (typeof canvas.renderAll === 'function') {
+      canvas.renderAll();
+    } else {
+      _requestRender(canvas);
+    }
   }
 
   _ensureBrush() {

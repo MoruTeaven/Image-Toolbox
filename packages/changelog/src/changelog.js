@@ -76,7 +76,8 @@ export const CHANGELOG = [
         { text: '新增积分页：查看积分余额、累计获得与消耗，以及积分流水', platforms: null }
       ],
       fixed: [
-        { text: '修复保存或复制图片后分辨率与原图不一致的问题', platforms: null }
+        { text: '修复保存或复制图片后分辨率与原图不一致的问题', platforms: null },
+        { text: '修复画笔光标跟随有时不显示的问题', platforms: null }
       ],
       improved: [],
       adjusted: [],
