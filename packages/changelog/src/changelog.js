@@ -79,9 +79,7 @@ export const CHANGELOG = [
         { text: '修复画笔光标跟随有时不显示、绘制及缩放后不跟随的问题，光标改为单个圆圈', platforms: null }
       ],
       improved: [],
-      adjusted: [
-        { text: '正式版暂未开放积分功能，待消耗链路完成后上线', platforms: null }
-      ],
+      adjusted: [],
       removed: []
     }
   },
