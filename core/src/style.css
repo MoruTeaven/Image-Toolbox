@@ -792,6 +792,58 @@ html, body {
   color: #ffffff;
 }
 
+/* ── AI 配置页：状态头图 ── */
+.account-card--ai-status {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.account-card--ai-ready {
+  border-color: color-mix(in srgb, var(--color-accent) 32%, var(--color-border));
+}
+.ai-status-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ai-status-hero__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-accent) 13%, transparent);
+  color: var(--color-accent);
+}
+.ai-status-hero__icon svg {
+  width: 21px;
+  height: 21px;
+}
+.ai-status-hero__title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+.ai-status-hero__body .account-page__theme-row {
+  margin-top: 6px;
+}
+.ai-status-hero__desc {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.ai-status-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+
 /* ── 设置页 AI 配置状态徽标 ── */
 .account-page__ai-status {
   display: inline-flex;
@@ -881,6 +933,26 @@ html, body {
 .account-card--ai-note p {
   line-height: 1.7;
 }
+.ai-note-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ai-note-head__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 9px;
+  background: var(--bg-hover);
+  color: var(--color-text-secondary);
+}
+.ai-note-head__icon svg {
+  width: 17px;
+  height: 17px;
+}
 
 /* ── AI 配置页：提供商主从布局 ── */
 .ai-config-split {
@@ -944,11 +1016,22 @@ html, body {
   font-size: 11px;
 }
 
-.ai-provider-item--in-use .ai-provider-item__name::after {
-  content: " ●";
-  color: var(--bg-active);
-  font-size: 9px;
+.ai-provider-item__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
+  font-size: 10px;
+  font-weight: 600;
   vertical-align: middle;
+}
+.ai-provider-item__badge svg {
+  width: 10px;
+  height: 10px;
 }
 
 /* 缺服务地址的提供商：光看「N 个模型」看不出它其实用不了 */

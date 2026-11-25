@@ -793,7 +793,7 @@ class AccountPage {
             <div class="account-daily__dots">${dots}</div>
             <div class="account-pool__foot">
               <span class="account-pool__hint-icon">${this._creditIcon('clock')}</span>
-              ${exhausted ? '今日额度已用完' : '消费时优先使用'} · 每日 ${resetText} 刷新，未用完不结转
+              ${exhausted ? '今日额度已用完 · ' : ''}每日 ${resetText} 刷新，未用完不结转
             </div>
           </div>
     `;
@@ -809,7 +809,7 @@ class AccountPage {
     const rows = packs.map((p) => {
       const expiry = p.expiresOn
         ? `${this._escapeHTML(this._formatDate(p.expiresOn))} 到期`
-        : '永久有效';
+        : '无到期日';
       const soon = p.expiresOn && this._isExpiringSoon(p.expiresOn);
       return `
             <div class="account-pack-row">
@@ -818,9 +818,6 @@ class AccountPage {
             </div>
           `;
     }).join('');
-    const foot = packs.some((p) => p.expiresOn)
-      ? '按到期日从近到远消耗 · 临期批次优先'
-      : '永久有效，不过期 · 每日额度用完后自动使用';
 
     return `
           <div class="account-pool account-pool--balance">
@@ -830,7 +827,6 @@ class AccountPage {
             </div>
             <div class="account-pool__value"><strong>${this._escapeHTML(balance)}</strong><span class="account-pool__of">积分</span></div>
             ${rows ? `<div class="account-pack-list">${rows}</div>` : ''}
-            <div class="account-pool__foot">${foot}</div>
           </div>
     `;
   }
@@ -841,6 +837,9 @@ class AccountPage {
       daily: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
       pack: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg>',
       clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+      check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg>',
+      spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>',
+      shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
     };
     return icons[name] || '';
   }
@@ -1217,7 +1216,7 @@ class AccountPage {
     if (badge) {
       badge.classList.toggle('account-page__ai-status--ready', status.ready);
       badge.classList.toggle('account-page__ai-status--unavailable', !status.ready);
-      badge.textContent = status.ready ? '云端 AI 已就绪' : '云端 AI 未配置';
+      badge.textContent = status.ready ? '已就绪' : '未配置';
     }
     const reasonEl = this._el.querySelector('[data-ai-status-reason]');
     if (reasonEl) {
@@ -1271,13 +1270,15 @@ class AccountPage {
         const meta = [
           `${provider.models.length} 个模型`,
           provider.baseUrl ? '' : '缺地址',
-          inUse ? '使用中' : '',
           provider.hasKey ? '' : '缺 Key'
         ].filter(Boolean).join(' · ');
+        const badge = inUse
+          ? `<span class="ai-provider-item__badge">${this._creditIcon('check')} 使用中</span>`
+          : '';
         return `
           <button type="button" class="ai-provider-item${provider.id === editingId ? ' ai-provider-item--editing' : ''}${inUse ? ' ai-provider-item--in-use' : ''}${provider.baseUrl ? '' : ' ai-provider-item--incomplete'}"
                   data-ai-provider-open="${provider.id}">
-            <span class="ai-provider-item__name">${this._escapeHTML(provider.label || '未命名服务商')}</span>
+            <span class="ai-provider-item__name">${this._escapeHTML(provider.label || '未命名服务商')}${badge}</span>
             <span class="ai-provider-item__meta">${this._escapeHTML(meta)}</span>
           </button>
         `;
@@ -1342,19 +1343,23 @@ class AccountPage {
       : '<div class="ai-config-detail ai-config-detail--empty">在左侧选择或添加一个提供商</div>';
 
     return `
-      <div class="account-card account-card--ai-status">
-        <div class="account-card__label">AI</div>
-        <div class="account-card__value">配置状态</div>
-        <p>配置完成后，在编辑器左侧选「AI 修图」工具，于右侧栏直接写提示词即可让 AI 编辑当前图片。</p>
-        <div class="account-page__theme-row">
-          <span class="account-page__ai-status ${ready ? 'account-page__ai-status--ready' : 'account-page__ai-status--unavailable'}"
-                data-ai-status-badge>
-            ${ready ? '云端 AI 已就绪' : '云端 AI 未配置'}
-          </span>
-          ${ready ? `<span class="account-page__ai-key-hint">当前：${this._escapeHTML(config.model)}</span>` : ''}
+      <div class="account-card account-card--ai-status ${ready ? 'account-card--ai-ready' : ''}">
+        <div class="ai-status-hero">
+          <span class="ai-status-hero__icon">${this._creditIcon('spark')}</span>
+          <div class="ai-status-hero__body">
+            <div class="ai-status-hero__title">云端 AI</div>
+            <div class="account-page__theme-row">
+              <span class="account-page__ai-status ${ready ? 'account-page__ai-status--ready' : 'account-page__ai-status--unavailable'}"
+                    data-ai-status-badge>
+                ${ready ? '已就绪' : '未配置'}
+              </span>
+              ${ready ? `<span class="account-page__ai-key-hint">当前模型：${this._escapeHTML(config.model)}</span>` : ''}
+            </div>
+          </div>
         </div>
+        <p class="ai-status-hero__desc">配置完成后，在编辑器左侧选「AI 修图」工具，于右侧栏写提示词即可让 AI 编辑当前图片。</p>
         ${ready ? '' : `<p class="ai-config-status-reason" data-ai-status-reason>${this._escapeHTML(status.message)}</p>`}
-        <div class="account-page__theme-row">
+        <div class="ai-status-actions">
           <button class="account-page__btn account-page__btn--primary" type="button" data-ai-action="test">测试连接</button>
           <button class="account-page__btn" type="button" data-ai-action="clear">清空配置</button>
           <span class="account-page__ai-test-result" data-ai-test-result></span>
@@ -1392,8 +1397,13 @@ class AccountPage {
       </div>
 
       <div class="account-card account-card--ai-note">
-        <div class="account-card__label">隐私</div>
-        <div class="account-card__value">数据去向</div>
+        <div class="ai-note-head">
+          <span class="ai-note-head__icon">${this._creditIcon('shield')}</span>
+          <div>
+            <div class="account-card__label">隐私</div>
+            <div class="account-card__value">数据去向</div>
+          </div>
+        </div>
         <p>云端 AI 只会把你填写的服务地址收到的一张 ≤777px 压缩预览图与提示词发给该服务商；原图不会上传，API Key 只保存在本机、只发往你填写的地址。</p>
       </div>
     `;
