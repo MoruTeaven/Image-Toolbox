@@ -41,5 +41,8 @@ PLATFORM_ADAPTERS.md
 # ESLint 临时产物（违规报告，可由 eslint -f json 重新生成）
 /dsh-lint-*
 
+# ztools publish 临时产物（只在发布时存在，不入库）
+clients/ztools/CHANGELOG.md
+
 # pnpm 本地元数据缓存
 /.pnpm-meta/
