@@ -735,23 +735,61 @@ class AccountPage {
 
     return `
       <div class="account-credits">
-        ${this._renderCreditsHero(credits)}
-        ${this._renderDailyCreditsCard(credits)}
+        ${this._renderCreditPools(credits)}
         ${this._renderCreditsStats(credits)}
         ${this._renderCreditsTxCard()}
       </div>
     `;
   }
 
-  /** 积分余额主卡 */
-  _renderCreditsHero(credits) {
+  /** 两个积分池并列展示：每日额度池（当日有效）+ 加量包池（永久有效） */
+  _renderCreditPools(credits) {
+    return `
+        <div class="account-pools">
+          ${this._renderDailyPool(credits)}
+          ${this._renderBalancePool(credits)}
+        </div>
+    `;
+  }
+
+  /**
+   * 每日额度池：当日有效、UTC 零点刷新（换算到本地时区），未用完不结转。
+   * 用 7 格进度点直观展示剩余额度；兼容旧后端（无 dailyCredits/dailyResetAt）时不渲染。
+   */
+  _renderDailyPool(credits) {
+    const hasDaily = credits.dailyCredits !== undefined && credits.dailyResetAt;
+    if (!hasDaily) {
+      return '';
+    }
+    const remaining = Number(credits.dailyCredits) || 0;
+    const total = Number(credits.dailyGrantAmount) || 7;
+    const resetText = this._escapeHTML(this._formatTime(credits.dailyResetAt));
+    const dots = Array.from({ length: total }, (_, i) =>
+      `<span class="account-daily__dot ${i < remaining ? 'account-daily__dot--on' : ''}"></span>`
+    ).join('');
+    const exhausted = remaining <= 0;
+
+    return `
+          <div class="account-pool account-pool--daily ${exhausted ? 'account-pool--exhausted' : ''}">
+            <div class="account-pool__label">每日免费额度</div>
+            <div class="account-pool__value"><strong>${this._escapeHTML(credits.dailyCredits)}</strong><span class="account-pool__of">/ ${this._escapeHTML(credits.dailyGrantAmount || '7.00')}</span></div>
+            <div class="account-daily__dots">${dots}</div>
+            <div class="account-pool__foot">
+              ${exhausted ? '今日额度已用完' : '消费时优先使用'} · 每日 ${resetText} 刷新，未用完不结转
+            </div>
+          </div>
+    `;
+  }
+
+  /** 加量包池：永久余额，不过期，每日额度用完后自动使用 */
+  _renderBalancePool(credits) {
     const balance = credits.balance || '0.00';
     return `
-        <div class="account-card account-card--credits-hero">
-          <div class="account-card__label">积分余额</div>
-          <div class="account-credits__balance">${this._escapeHTML(balance)}</div>
-          <div class="account-credits__balance-unit">可用于 AI 修图等付费功能</div>
-        </div>
+          <div class="account-pool account-pool--balance">
+            <div class="account-pool__label">加量包</div>
+            <div class="account-pool__value"><strong>${this._escapeHTML(balance)}</strong><span class="account-pool__of">积分</span></div>
+            <div class="account-pool__foot">永久有效，不过期 · 每日额度用完后自动使用</div>
+          </div>
     `;
   }
 
@@ -768,37 +806,6 @@ class AccountPage {
           <div class="account-credits__stat">
             <span class="account-credits__stat-label">累计消耗</span>
             <span class="account-credits__stat-value">${this._escapeHTML(spent)}</span>
-          </div>
-        </div>
-    `;
-  }
-
-  /**
-   * 每日免费额度卡：当日有效、UTC 零点刷新（换算到本地时区），未用完不结转。
-   * 用 7 格进度点直观展示剩余额度；兼容旧后端（无 dailyCredits/dailyResetAt）时不渲染。
-   */
-  _renderDailyCreditsCard(credits) {
-    const hasDaily = credits.dailyCredits !== undefined && credits.dailyResetAt;
-    if (!hasDaily) {
-      return '';
-    }
-    const remaining = Number(credits.dailyCredits) || 0;
-    const total = Number(credits.dailyGrantAmount) || 7;
-    const resetText = this._escapeHTML(this._formatTime(credits.dailyResetAt));
-    const dots = Array.from({ length: total }, (_, i) =>
-      `<span class="account-daily__dot ${i < remaining ? 'account-daily__dot--on' : ''}"></span>`
-    ).join('');
-    const exhausted = remaining <= 0;
-
-    return `
-        <div class="account-card account-daily ${exhausted ? 'account-daily--exhausted' : ''}">
-          <div class="account-daily__head">
-            <span class="account-daily__title">今日免费额度</span>
-            <span class="account-daily__count"><strong>${this._escapeHTML(credits.dailyCredits)}</strong> / ${this._escapeHTML(credits.dailyGrantAmount || '7.00')}</span>
-          </div>
-          <div class="account-daily__dots">${dots}</div>
-          <div class="account-daily__foot">
-            ${exhausted ? '今日额度已用完' : '消费时优先使用，不用余额'} · 每日 ${resetText} 刷新，未用完不结转
           </div>
         </div>
     `;
@@ -824,14 +831,13 @@ class AccountPage {
           <div class="account-credits__stat">
             ${bar('50%')}${bar('70%')}
           </div>`;
+    const pool = (withDots) => `
+          <div class="account-pool">
+            ${bar('50%')}${bar('40%')}${withDots ? `<span class="account-skeleton__dots">${Array.from({ length: 7 }, () => '<i></i>').join('')}</span>` : ''}${bar('80%')}
+          </div>`;
     return `
       <div class="account-credits account-credits--skeleton" aria-busy="true" aria-label="积分加载中">
-        <div class="account-card account-card--credits-hero">
-          ${bar('30%')}${bar('45%')}${bar('24%')}
-        </div>
-        <div class="account-card account-daily">
-          ${bar('40%')}<span class="account-skeleton__dots">${Array.from({ length: 7 }, () => '<i></i>').join('')}</span>${bar('80%')}
-        </div>
+        <div class="account-pools">${pool(true)}${pool(false)}</div>
         <div class="account-credits__stats">${stat()}${stat()}</div>
         <div class="account-card">
           <div class="account-card__header">${bar('30%')}${bar('16%')}</div>

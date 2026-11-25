@@ -73,16 +73,13 @@ export const CHANGELOG = [
     changes: {
       added: [
         { text: '新增账号自动登录：打开插件自动恢复登录状态，登录过期自动续期，网络不稳时不再被误登出', platforms: null },
-        { text: '新增积分页：查看积分余额、累计获得与消耗，以及积分流水', platforms: null }
+        { text: '新增积分功能：每日免费额度与加量包两个积分池，可查看余额与流水', platforms: null }
       ],
       fixed: [
         { text: '修复保存或复制图片后分辨率与原图不一致的问题', platforms: null },
         { text: '修复画笔光标跟随有时不显示的问题', platforms: null }
       ],
-      improved: [
-        { text: '每日免费额度改为当天有效、每天零点自动刷新，未用完不结转，消费时优先使用', platforms: null },
-        { text: '优化积分页：每日额度进度直观可见，加载过程改为骨架屏', platforms: null }
-      ],
+      improved: [],
       adjusted: [],
       removed: []
     }
