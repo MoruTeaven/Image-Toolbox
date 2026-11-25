@@ -472,7 +472,7 @@ class IdentityClient {
     return data;
   }
 
-  /** 查询积分概览：余额 / 累计获得 / 累计消耗 / 今日额度发放日期 */
+  /** 查询积分概览：余额 / 累计获得 / 累计消耗 / 当日免费额度（UTC 零点刷新） */
   async getCredits() {
     return this._apiFetch('/api/credits');
   }

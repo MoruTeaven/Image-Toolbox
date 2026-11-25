@@ -79,7 +79,9 @@ export const CHANGELOG = [
         { text: '修复保存或复制图片后分辨率与原图不一致的问题', platforms: null },
         { text: '修复画笔光标跟随有时不显示的问题', platforms: null }
       ],
-      improved: [],
+      improved: [
+        { text: '每日免费额度改为当天有效、每天零点自动刷新，未用完不结转，消费时优先使用', platforms: null }
+      ],
       adjusted: [],
       removed: []
     }

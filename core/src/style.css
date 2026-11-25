@@ -4089,6 +4089,16 @@ html, body {
   color: var(--color-text-secondary);
   line-height: 1.6;
 }
+.account-credits__daily-count {
+  display: block;
+  color: var(--color-accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+.account-credits__daily-reset {
+  display: block;
+  opacity: 0.85;
+}
 .account-credits__stats {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -690,7 +690,7 @@ class AccountPage {
         <div class="account-card__label">积分</div>
         <div class="account-card__body">
           <h2>登录后查看积分</h2>
-          <p>登录后可以查看积分余额与流水，每天还可领取 7 积分免费额度（UTC 零点重置）。</p>
+          <p>登录后可以查看积分余额与流水，每天有 7 积分免费额度，零点自动刷新、未用完不结转。</p>
           <button class="account-page__btn account-page__btn--primary" type="button" data-action="login">登录 / 注册</button>
         </div>
       </div>
@@ -717,7 +717,7 @@ class AccountPage {
           <div class="account-card__label">积分</div>
           <div class="account-card__body">
             <h2>积分功能即将上线</h2>
-            <p>积分余额与流水正在准备中，更新后即可查看。每天还可领取 7 积分免费额度。</p>
+            <p>积分余额与流水正在准备中，更新后即可查看。每天有 7 积分免费额度，零点自动刷新。</p>
           </div>
         </div>
       `;
@@ -739,10 +739,7 @@ class AccountPage {
     const balance = credits.balance || '0.00';
     const earned = credits.totalEarned || '0.00';
     const spent = credits.totalSpent || '0.00';
-    const dailyDate = credits.dailyGrantDate || null;
-    const dailyHint = dailyDate
-      ? `今日免费额度已于 ${this._escapeHTML(dailyDate)}（UTC）到账`
-      : '今日免费额度尚未到账，查看后自动发放';
+    const dailyHint = this._renderDailyCreditsHint(credits);
 
     return `
       <div class="account-credits">
@@ -750,7 +747,7 @@ class AccountPage {
           <div class="account-card__label">积分余额</div>
           <div class="account-credits__balance">${this._escapeHTML(balance)}</div>
           <div class="account-credits__balance-unit">积分</div>
-          <div class="account-credits__daily">${this._escapeHTML(dailyHint)}</div>
+          ${dailyHint}
         </div>
 
         <div class="account-credits__stats">
@@ -773,6 +770,26 @@ class AccountPage {
         </div>
       </div>
     `;
+  }
+
+  /**
+   * 每日额度提示：当日有效、UTC 零点刷新，刷新时间换算到用户本地时区。
+   * 兼容旧后端（无 dailyCredits/dailyResetAt）：不显示该区块，不做错误假设。
+   */
+  _renderDailyCreditsHint(credits) {
+    const hasDaily = credits.dailyCredits !== undefined && credits.dailyResetAt;
+    if (!hasDaily) {
+      return '';
+    }
+    const remaining = this._escapeHTML(credits.dailyCredits);
+    const total = this._escapeHTML(credits.dailyGrantAmount || '7.00');
+    const resetText = this._escapeHTML(this._formatTime(credits.dailyResetAt));
+    return `
+          <div class="account-credits__daily">
+            <span class="account-credits__daily-count">今日免费额度 ${remaining} / ${total}</span>
+            <span class="account-credits__daily-reset">每日 ${resetText} 自动刷新，未用完不结转</span>
+          </div>
+        `;
   }
 
   _renderCreditsTxList() {
