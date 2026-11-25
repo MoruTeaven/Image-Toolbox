@@ -1,6 +1,6 @@
 {
   "name": "img-toolbox",
-  "version": "3.0.1",
+  "version": "3.0.2-dev",
   "private": true,
   "license": "MIT",
   "description": "图片工具箱 — 多端图片编辑工具（uTools / ZTools / Web）",
@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@esbuild/win32-x64": "0.28.2",
-    "@moruteaven/identity-sdk": "0.3.4",
+    "@moruteaven/identity-sdk": "0.7.0-dev.0",
     "ag-psd": "^31.0.3",
     "fast-xml-parser": "^5.11.2",
     "fflate": "^0.8.3"

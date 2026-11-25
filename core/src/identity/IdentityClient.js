@@ -290,6 +290,12 @@ class IdentityClient {
     return this._sdk.verifyMagicLink(token);
   }
 
+  /** 用邮件里的 7 位短验证码登录（码即凭证，uTools 场景推荐） */
+  async verifyMagicCode(code) {
+    await this.init();
+    return this._sdk.verifyMagicCode(code);
+  }
+
   // ═══════════════════════════════════════
   // uTools 登录
   // ═══════════════════════════════════════

@@ -50,7 +50,7 @@
  * 修改此处即代表发版意图，其余引用点由构建期校验强制同步。
  * @type {string}
  */
-export const APP_VERSION = '3.0.1';
+export const APP_VERSION = '3.0.2-dev';
 
 /**
  * 版本记录条目结构
@@ -67,6 +67,19 @@ export const APP_VERSION = '3.0.1';
  * @type {ChangelogRecord[]}
  */
 export const CHANGELOG = [
+  {
+    version: '3.0.2-dev',
+    date: '2026-11-26',
+    changes: {
+      added: [
+        { text: '邮箱登录改用 7 位验证码：输入邮件里的验证码即可登录，不再需要从链接里复制一长串字符', platforms: null }
+      ],
+      fixed: [],
+      improved: [],
+      adjusted: [],
+      removed: []
+    }
+  },
   {
     version: '3.0.1',
     date: '2026-11-25',

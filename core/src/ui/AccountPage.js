@@ -2143,11 +2143,11 @@ class AccountPage {
           </div>
           ${magicLinkSent ? `
             <p class="login-modal__hint" style="text-align:center;color:var(--accent-color,#597EF7);">
-              登录链接已发送到您的邮箱，请查收邮件并点击链接完成登录。
+              验证码已发送到您的邮箱，请在下方输入 7 位验证码完成登录。
             </p>
             <div class="login-modal__field">
-              <label>或手动输入链接中的 token</label>
-              <input type="text" id="login-token-input" placeholder="粘贴 Magic Link 中的 token" autocomplete="off">
+              <label>邮箱验证码（7 位）</label>
+              <input type="text" id="login-token-input" placeholder="输入邮件中的 7 位验证码" autocomplete="one-time-code" maxlength="7" style="letter-spacing:4px;font-size:18px;text-align:center;">
             </div>
             <button class="login-modal__btn login-modal__btn--primary" type="button" data-modal-action="verify-magic-link">验证并登录</button>
           ` : `
@@ -2212,8 +2212,8 @@ class AccountPage {
       this._magicLinkEmail = email;
       await this._identity.requestMagicLink(email);
       this._magicLinkSending = 'done';
-      eventBus.emit('toast:show', { message: '登录链接已发送，请查收邮件', type: 'success' });
-      this._openLoginModal(); // 重新渲染弹窗，显示 token 输入框
+      eventBus.emit('toast:show', { message: '验证码已发送到您的邮箱，请查收', type: 'success' });
+      this._openLoginModal(); // 重新渲染弹窗，显示验证码输入框
     } catch (e) {
       eventBus.emit('toast:show', { message: e?.message || '发送失败', type: 'error' });
       this._magicLinkSending = false;
@@ -2223,13 +2223,20 @@ class AccountPage {
     }
   }
 
-  async _handleVerifyMagicLink(token) {
-    if (!token || !token.trim()) {
-      eventBus.emit('toast:show', { message: '请输入登录链接中的 token', type: 'error' });
+  async _handleVerifyMagicLink(code) {
+    if (!code || !code.trim()) {
+      eventBus.emit('toast:show', { message: '请输入邮件中的 7 位验证码', type: 'error' });
       return;
     }
     try {
-      await this._identity.verifyMagicLink(token.trim());
+      // 用 7 位短验证码登录（码即凭证）。如果用户输入的是历史邮件里的长 token，
+      // 长度不是 7 位，自动回退到旧的 token 验证，保持向后兼容。
+      const value = code.trim();
+      if (/^[23456789A-HJ-NP-Za-hj-np-z]{7}$/.test(value)) {
+        await this._identity.verifyMagicCode(value);
+      } else {
+        await this._identity.verifyMagicLink(value);
+      }
       this._closeLoginModal();
       this._magicLinkSending = false;
       this._magicLinkEmail = '';
