@@ -1,261 +1,132 @@
 /**
  * 画笔光标跟随门禁（独立门禁，pnpm build 不调用）。
  *
- * 守护「画笔光标有时候不显示」这一类回归。历史上这个 bug 反复出现，根因不止一种：
- *   A) _requestRender 走 requestRenderAll（rAF），在 uTools/ZTools 被宿主节流，
- *      光标那一帧迟迟不画；
- *   B) 依赖 Fabric 的 mouse:over/out 驱动显隐，但绘图模式下这两个合成事件被跳过，
- *      mouse:over 还要求 findTarget 为空——鼠标已在画布内切到画笔、或压在对象上时
- *      永不显示；
- *   C) 撤销/重做、换图后画布对象重建，旧预览引用失效，鼠标静止时不再恢复；
- *   D) 重复 activate / 画布重建后事件绑定丢失或重复。
+ * 光标指示的演进：早期用 Fabric 画布对象（Group + 3 个 Circle），反复出问题——
+ * 缩放后对象坐标正确、visible=true，但 Fabric 在 isDrawingMode 下不再画它
+ * （真机逐像素扫描：缩放后整张画布 0 个红色像素），且外圈+主圈看起来是
+ * 「两个圈」。现改为 DOM 覆盖层（单个圆圈），用原生 clientX/clientY 直接定位，
+ * 与画布缩放/对象缓存/历史序列化彻底解耦。
  *
- * 本脚本用最小桩件直接驱动 BrushModule 的光标相关方法，断言上述修复点：
- *   1. 光标跟随走同步 renderAll，不再依赖 requestRenderAll；
- *   2. mouseenter 立即显示，不依赖 mousemove / Fabric 合成事件；
- *   3. 画布重建（canvas:restored）后立即按最后指针位置重建预览，无需鼠标再动；
- *   4. 画布对象被清空、旧引用失效时 _ensureCursorPreview 能自愈重建；
- *   5. 反复 activate/deactivate 不重复绑定、不残留监听；
- *   6. mouseleave 隐藏，mousemove 又能恢复显示。
+ * 本脚本用桩件驱动 BrushModule，守护：
+ *   1. 光标是单个 DOM 元素（不是 Fabric 对象，不会出现两个圈）；
+ *   2. mousemove/mouseenter 用 clientX/clientY 定位并立即可见；
+ *   3. 缩放（canvas:zoomChanged）只改直径，不改变位置、不隐藏、不新增元素；
+ *   4. mouseleave 隐藏，再次 mousemove 恢复；
+ *   5. 切走工具 deactivate 清理元素与监听，重复 activate 不重复绑定；
+ *   6. 换色/改粗细同步光圈样式；直径随缩放放大。
+ *
+ * 真机 CDP + 像素级验证见 scripts/probe-brush-real.mjs。
  *
  * 用法：node scripts/verify-brush-cursor.mjs
- * 退出码 0 = 全部通过；非 0 = 有断言失败。
  */
 
 import { installDom } from './test-env.mjs';
 
 installDom();
 
-// ── 最小 fabric 桩件：只需覆盖 BrushModule 光标路径用到的成员 ──
-
-class StubObject {
-  constructor(props = {}) {
-    this.left = 0;
-    this.top = 0;
-    this.visible = false;
-    this.objectCaching = false;
-    Object.assign(this, props);
-  }
-  set(props, value) {
-    // Fabric 的 set 既支持 set({a:1}) 也支持 set('a', 1)，桩件两者都要覆盖。
-    if (typeof props === 'string') { this[props] = value; } else { Object.assign(this, props); }
-    return this;
-  }
-  setCoords() { this._coordsReady = true; }
-  getObjects() { return this._objects || []; }
-}
-
-class StubGroup extends StubObject {
-  constructor(objects = [], props = {}) {
-    super(props);
-    this._objects = objects;
-  }
-}
-
-class StubUpperCanvasEl {
-  constructor() { this._listeners = new Map(); }
-  addEventListener(type, fn) {
-    if (!this._listeners.has(type)) { this._listeners.set(type, []); }
-    this._listeners.get(type).push(fn);
-  }
-  removeEventListener(type, fn) {
-    const fns = this._listeners.get(type);
-    if (!fns) { return; }
-    this._listeners.set(type, fns.filter(f => f !== fn));
-  }
-  fire(type, e = {}) {
-    for (const fn of (this._listeners.get(type) || [])) { fn(e); }
-  }
-  listenerCount(type) { return (this._listeners.get(type) || []).length; }
-  totalListeners() {
-    let n = 0;
-    for (const fns of this._listeners.values()) { n += fns.length; }
-    return n;
-  }
-}
-
-class StubCanvas {
-  constructor() {
-    this.upperCanvasEl = new StubUpperCanvasEl();
-    this._objects = [];
-    this._fabricListeners = new Map();
-    this.renderAllCount = 0;
-    this.requestRenderAllCount = 0;
-    this.freeDrawingBrush = null;
-    this.isDrawingMode = false;
-    // 模拟 Fabric 的 pointer 缓存：getPointer 无第二参时优先返回 _absolutePointer。
-    this._absolutePointer = null;
-    this._pointer = null;
-    // 模拟 viewportTransform，用于验证缩放后光标重投影。
-    this._vpt = [1, 0, 0, 1, 0, 0];
-  }
-  on(type, fn) {
-    if (!this._fabricListeners.has(type)) { this._fabricListeners.set(type, []); }
-    this._fabricListeners.get(type).push(fn);
-  }
-  off(type, fn) {
-    const fns = this._fabricListeners.get(type);
-    if (!fns) { return; }
-    this._fabricListeners.set(type, fns.filter(f => f !== fn));
-  }
-  fabricListenerCount(type) { return (this._fabricListeners.get(type) || []).length; }
-  add(obj) { this._objects.push(obj); }
-  remove(obj) {
-    const i = this._objects.indexOf(obj);
-    if (i >= 0) { this._objects.splice(i, 1); }
-  }
-  clear() { this._objects = []; }
-  getObjects() { return this._objects.concat(); }
-  bringToFront(obj) {
-    this.remove(obj);
-    this._objects.push(obj);
-  }
-  getPointer(nativeEvent, ignoreVpt) {
-    // 复刻 fabric 5.3 的关键行为：缓存存在时优先返回缓存（可能 stale），
-    // 清掉缓存后按当前原生事件重算。这样测试才能真正抓住「绘制中光标不跟随」。
-    if (this._absolutePointer) { return this._absolutePointer; }
-    const p = nativeEvent?.__canvasPoint || this.__pointer || { x: 0, y: 0 };
-    // 模拟 viewportTransform：client 点先经 vpt 反算到场景坐标。
-    if (!ignoreVpt) {
-      const v = this._vpt;
-      return { x: (p.x - v[4]) / v[0], y: (p.y - v[5]) / v[3] };
-    }
-    return p;
-  }
-  renderAll() { this.renderAllCount++; }
-  requestRenderAll() { this.requestRenderAllCount++; }
-  discardActiveObject() {}
-}
-
-globalThis.fabric = {
-  Group: StubGroup,
-  Circle: class Circle extends StubObject {},
-  PencilBrush: class PencilBrush {
-    constructor() { this.color = null; this.width = null; }
-  },
-};
-
-// ── 加载被测模块 ──
-
 const { default: eventBus } = await import('../core/src/EventBus.js');
 const { default: BrushModule } = await import('../core/src/modules/BrushModule.js');
+const { setDomPort } = await import('../core/src/ports/DomPort.js');
+
+// ── 注入测试 DomPort：createElement 返回可用 style/append 的桩件 ──
+const created = [];
+setDomPort({
+  createElement(tag) {
+    const el = {
+      tagName: tag,
+      style: { setProperty(k, v) { this[k] = String(v); } },
+      dataset: {},
+      parentNode: null,
+    };
+    created.push(el);
+    return el;
+  },
+  getBody() {
+    return {
+      appendChild(child) { child.parentNode = this; },
+      removeChild(child) { child.parentNode = null; },
+    };
+  },
+});
+
+// 最小 fabric 桩件（_ensureBrush 需要 PencilBrush）
+globalThis.fabric = { PencilBrush: class { constructor(c) { this.canvas = c; } } };
+
+// 最小 canvas 桩件
+const upper = {
+  _l: new Map(),
+  addEventListener(t, f) { if (!this._l.has(t)) this._l.set(t, []); this._l.get(t).push(f); },
+  removeEventListener(t, f) { const a = this._l.get(t); if (a) this._l.set(t, a.filter(x => x !== f)); },
+  fire(t, e) { for (const f of (this._l.get(t) || [])) f(e); },
+  count(t) { return (this._l.get(t) || []).length; },
+};
+const canvas = {
+  upperCanvasEl: upper,
+  isDrawingMode: false,
+  freeDrawingBrush: null,
+  getObjects() { return []; },
+  renderAll() {},
+  discardActiveObject() {},
+  on() {}, off() {},
+};
+const cm = { canvas, zoomLevel: 1 };
+const hm = { saveState() {} };
 
 const failures = [];
 let passed = 0;
-
 function check(name, condition, detail = '') {
-  if (condition) {
-    passed += 1;
-    console.log(`  ✓ ${name}`);
-  } else {
-    failures.push(`${name}${detail ? ` — ${detail}` : ''}`);
-    console.log(`  ✗ ${name}${detail ? ` — ${detail}` : ''}`);
-  }
+  if (condition) { passed++; console.log(`  ✓ ${name}`); }
+  else { failures.push(`${name}${detail ? ' — ' + detail : ''}`); console.error(`  ✗ ${name}${detail ? ' — ' + detail : ''}`); }
 }
 
-const canvas = new StubCanvas();
-const canvasManager = { canvas };
-const history = { saveState() {} };
-const brush = new BrushModule(canvasManager, history);
-
 eventBus.clear();
+const brush = new BrushModule(cm, hm);
 brush.activate();
 
-const el = canvas.upperCanvasEl;
-const preview = () => brush._cursorPreview;
+const el = brush._cursorEl;
+check('光标是单个 DOM 元素', !!el && created.filter(e => e.dataset.brushCursor === '1').length === 1);
+check('光标 DOM 用 fixed 定位', el?.style.position === 'fixed');
+check('光标只有一层圆圈（非 Fabric Group）', el?.tagName === 'div' && !('getObjects' in (el || {})));
 
-// ── 1. mouseenter 立即显示，无需 mousemove ──
-canvas.__pointer = { x: 120, y: 80 };
-el.fire('mouseenter', { clientX: 120, clientY: 80 });
-check('mouseenter 立即创建并显示光标预览', !!preview() && preview().visible === true);
-check('光标定位到指针位置', preview() && preview().left === 120 && preview().top === 80);
+// mousemove 定位到 client 坐标
+upper.fire('mousemove', { clientX: 320, clientY: 240 });
+check('mousemove 后立即显示', el.style.display === 'block');
+check('mousemove 定位到 clientX/clientY', el.style.left === '320px' && el.style.top === '240px');
+check('记录最后鼠标屏幕坐标', brush._lastClientPoint?.clientX === 320 && brush._lastClientPoint?.clientY === 240);
 
-// ── 2. 光标跟随走同步 renderAll，不用 requestRenderAll ──
-const rendersBefore = canvas.renderAllCount;
-const asyncBefore = canvas.requestRenderAllCount;
-canvas.__pointer = { x: 200, y: 160 };
-el.fire('mousemove', { clientX: 200, clientY: 160 });
-check('mousemove 后光标位置更新', preview().left === 200 && preview().top === 160);
-check('光标跟随触发同步 renderAll', canvas.renderAllCount > rendersBefore);
-check('光标跟随不依赖 requestRenderAll', canvas.requestRenderAllCount === asyncBefore);
+// 缩放：只改直径，不改位置、不隐藏、不新增元素
+const beforeW = el.style.width;
+const beforeLeft = el.style.left;
+cm.zoomLevel = 1.5;
+eventBus.emit('canvas:zoomChanged', 1.5);
+check('缩放后光标仍显示', el.style.display === 'block');
+check('缩放后位置不变（贴着未动的鼠标）', el.style.left === beforeLeft);
+check('缩放后直径随缩放变大', parseFloat(el.style.width) > parseFloat(beforeW),
+  `before=${beforeW}, after=${el.style.width}`);
+check('缩放不新增光标元素', created.filter(e => e.dataset.brushCursor === '1').length === 1);
 
-// ── 3. mouseleave 隐藏，mousemove 恢复 ──
-el.fire('mouseleave', {});
-check('mouseleave 隐藏光标', preview().visible === false);
-canvas.__pointer = { x: 210, y: 170 };
-el.fire('mousemove', { clientX: 210, clientY: 170 });
-check('回到画布后 mousemove 恢复显示', preview().visible === true);
+// mouseleave 隐藏，mousemove 恢复
+upper.fire('mouseleave', {});
+check('mouseleave 隐藏光标', el.style.display === 'none');
+upper.fire('mousemove', { clientX: 400, clientY: 300 });
+check('mousemove 恢复显示', el.style.display === 'block');
+check('恢复后定位到新坐标', el.style.left === '400px' && el.style.top === '300px');
 
-// ── 4. 画布重建（canvas:restored）后立即按最后位置恢复，无需鼠标再动 ──
-const oldPreview = preview();
-canvas.clear(); // 模拟 loadFromJSON 清空对象
-check('画布清空后旧预览已不在画布上', canvas.getObjects().indexOf(oldPreview) === -1);
-eventBus.emit('canvas:restored');
-check('canvas:restored 后重建预览引用', !!preview() && preview() !== oldPreview);
-check('重建后立即可见，无需鼠标移动', preview().visible === true);
-check('重建位置沿用最后指针', preview().left === 210 && preview().top === 170);
-check('重建后的预览已加入画布', canvas.getObjects().includes(preview()));
+// 换色/改粗细
+brush.setColor('#1677ff');
+check('换色同步光圈边框', el.style['border-color'] === '#1677ff', el.style['border-color']);
+brush.setWidth(12);
+check('改粗细同步光圈直径', parseFloat(el.style.width) >= 12, el.style.width);
 
-// ── 5. 缩放后重投影：场景坐标随 vpt 变化，屏幕位置仍贴住鼠标 ──
-// 这是「滚轮缩放后光标跟随没有了」的根因：光标存的是场景坐标，缩放改变
-// viewportTransform 后必须用鼠标屏幕坐标重新反算，否则光标越飘越远。
-canvas.clear();
-canvas._absolutePointer = null;
-canvas._vpt = [1, 0, 0, 1, 0, 0];
-canvas.__pointer = { x: 305, y: 280 };
-el.fire('mousemove', { clientX: 305, clientY: 280, __canvasPoint: { x: 305, y: 280 } });
-check('缩放前光标在鼠标位置 305,280', preview().left === 305 && preview().top === 280);
-// 模拟滚轮放大：vpt 变成 1.2 倍并带平移偏移
-canvas.clear();
-canvas._vpt = [1.2, 0, 0, 1.2, -80, -60];
-eventBus.emit('canvas:zoomChanged', 1.2);
-const expX = (305 - (-80)) / 1.2; // 320.8333
-const expY = (280 - (-60)) / 1.2; // 283.3333
-check('canvas:zoomChanged 后预览重建且可见', !!preview() && preview().visible === true);
-check(
-  '缩放后光标场景坐标按新 vpt 重算',
-  Math.abs(preview().left - expX) < 0.01 && Math.abs(preview().top - expY) < 0.01,
-  `实际 ${preview().left},${preview().top} 期望 ${expX.toFixed(2)},${expY.toFixed(2)}`
-);
-// 投影回屏幕应贴住鼠标（client 305,280）
-const screenX = preview().left * 1.2 - 80;
-const screenY = preview().top * 1.2 - 60;
-check(
-  '缩放后光标屏幕位置贴住鼠标（漂移 < 1px）',
-  Math.abs(screenX - 305) < 1 && Math.abs(screenY - 280) < 1,
-  `屏幕 ${screenX.toFixed(1)},${screenY.toFixed(1)} vs 鼠标 305,280`
-);
-
-// ── 5.5 绘制中 pointer 缓存 stale：光标必须跟随最新位置，不卡在旧值 ──
-// 这是曾经漏掉、导致用户仍看不到跟随的真 bug：绘制时 Fabric 的 _absolutePointer
-// 缓存是上一帧旧值，getPointer 无第二参会优先返回它。修复通过先清缓存强制重算，
-// 避开 stale。若这段清理被去掉，本断言必须变红（下面会做变异自验）。
-canvas.isDrawingMode = true;
-canvas._vpt = [1, 0, 0, 1, 0, 0]; // 复位缩放，避免影响本场景断言
-canvas._absolutePointer = { x: 1, y: 1 }; // Fabric 留下的过期缓存
-canvas.__pointer = { x: 400, y: 350 };
-el.fire('mousemove', { clientX: 400, clientY: 350, __canvasPoint: { x: 400, y: 350 } });
-check(
-  '绘制中 pointer 缓存 stale 时光标仍跟随最新位置（不卡旧值）',
-  preview().left === 400 && preview().top === 350,
-  `实际 left=${preview().left}, top=${preview().top}`
-);
-canvas.isDrawingMode = false;
-
-// ── 6. 重复 activate 不重复绑定、不残留监听 ──
+// 重复 activate 不重复绑定
 brush.activate();
-check('重复 activate 后 Fabric mouse:down 监听不重复', canvas.fabricListenerCount('mouse:down') === 1);
-check('重复 activate 后 mouseenter 监听不重复', el.listenerCount('mouseenter') === 1);
-check('重复 activate 后 mousemove 监听不重复', el.listenerCount('mousemove') === 1);
-check('重复 activate 后 mouseleave 监听不重复', el.listenerCount('mouseleave') === 1);
+check('重复 activate 后 mousemove 监听不重复', upper.count('mousemove') === 1);
+check('重复 activate 后光标元素不重复', created.filter(e => e.dataset.brushCursor === '1').length === 1);
 
-// ── 7. deactivate 解绑全部监听并清理预览 ──
+// deactivate 清理
 brush.deactivate();
-check('deactivate 后 mousemove 监听清零', el.listenerCount('mousemove') === 0);
-check('deactivate 后 mouseenter 监听清零', el.listenerCount('mouseenter') === 0);
-check('deactivate 后 mouseleave 监听清零', el.listenerCount('mouseleave') === 0);
-check('deactivate 后 Fabric mouse:down 监听清零', canvas.fabricListenerCount('mouse:down') === 0);
-check('deactivate 后预览引用清空', preview() === null);
+check('deactivate 后光标元素移除', el.parentNode === null);
+check('deactivate 后 mousemove 监听清零', upper.count('mousemove') === 0);
 
 console.log(`\n[画笔光标门禁] ${passed} 通过，${failures.length} 失败`);
 if (failures.length) {

@@ -1,10 +1,21 @@
-﻿import BaseModule from './BaseModule.js';
+import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
-import { clamp, escapeAttr, normalizeColor, requestRender as _requestRender } from '../utils/helpers.js';
+import { clamp, escapeAttr, normalizeColor } from '../utils/helpers.js';
 import { pickColorFromScreen } from '../utils/colorPicker.js';
+import { getDomPort } from '../ports/DomPort.js';
 
 /**
  * 画笔模块 - 使用 Fabric 自由绘制生成可编辑的 path 图层。
+ *
+ * 光标指示的实现说明（重要）：
+ * 早期版本把光标做成 Fabric 画布对象（Group + 三个 Circle），结果反复出问题：
+ *   - 缩放后光标对象坐标正确、visible=true，但 Fabric 在 isDrawingMode 下
+ *     不再把它画出来（真机逐像素扫描：缩放后整张画布 0 个红色像素）；
+ *   - 撤销/重做、换图重建对象后引用失效；
+ *   - 外圈 + 主圈 + 中心点看起来是「两个圈」。
+ * 现在改为独立的 DOM 覆盖层：用原生 mousemove 的 clientX/clientY 直接定位
+ * （position:fixed），与画布缩放变换、对象缓存、历史序列化彻底解耦，且只有
+ * 一个圈。缩放不会移动鼠标，所以光标天然保持在鼠标正下方。
  */
 class BrushModule extends BaseModule {
   constructor(canvasManager, historyManager, defaultOptions = {}) {
@@ -14,20 +25,16 @@ class BrushModule extends BaseModule {
       ...defaultOptions,
     });
 
-    this._cursorPreview = null;
-    this._lastPointer = null;
-    // 鼠标最后的屏幕坐标（clientX/clientY）。缩放改变 viewportTransform 后，
-    // _lastPointer 存的场景坐标不再对应鼠标位置，须用屏幕坐标重新反算。
+    this._cursorEl = null;
     this._lastClientPoint = null;
-    this._boundUpperCanvasEl = null;
-    this._savedBeforeStroke = false;
     this._eventBusUnsubscribers = null;
+    this._savedBeforeStroke = false;
     this._boundMouseDown = this._onMouseDown.bind(this);
     this._boundMouseMove = this._onMouseMove.bind(this);
     this._boundMouseEnter = this._onMouseEnter.bind(this);
     this._boundMouseLeave = this._hideCursorPreview.bind(this);
     this._boundPathCreated = this._onPathCreated.bind(this);
-    this._boundInvalidateCursorPreview = this._invalidateCursorPreview.bind(this);
+    this._boundZoomChanged = this._onZoomChanged.bind(this);
   }
 
   activate(options = {}) {
@@ -43,23 +50,17 @@ class BrushModule extends BaseModule {
     canvas.freeDrawingCursor = 'none';
     this._ensureBrush();
     this._applyBrushOptions();
-    // 先清理可能残留的旧监听/订阅（重复 activate 或画布曾被重建时），
-    // 避免同一回调绑定多次、或绑在已被 dispose 的旧 upperCanvasEl 上。
+    // 重复 activate 时先清理旧监听，避免同一回调绑定多次。
     this._unbindEvents();
     this._bindEvents(canvas);
-
-    // 画布被重置（撤销/重做、打开新图、导入 ORA）后，旧的光标预览对象
-    // 已被清出画布，需要失效引用并尽快重建，避免鼠标静止时指示丢失。
+    // 缩放时只需同步光圈直径；位置由 clientX/clientY 决定，缩放不动鼠标=不漂。
     this._eventBusUnsubscribers = [
-      eventBus.on('canvas:restored', this._boundInvalidateCursorPreview),
-      eventBus.on('image:loaded', this._boundInvalidateCursorPreview),
-      eventBus.on('canvas:zoomChanged', this._boundInvalidateCursorPreview),
-      eventBus.on('canvas:overlaysCleared', this._boundInvalidateCursorPreview),
+      eventBus.on('canvas:zoomChanged', this._boundZoomChanged),
     ];
-
-    // 工具切换回画笔且鼠标仍停在画布上时，用上次记录的位置立即恢复光标。
-    if (this._lastPointer) {
-      this._showCursorAt(this._lastPointer);
+    // DOM 覆盖层光标：画布重建、缩放都不影响它；切回工具时按最后位置恢复。
+    this._ensureCursorEl();
+    if (this._lastClientPoint) {
+      this._showCursorAtClient(this._lastClientPoint.clientX, this._lastClientPoint.clientY);
     }
 
     eventBus.emit('module:activated', 'brush');
@@ -67,18 +68,12 @@ class BrushModule extends BaseModule {
 
   /**
    * 绑定光标跟随所需的画布事件与原生 DOM 事件。
+   * 光标位置直接取原生事件的 clientX/clientY，不经过 Fabric 的 getPointer。
    * @param {fabric.Canvas} canvas
    */
   _bindEvents(canvas) {
     canvas.on('mouse:down', this._boundMouseDown);
     canvas.on('path:created', this._boundPathCreated);
-    // 光标跟随统一走 upperCanvasEl 的原生 DOM 事件，不用 Fabric 的合成事件：
-    //   1) 绘图模式下 Fabric 走 _onMouseMoveInDrawingMode，会跳过 mouse:over/out
-    //      的合成，唯独 mouse:move 可用，但它派生自同一个原生 mousemove；
-    //   2) mouse:over 还要求 findTarget 为空才触发，鼠标进入时若压在对象上就不发。
-    // 原生 mousemove 无论绘图模式、无论悬停在什么对象上都稳定触发，且 Fabric
-    // 的 capture 阶段监听会先刷新 _absolutePointer，这里 getPointer 拿到的已是最新值。
-    // 记录元素引用，画布重建后也能从旧元素精确解绑。
     const el = canvas.upperCanvasEl;
     if (el) {
       el.addEventListener('mousemove', this._boundMouseMove);
@@ -89,8 +84,7 @@ class BrushModule extends BaseModule {
   }
 
   /**
-   * 解绑光标跟随事件。用记录的 upperCanvasEl 引用，避免画布重建后
-   * 只对「当前」元素解绑、旧元素监听残留的问题。
+   * 解绑事件。用记录的元素引用，画布重建后也能从旧元素精确解绑。
    */
   _unbindEvents() {
     const canvas = this.canvasManager.canvas;
@@ -110,33 +104,36 @@ class BrushModule extends BaseModule {
   deactivate() {
     const canvas = this.canvasManager.canvas;
     this._unbindEvents();
+    this._removeCursorEl();
+    if (this._eventBusUnsubscribers) {
+      this._eventBusUnsubscribers.forEach((unsub) => unsub && unsub());
+      this._eventBusUnsubscribers = null;
+    }
     if (canvas) {
-      this._removeCursorPreview();
       canvas.isDrawingMode = false;
       canvas.freeDrawingCursor = 'crosshair';
       canvas.hoverCursor = 'move';
       this._savedBeforeStroke = false;
     }
-
-    if (this._eventBusUnsubscribers) {
-      this._eventBusUnsubscribers.forEach((unsub) => unsub && unsub());
-      this._eventBusUnsubscribers = null;
-    }
-
     super.deactivate();
+  }
+
+  _onZoomChanged() {
+    // 缩放只改变笔迹的屏幕视觉宽度，光圈直径随之同步；位置不动。
+    this._applyCursorStyle();
   }
 
   setColor(color) {
     this.options.color = normalizeColor(color, this.options.color);
     this._applyBrushOptions();
-    this._updateCursorPreviewStyle();
+    this._applyCursorStyle();
   }
 
   setWidth(width) {
     const parsed = parseInt(width, 10);
     this.options.width = this._clamp(Number.isFinite(parsed) ? parsed : this.options.width, 1, 80);
     this._applyBrushOptions();
-    this._updateCursorPreviewStyle();
+    this._applyCursorStyle();
   }
 
   applyPreset(presetName) {
@@ -238,75 +235,15 @@ class BrushModule extends BaseModule {
   }
 
   _onMouseMove(e) {
-    const canvas = this.canvasManager.canvas;
-    if (!canvas) return;
-
     const nativeEvent = e?.e || e;
     if (!nativeEvent) return;
-    this._rememberClientPoint(nativeEvent);
-    this._showCursorAt(this._getCursorPointer(canvas, nativeEvent));
+    if (typeof nativeEvent.clientX !== 'number' || typeof nativeEvent.clientY !== 'number') return;
+    this._showCursorAtClient(nativeEvent.clientX, nativeEvent.clientY);
   }
 
   _onMouseEnter(e) {
-    // 鼠标进入画布时立即显示光标预览，无需等待 mousemove。
-    const nativeEvent = e?.e || e;
-    if (!nativeEvent) return;
-    const canvas = this.canvasManager.canvas;
-    if (!canvas) return;
-    this._rememberClientPoint(nativeEvent);
-    this._showCursorAt(this._getCursorPointer(canvas, nativeEvent));
-  }
-
-  /**
-   * 记录鼠标的屏幕坐标。缩放会改变 viewportTransform，光标预览的场景坐标
-   * 必须据当前 transform 从屏幕坐标重新反算，才能继续贴着鼠标。
-   * @param {Event} nativeEvent
-   */
-  _rememberClientPoint(nativeEvent) {
-    if (typeof nativeEvent.clientX !== 'number' || typeof nativeEvent.clientY !== 'number') return;
-    this._lastClientPoint = { clientX: nativeEvent.clientX, clientY: nativeEvent.clientY };
-  }
-
-  /**
-   * 取当前原生事件对应的画布场景坐标。
-   *
-   * 关键：绘制模式（isDrawingMode + _isCurrentlyDrawing）下，Fabric 的 pointer
-   * 缓存时序与我们在 upperCanvasEl 上的原生 mousemove 监听器交错——
-   * fabric.Canvas#getPointer(t)（无第二参）会先返回 _absolutePointer 缓存，
-   * 而这个缓存可能是上一帧的旧值，导致画笔拖动时光标指示停在原地不跟随。
-   * 这里先清掉两份缓存，强制 fabric 按当前事件重算（含 offset / retina /
-   * viewportTransform 反算），再取场景坐标，彻底避开 stale 缓存。
-   * @param {fabric.Canvas} canvas
-   * @param {Event} nativeEvent
-   * @returns {{x: number, y: number}}
-   */
-  _getCursorPointer(canvas, nativeEvent) {
-    if (canvas._absolutePointer) canvas._absolutePointer = null;
-    if (canvas._pointer) canvas._pointer = null;
-    return canvas.getPointer(nativeEvent);
-  }
-
-  /**
-   * 把光标预览移动到画布坐标 (x, y) 并显示，同时记录最后位置。
-   * 撤销/重做、换图后画布对象被重建时可据此立即恢复，不必等鼠标再动一下。
-   * @param {{x: number, y: number}} pointer
-   */
-  _showCursorAt(pointer) {
-    if (!pointer || typeof pointer.x !== 'number' || typeof pointer.y !== 'number') return;
-    const canvas = this.canvasManager.canvas;
-    if (!canvas) return;
-
-    this._lastPointer = { x: pointer.x, y: pointer.y };
-    const preview = this._ensureCursorPreview();
-    if (!preview) return;
-    preview.set({
-      left: pointer.x,
-      top: pointer.y,
-      visible: true,
-    });
-    // 每次都置顶，防止绘制出的新 path 覆盖光标预览。
-    canvas.bringToFront(preview);
-    this._requestRender();
+    // 鼠标进入画布时立即显示，无需等待移动。
+    this._onMouseMove(e);
   }
 
   _onPathCreated(e) {
@@ -328,114 +265,101 @@ class BrushModule extends BaseModule {
     });
     path.setCoords();
     this.canvasManager.canvas.discardActiveObject();
-    const preview = this._cursorPreview;
-    const canvas = this.canvasManager.canvas;
-    if (preview && canvas.getObjects().includes(preview)) {
-      canvas.bringToFront(preview);
-    }
-    canvas.renderAll();
+    this.canvasManager.canvas.renderAll();
     eventBus.emit('canvas:objectMetadataChanged', path);
     this._savedBeforeStroke = false;
   }
 
-  _ensureCursorPreview() {
-    const canvas = this.canvasManager.canvas;
-    if (!canvas) return null;
+  // ── DOM 覆盖层光标 ────────────────────────────────────────────
 
-    // 历史恢复/换图等操作会清空并重建画布对象，旧引用可能已不在画布上，
-    // 此时需移除失效引用并重新创建，否则画笔位置圆点不会显示。
-    if (this._cursorPreview && canvas.getObjects().includes(this._cursorPreview)) {
-      return this._cursorPreview;
-    }
-    if (this._cursorPreview) {
-      canvas.remove(this._cursorPreview);
-      this._cursorPreview = null;
-    }
+  /**
+   * 创建光标 DOM 元素（单个圆圈）。经 DomPort 访问 DOM，符合 core 非 UI 层边界。
+   * 用 position:fixed + clientX/clientY 定位：不受画布缩放/平移/对象重建影响。
+   */
+  _ensureCursorEl() {
+    if (this._cursorEl) return this._cursorEl;
+    const dom = getDomPort();
+    const el = dom?.createElement?.('div');
+    if (!el) return null;
 
-    const preview = this._createCursorPreviewObject();
-    this._cursorPreview = preview;
-    canvas.add(preview);
-    canvas.bringToFront(preview);
-    return preview;
+    this._setStyle(el, {
+      position: 'fixed',
+      left: '0px',
+      top: '0px',
+      width: '6px',
+      height: '6px',
+      'border-radius': '50%',
+      border: '2px solid',
+      'background-color': 'transparent',
+      'pointer-events': 'none',
+      'z-index': '10000',
+      transform: 'translate(-50%, -50%)',
+      display: 'none'
+    });
+    if (el.dataset) { el.dataset.brushCursor = '1'; }
+    const body = dom?.getBody?.() || null;
+    if (body?.appendChild) { body.appendChild(el); } else { return null; }
+    this._cursorEl = el;
+    this._applyCursorStyle();
+    return el;
   }
 
   /**
-   * 创建画笔位置光标预览。
-   * 由「深色外圈 + 画笔色主圈 + 中心点」组成，确保在浅色/深色背景上都清晰可见。
+   * 把光标移动到鼠标屏幕坐标并显示，同时记录该坐标。
+   * @param {number} clientX
+   * @param {number} clientY
    */
-  _createCursorPreviewObject() {
-    const color = normalizeColor(this.options.color, '#d83b31');
-    const r = Math.max(this.options.width / 2, 3);
-
-    return new fabric.Group([
-      // 外圈：半透明深色描边，保证在浅色/深色背景上都有对比
-      new fabric.Circle({
-        radius: r + 2,
-        fill: 'transparent',
-        stroke: 'rgba(0, 0, 0, 0.35)',
-        strokeWidth: 2,
-        strokeUniform: true,
-        objectCaching: false,
-      }),
-      // 主圈：画笔颜色
-      new fabric.Circle({
-        radius: r,
-        fill: this._colorToRgba(color, 0.18),
-        stroke: color,
-        strokeWidth: 1.5,
-        strokeUniform: true,
-        objectCaching: false,
-      }),
-      // 中心点：指示精确落笔位置
-      new fabric.Circle({
-        radius: Math.max(1.5, Math.min(3, r * 0.35)),
-        fill: color,
-        stroke: 'rgba(255, 255, 255, 0.55)',
-        strokeWidth: 0.5,
-        strokeUniform: true,
-        objectCaching: false,
-      }),
-    ], {
-      left: 0,
-      top: 0,
-      originX: 'center',
-      originY: 'center',
-      selectable: false,
-      evented: false,
-      excludeFromLayer: true,
-      excludeFromProperty: true,
-      excludeFromHistory: true,
-      excludeFromExport: true,
-      objectCaching: false,
-      visible: false,
+  _showCursorAtClient(clientX, clientY) {
+    if (typeof clientX !== 'number' || typeof clientY !== 'number') return;
+    const el = this._ensureCursorEl();
+    if (!el) return;
+    this._lastClientPoint = { clientX, clientY };
+    this._setStyle(el, {
+      left: `${clientX}px`,
+      top: `${clientY}px`,
+      display: 'block'
     });
   }
 
-  _updateCursorPreviewStyle() {
-    const preview = this._cursorPreview;
-    if (!preview) return;
-
+  /**
+   * 应用画笔颜色/粗细/缩放对应的光圈样式。
+   * 画布上的笔迹宽度是场景单位，屏幕直径 = 宽度 × 当前缩放。
+   */
+  _applyCursorStyle() {
+    const el = this._cursorEl;
+    if (!el) return;
     const color = normalizeColor(this.options.color, '#d83b31');
-    const r = Math.max(this.options.width / 2, 3);
-    const children = preview.getObjects ? preview.getObjects() : [];
+    const zoom = Number(this.canvasManager?.zoomLevel) || 1;
+    const diameter = Math.max(this.options.width * zoom, 6);
+    this._setStyle(el, {
+      width: `${diameter}px`,
+      height: `${diameter}px`,
+      'border-color': color,
+      'background-color': this._colorToRgba(color, 0.16)
+    });
+  }
 
-    if (children[0]) children[0].set({ radius: r + 2 });
-    if (children[1]) {
-      children[1].set({
-        radius: r,
-        fill: this._colorToRgba(color, 0.18),
-        stroke: color,
-      });
+  _setStyle(el, props) {
+    if (!el?.style) return;
+    for (const [key, value] of Object.entries(props)) {
+      if (typeof el.style.setProperty === 'function') {
+        el.style.setProperty(key, String(value));
+      } else {
+        el.style[key] = value;
+      }
     }
-    if (children[2]) {
-      children[2].set({
-        radius: Math.max(1.5, Math.min(3, r * 0.35)),
-        fill: color,
-      });
-    }
+  }
 
-    preview.setCoords();
-    this._requestRender();
+  _hideCursorPreview() {
+    if (!this._cursorEl) return;
+    this._setStyle(this._cursorEl, { display: 'none' });
+  }
+
+  _removeCursorEl() {
+    const el = this._cursorEl;
+    if (!el) return;
+    el.parentNode?.removeChild?.(el);
+    this._cursorEl = null;
   }
 
   _colorToRgba(color, alpha) {
@@ -449,75 +373,6 @@ class BrushModule extends BaseModule {
     const g = parseInt(hex.slice(2, 4), 16);
     const b = parseInt(hex.slice(4, 6), 16);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-
-  /**
-   * 画布被重置（撤销/重做、打开新图、导入 ORA）后调用，
-   * 移除旧的光标预览引用，并按最后记录的指针位置立即重建。
-   */
-  _invalidateCursorPreview() {
-    const canvas = this.canvasManager.canvas;
-    if (this._cursorPreview && canvas && canvas.getObjects().includes(this._cursorPreview)) {
-      canvas.remove(this._cursorPreview);
-    }
-    this._cursorPreview = null;
-    // 撤销/重做、换图或导入 ORA 会清空画布并重建对象，旧预览引用随之失效。
-    // 若鼠标此刻停在画布上，立即按最后位置重建，避免光标指示消失到下次移动。
-    if (this.active) {
-      const point = this._resolveCurrentCursorPoint(canvas);
-      if (point) { this._showCursorAt(point); }
-    }
-  }
-
-  /**
-   * 解析光标的当前场景坐标。
-   *
-   * 缩放（canvas:zoomChanged）会改变 viewportTransform：同一场景坐标对应的
-   * 屏幕位置随之漂移，若仍用 _lastPointer（旧场景坐标）恢复，光标会越飘越远，
-   * 看起来就是「缩放后跟随没有了」。因此只要有最后的屏幕坐标，就按当前
-   * transform 重新反算；没有屏幕坐标（如纯画布重建）才退回旧场景坐标。
-   * @param {fabric.Canvas} canvas
-   * @returns {{x: number, y: number}|null}
-   */
-  _resolveCurrentCursorPoint(canvas) {
-    if (!canvas) return null;
-    if (this._lastClientPoint) {
-      // 清缓存，确保 getPointer 用当前 viewportTransform 重新反算。
-      const { clientX, clientY } = this._lastClientPoint;
-      return this._getCursorPointer(canvas, { clientX, clientY });
-    }
-    return this._lastPointer;
-  }
-
-  _hideCursorPreview() {
-    if (!this._cursorPreview) return;
-
-    this._cursorPreview.set('visible', false);
-    this._requestRender();
-  }
-
-  _removeCursorPreview() {
-    if (!this._cursorPreview) return;
-
-    const canvas = this.canvasManager.canvas;
-    if (canvas) {
-      canvas.remove(this._cursorPreview);
-    }
-    this._cursorPreview = null;
-  }
-
-  _requestRender() {
-    const canvas = this.canvasManager.canvas;
-    if (!canvas) return;
-    // 光标跟随必须即时可见：requestRenderAll 走 requestAnimationFrame，在 uTools/
-    // ZTools 插件窗口里 rAF 会被宿主节流，那一帧迟迟不画，用户看到的就是
-    // 「画笔位置不显示/跟不上」。改用同步 renderAll（AIModule._renderNow 同款）；
-    // 绘图模式下 renderAll 不会清空 contextTop 的笔迹，安全。
-    if (typeof canvas.renderAll === 'function') {
-      canvas.renderAll();
-    } else {
-      _requestRender(canvas);
-    }
   }
 
   _ensureBrush() {
