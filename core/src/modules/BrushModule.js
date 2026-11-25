@@ -1,4 +1,4 @@
-import BaseModule from './BaseModule.js';
+﻿import BaseModule from './BaseModule.js';
 import eventBus from '../EventBus.js';
 import { clamp, escapeAttr, normalizeColor, requestRender as _requestRender } from '../utils/helpers.js';
 import { pickColorFromScreen } from '../utils/colorPicker.js';
@@ -238,11 +238,9 @@ class BrushModule extends BaseModule {
     const canvas = this.canvasManager.canvas;
     if (!canvas) return;
 
-    // 统一用原生 mousemove 事件走 getPointer（无第二参返回已反算 viewportTransform
-    // 的场景坐标）。Fabric 的 capture 阶段监听会先刷新缓存，这里拿到的是最新值。
     const nativeEvent = e?.e || e;
     if (!nativeEvent) return;
-    this._showCursorAt(canvas.getPointer(nativeEvent));
+    this._showCursorAt(this._getCursorPointer(canvas, nativeEvent));
   }
 
   _onMouseEnter(e) {
@@ -251,7 +249,26 @@ class BrushModule extends BaseModule {
     if (!nativeEvent) return;
     const canvas = this.canvasManager.canvas;
     if (!canvas) return;
-    this._showCursorAt(canvas.getPointer(nativeEvent));
+    this._showCursorAt(this._getCursorPointer(canvas, nativeEvent));
+  }
+
+  /**
+   * 取当前原生事件对应的画布场景坐标。
+   *
+   * 关键：绘制模式（isDrawingMode + _isCurrentlyDrawing）下，Fabric 的 pointer
+   * 缓存时序与我们在 upperCanvasEl 上的原生 mousemove 监听器交错——
+   * fabric.Canvas#getPointer(t)（无第二参）会先返回 _absolutePointer 缓存，
+   * 而这个缓存可能是上一帧的旧值，导致画笔拖动时光标指示停在原地不跟随。
+   * 这里先清掉两份缓存，强制 fabric 按当前事件重算（含 offset / retina /
+   * viewportTransform 反算），再取场景坐标，彻底避开 stale 缓存。
+   * @param {fabric.Canvas} canvas
+   * @param {Event} nativeEvent
+   * @returns {{x: number, y: number}}
+   */
+  _getCursorPointer(canvas, nativeEvent) {
+    if (canvas._absolutePointer) canvas._absolutePointer = null;
+    if (canvas._pointer) canvas._pointer = null;
+    return canvas.getPointer(nativeEvent);
   }
 
   /**

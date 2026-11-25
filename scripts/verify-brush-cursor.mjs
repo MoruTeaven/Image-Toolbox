@@ -83,6 +83,9 @@ class StubCanvas {
     this.requestRenderAllCount = 0;
     this.freeDrawingBrush = null;
     this.isDrawingMode = false;
+    // 模拟 Fabric 的 pointer 缓存：getPointer 无第二参时优先返回 _absolutePointer。
+    this._absolutePointer = null;
+    this._pointer = null;
   }
   on(type, fn) {
     if (!this._fabricListeners.has(type)) { this._fabricListeners.set(type, []); }
@@ -105,9 +108,12 @@ class StubCanvas {
     this.remove(obj);
     this._objects.push(obj);
   }
-  getPointer(_nativeEvent) {
-    // 桩件直接返回预设指针；缩放/平移由真实 getPointer 负责反算。
-    return this.__pointer || { x: 0, y: 0 };
+  getPointer(nativeEvent) {
+    // 复刻 fabric 5.3 的关键行为：缓存存在时优先返回缓存（可能 stale），
+    // 清掉缓存后按当前原生事件重算。这样测试才能真正抓住「绘制中光标不跟随」。
+    if (this._absolutePointer && !nativeEvent?.__force) { return this._absolutePointer; }
+    const p = nativeEvent?.__canvasPoint || this.__pointer || { x: 0, y: 0 };
+    return p;
   }
   renderAll() { this.renderAllCount++; }
   requestRenderAll() { this.requestRenderAllCount++; }
@@ -187,6 +193,21 @@ check('重建后的预览已加入画布', canvas.getObjects().includes(preview(
 canvas.clear();
 eventBus.emit('canvas:zoomChanged', 2);
 check('canvas:zoomChanged 后预览重建且可见', !!preview() && preview().visible === true);
+
+// ── 5.5 绘制中 pointer 缓存 stale：光标必须跟随最新位置，不卡在旧值 ──
+// 这是曾经漏掉、导致用户仍看不到跟随的真 bug：绘制时 Fabric 的 _absolutePointer
+// 缓存是上一帧旧值，getPointer 无第二参会优先返回它。修复通过先清缓存强制重算，
+// 避开 stale。若这段清理被去掉，本断言必须变红（下面会做变异自验）。
+canvas.isDrawingMode = true;
+canvas._absolutePointer = { x: 1, y: 1 }; // Fabric 留下的过期缓存
+canvas.__pointer = { x: 400, y: 350 };
+el.fire('mousemove', { clientX: 400, clientY: 350, __canvasPoint: { x: 400, y: 350 } });
+check(
+  '绘制中 pointer 缓存 stale 时光标仍跟随最新位置（不卡旧值）',
+  preview().left === 400 && preview().top === 350,
+  `实际 left=${preview().left}, top=${preview().top}`
+);
+canvas.isDrawingMode = false;
 
 // ── 6. 重复 activate 不重复绑定、不残留监听 ──
 brush.activate();
