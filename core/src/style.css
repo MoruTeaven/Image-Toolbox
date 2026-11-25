@@ -4098,6 +4098,30 @@ html, body {
     color-mix(in srgb, var(--color-accent) 10%, var(--bg-card)) 0%,
     var(--bg-card) 62%);
 }
+.account-pool__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.account-pool__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+}
+.account-pool__icon svg {
+  width: 15px;
+  height: 15px;
+}
+.account-pool--balance .account-pool__icon {
+  background: var(--bg-hover);
+  color: var(--color-text-secondary);
+}
 .account-pool__label {
   font-size: 12px;
   font-weight: 600;
@@ -4174,6 +4198,16 @@ html, body {
   font-size: 11px;
   line-height: 1.5;
   color: var(--color-text-secondary);
+}
+.account-pool__hint-icon {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin-right: 2px;
+  opacity: 0.75;
+}
+.account-pool__hint-icon svg {
+  width: 12px;
+  height: 12px;
 }
 .account-pool--exhausted .account-pool__value strong {
   color: var(--color-warning);

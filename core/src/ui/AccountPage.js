@@ -753,28 +753,46 @@ class AccountPage {
   }
 
   /**
+   * 每日额度信息：兼容旧后端。
+   * 生产若仍是旧后端（未返回 dailyCredits / dailyResetAt），用「满额 + 本地计算的下次
+   * UTC 零点」兜底，保证每日卡始终可见——不能因为后端字段缺失就整卡隐藏。
+   */
+  _dailyCreditInfo(credits) {
+    const hasDaily = credits.dailyCredits !== undefined && credits.dailyResetAt;
+    const total = Number(credits.dailyGrantAmount) || 7;
+    const remaining = hasDaily ? (Number(credits.dailyCredits) || 0) : total;
+    let resetAt = credits.dailyResetAt;
+    if (!resetAt) {
+      const now = new Date();
+      resetAt = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+    }
+    return { remaining, total, resetAt };
+  }
+
+  /**
    * 每日额度池：当日有效、UTC 零点刷新（换算到本地时区），未用完不结转。
-   * 用 7 格进度点直观展示剩余额度；兼容旧后端（无 dailyCredits/dailyResetAt）时不渲染。
+   * 用格数进度点直观展示剩余额度；始终显示。
    */
   _renderDailyPool(credits) {
-    const hasDaily = credits.dailyCredits !== undefined && credits.dailyResetAt;
-    if (!hasDaily) {
-      return '';
-    }
-    const remaining = Number(credits.dailyCredits) || 0;
-    const total = Number(credits.dailyGrantAmount) || 7;
-    const resetText = this._escapeHTML(this._formatTime(credits.dailyResetAt));
-    const dots = Array.from({ length: total }, (_, i) =>
+    const { remaining, total, resetAt } = this._dailyCreditInfo(credits);
+    const resetText = this._escapeHTML(this._formatTime(resetAt));
+    const dots = Array.from({ length: Math.min(total, 14) }, (_, i) =>
       `<span class="account-daily__dot ${i < remaining ? 'account-daily__dot--on' : ''}"></span>`
     ).join('');
     const exhausted = remaining <= 0;
+    const remainingStr = remaining.toFixed(2);
+    const totalStr = total.toFixed(2);
 
     return `
           <div class="account-pool account-pool--daily ${exhausted ? 'account-pool--exhausted' : ''}">
-            <div class="account-pool__label">每日免费额度</div>
-            <div class="account-pool__value"><strong>${this._escapeHTML(credits.dailyCredits)}</strong><span class="account-pool__of">/ ${this._escapeHTML(credits.dailyGrantAmount || '7.00')}</span></div>
+            <div class="account-pool__head">
+              <span class="account-pool__icon">${this._creditIcon('daily')}</span>
+              <span class="account-pool__label">每日免费额度</span>
+            </div>
+            <div class="account-pool__value"><strong>${this._escapeHTML(remainingStr)}</strong><span class="account-pool__of">/ ${this._escapeHTML(totalStr)}</span></div>
             <div class="account-daily__dots">${dots}</div>
             <div class="account-pool__foot">
+              <span class="account-pool__hint-icon">${this._creditIcon('clock')}</span>
               ${exhausted ? '今日额度已用完' : '消费时优先使用'} · 每日 ${resetText} 刷新，未用完不结转
             </div>
           </div>
@@ -806,12 +824,25 @@ class AccountPage {
 
     return `
           <div class="account-pool account-pool--balance">
-            <div class="account-pool__label">加量包</div>
+            <div class="account-pool__head">
+              <span class="account-pool__icon">${this._creditIcon('pack')}</span>
+              <span class="account-pool__label">加量包</span>
+            </div>
             <div class="account-pool__value"><strong>${this._escapeHTML(balance)}</strong><span class="account-pool__of">积分</span></div>
             ${rows ? `<div class="account-pack-list">${rows}</div>` : ''}
             <div class="account-pool__foot">${foot}</div>
           </div>
     `;
+  }
+
+  /** 积分模块内联 SVG 图标（不用 emoji，统一 currentColor 跟随主题） */
+  _creditIcon(name) {
+    const icons = {
+      daily: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+      pack: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg>',
+      clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    };
+    return icons[name] || '';
   }
 
   /** yyyy-mm-dd → 本地可读日期（按 UTC 解析，避免时区把日期挪前一天） */
