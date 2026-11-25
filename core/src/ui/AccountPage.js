@@ -3,6 +3,7 @@ import { SIDE_PANEL_LAYOUT_KEY, SIDE_PANEL_LAYOUTS } from './SidePanelTabs.js';
 import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../utils/theme.js';
 import { updateCategories, CHANGELOG, PLATFORMS, getAppVersion } from '@moruteaven/img-toolbox_changelog';
 import { escapeHTML, escapeAttr } from '../utils/helpers.js';
+import { FEATURE_CREDITS_ENABLED } from '../utils/constants.js';
 import { getSharedIdentity, SESSION_STATUS } from '../identity/IdentityClient.js';
 import {
   AI_CONFIG_FIELDS,
@@ -190,7 +191,11 @@ class AccountPage {
    */
   open(payload = {}) {
     const section = payload && typeof payload === 'object' ? payload.section : '';
-    if (ACCOUNT_SECTIONS.includes(section)) {
+    // 积分未启用时，即便外部 emit account:open + { section: 'credits' }
+    // 也落回「我的」，避免直达被隐藏的分区。
+    if (FEATURE_CREDITS_ENABLED && section === 'credits') {
+      this._activeSection = 'credits';
+    } else if (section && section !== 'credits' && ACCOUNT_SECTIONS.includes(section)) {
       this._activeSection = section;
     }
     this._user = this._getHostUser();
@@ -205,7 +210,7 @@ class AccountPage {
         this._loadProfile();
       }
       // 直达积分分区时拉取积分数据（概览接口会顺带发放今日额度）
-      if (this._activeSection === 'credits' && this._identity.isAuthenticated() && !this._credits) {
+      if (FEATURE_CREDITS_ENABLED && this._activeSection === 'credits' && this._identity.isAuthenticated() && !this._credits) {
         this._loadCredits();
       }
     }).catch(() => {});
@@ -241,7 +246,7 @@ class AccountPage {
 
           <nav class="account-page__nav" aria-label="账户导航">
             ${this._renderNavItem('mine', '我的')}
-            ${this._renderNavItem('credits', '积分')}
+            ${FEATURE_CREDITS_ENABLED ? this._renderNavItem('credits', '积分') : ''}
             ${this._renderNavItem('settings', '设置')}
             ${this._renderNavItem('ai', 'AI 配置')}
             ${this._renderNavItem('updates', '更新记录')}
@@ -286,7 +291,7 @@ class AccountPage {
         this._activeSection = navItem.getAttribute('data-section');
         this._nicknameEditing = false;
         this._render();
-        if (this._activeSection === 'credits' && this._identity.isAuthenticated() && !this._credits) {
+        if (FEATURE_CREDITS_ENABLED && this._activeSection === 'credits' && this._identity.isAuthenticated() && !this._credits) {
           this._loadCredits();
         }
         return;
@@ -453,11 +458,15 @@ class AccountPage {
         return;
       }
       if (accountAction === 'refresh-credits') {
-        this._loadCredits();
+        if (FEATURE_CREDITS_ENABLED) {
+          this._loadCredits();
+        }
         return;
       }
       if (accountAction === 'load-more-tx') {
-        this._loadMoreTx();
+        if (FEATURE_CREDITS_ENABLED) {
+          this._loadMoreTx();
+        }
         return;
       }
 
@@ -572,7 +581,7 @@ class AccountPage {
     if (this._activeSection === 'settings') {
       return this._renderSettings();
     }
-    if (this._activeSection === 'credits') {
+    if (FEATURE_CREDITS_ENABLED && this._activeSection === 'credits') {
       return this._renderCredits();
     }
     if (this._activeSection === 'ai') {
@@ -958,7 +967,7 @@ class AccountPage {
 
   /** 加载积分概览与流水（概览接口会顺带发放今日免费额度） */
   async _loadCredits() {
-    if (this._creditsLoading) {
+    if (!FEATURE_CREDITS_ENABLED || this._creditsLoading) {
       return;
     }
     this._creditsLoading = true;
@@ -990,7 +999,7 @@ class AccountPage {
 
   /** 流水游标翻页 */
   async _loadMoreTx() {
-    if (!this._txCursor) {
+    if (!FEATURE_CREDITS_ENABLED || !this._txCursor) {
       return;
     }
     try {

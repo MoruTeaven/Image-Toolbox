@@ -109,3 +109,11 @@ export const TOOL_GROUPS = {
   view: '视图工具',
   action: '操作',
 };
+
+/**
+ * 功能开关：积分（余额 / 流水 / 每日额度 / 加量包）。
+ *
+ * 积分消耗链路尚未完成，正式版先整体隐藏入口。相关 UI、状态与 API 代码
+ * 全部保留，日后把本开关改为 true 即可原样恢复，无需找回被删的代码。
+ */
+export const FEATURE_CREDITS_ENABLED = false;
