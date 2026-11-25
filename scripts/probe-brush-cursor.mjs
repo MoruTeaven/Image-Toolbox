@@ -259,6 +259,88 @@ try {
   `);
   console.log('绘制中像素:', JSON.stringify(drawPixels));
 
+  // ── 场景 9：滚轮缩放后，光标必须仍贴合鼠标 ──
+  // 先把绘制状态收尾，把鼠标放到一个确定位置，再滚轮缩放（鼠标静止），
+  // 然后只比较「光标预览投影回屏幕的位置」是否仍贴着鼠标那一点。
+  await evaluate(`
+    (() => {
+      const el = window.__imageToolboxApp.canvasManager.canvas.upperCanvasEl;
+      el.dispatchEvent(new MouseEvent('mouseup', { clientX: 300, clientY: 280, button: 0, bubbles: true }));
+      // 给鼠标一个确定的落点（headless 下 canvas rect 为 0，探针已 override getBoundingClientRect 为 left/top=100）
+      el.dispatchEvent(new MouseEvent('mousemove', { clientX: 305, clientY: 280, bubbles: true }));
+    })()
+  `);
+  await sleep(100);
+  const beforeZoom = await evaluate(`
+    (() => {
+      const m = window.__imageToolboxApp.toolManager.getCurrentModule();
+      const p = m._cursorPreview;
+      return { visible: p?.visible, left: p?.left, top: p?.top, zoom: window.__imageToolboxApp.canvasManager.zoomLevel,
+               lastClient: m._lastClientPoint };
+    })()
+  `);
+  console.log('缩放前:', JSON.stringify(beforeZoom));
+
+  // 派发多次 wheel 放大，让 viewportTransform 明显变化（鼠标静止不动）
+  for (let i = 0; i < 4; i++) {
+    await evaluate(`
+      (() => {
+        const area = document.getElementById('canvas-area');
+        area.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, clientX: 305, clientY: 280, bubbles: true, cancelable: true }));
+      })()
+    `);
+  }
+  const zoomResult = await evaluate(`
+    (() => {
+      const app = window.__imageToolboxApp;
+      const m = app.toolManager.getCurrentModule();
+      const p = m._cursorPreview;
+      return { zoom: app.canvasManager.zoomLevel, visible: p?.visible, left: p?.left, top: p?.top, hasPreview: !!p,
+               lastClient: m._lastClientPoint };
+    })()
+  `);
+  console.log('缩放后(未移动鼠标):', JSON.stringify(zoomResult));
+
+  // 诊断：光标预览场景坐标 → 屏幕坐标，与鼠标最后 client 点比较。
+  // Fabric getPointer 用 c._offset（不是 getBoundingClientRect 直接值）做 client→viewport
+  // 换算，所以投影回屏幕必须用同一个 _offset，否则坐标系不一致会算出假漂移。
+  const screenPos = await evaluate(`
+    (() => {
+      const app = window.__imageToolboxApp;
+      const c = app.canvasManager.canvas;
+      const m = app.toolManager.getCurrentModule();
+      const p = m._cursorPreview;
+      const vpt = c.viewportTransform;
+      const off = c._offset || {left: 0, top: 0};
+      // scene → viewport: scene*scale + vpt.offset；viewport → screen: + canvas offset
+      const screenX = (p?.left || 0) * vpt[0] + vpt[4] + (off.left || 0);
+      const screenY = (p?.top || 0) * vpt[3] + vpt[5] + (off.top || 0);
+      const last = m._lastClientPoint;
+      return { cursorScene: {x: p?.left, y: p?.top}, cursorScreen: {x: screenX, y: screenY},
+               mouseScreen: last ? {x: last.clientX, y: last.clientY} : null, hasLastClient: !!last,
+               offset: {left: off.left, top: off.top}, vpt };
+    })()
+  `);
+  console.log('缩放后光标屏幕位置诊断:', JSON.stringify(screenPos));
+  await sleep(200);
+
+  // 缩放后再移动鼠标，看光标是否继续跟随
+  await evaluate(`
+    (() => {
+      const el = window.__imageToolboxApp.canvasManager.canvas.upperCanvasEl;
+      el.dispatchEvent(new MouseEvent('mousemove', { clientX: 360, clientY: 320, bubbles: true }));
+    })()
+  `);
+  await sleep(200);
+  const afterZoomMove = await evaluate(`
+    (() => {
+      const m = window.__imageToolboxApp.toolManager.getCurrentModule();
+      const p = m._cursorPreview;
+      return { visible: p?.visible, left: p?.left, top: p?.top, zoom: window.__imageToolboxApp.canvasManager.zoomLevel };
+    })()
+  `);
+  console.log('缩放后移动鼠标:', JSON.stringify(afterZoomMove));
+
   // ── 断言：真实浏览器里光标必须真的可见且跟随，尤其绘制过程中 ──
   const assert = (name, ok, detail = '') => {
     if (ok) { console.log(`  ✓ ${name}`); }
@@ -275,6 +357,15 @@ try {
   assert('绘制中光标真实画在画布上（非透明）',
     Array.isArray(drawPixels?.lowerCenter) && drawPixels.lowerCenter[3] > 0,
     `lowerCenter=${JSON.stringify(drawPixels?.lowerCenter)}`);
+  // 缩放后光标屏幕位置必须仍贴近鼠标（否则「缩放后跟随没有了」）。
+  // 光标场景坐标经 vpt + canvasRect 换算回屏幕，应贴近 _lastClientPoint。
+  const zoomCursorScreen = screenPos?.cursorScreen;
+  const mouseScreen = screenPos?.mouseScreen;
+  const drift = zoomCursorScreen && mouseScreen && screenPos?.hasLastClient
+    ? Math.hypot(zoomCursorScreen.x - mouseScreen.x, zoomCursorScreen.y - mouseScreen.y)
+    : Infinity;
+  assert('滚轮缩放后光标仍贴合鼠标（屏幕漂移 < 5px）', drift < 5,
+    `drift=${drift.toFixed(1)}px, cursorScreen=${JSON.stringify(zoomCursorScreen)}, mouse=${JSON.stringify(mouseScreen)}, hasLastClient=${screenPos?.hasLastClient}`);
   if (process.exitCode) {
     console.error('真实浏览器验证失败：画笔光标跟随仍有回归');
   } else {

@@ -77,7 +77,7 @@ export const CHANGELOG = [
       ],
       fixed: [
         { text: '修复保存或复制图片后分辨率与原图不一致的问题', platforms: null },
-        { text: '修复画笔光标跟随有时不显示的问题', platforms: null }
+        { text: '修复画笔光标跟随有时不显示、绘制及缩放后不跟随的问题', platforms: null }
       ],
       improved: [],
       adjusted: [],

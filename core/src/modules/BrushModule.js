@@ -16,6 +16,9 @@ class BrushModule extends BaseModule {
 
     this._cursorPreview = null;
     this._lastPointer = null;
+    // 鼠标最后的屏幕坐标（clientX/clientY）。缩放改变 viewportTransform 后，
+    // _lastPointer 存的场景坐标不再对应鼠标位置，须用屏幕坐标重新反算。
+    this._lastClientPoint = null;
     this._boundUpperCanvasEl = null;
     this._savedBeforeStroke = false;
     this._eventBusUnsubscribers = null;
@@ -240,6 +243,7 @@ class BrushModule extends BaseModule {
 
     const nativeEvent = e?.e || e;
     if (!nativeEvent) return;
+    this._rememberClientPoint(nativeEvent);
     this._showCursorAt(this._getCursorPointer(canvas, nativeEvent));
   }
 
@@ -249,7 +253,18 @@ class BrushModule extends BaseModule {
     if (!nativeEvent) return;
     const canvas = this.canvasManager.canvas;
     if (!canvas) return;
+    this._rememberClientPoint(nativeEvent);
     this._showCursorAt(this._getCursorPointer(canvas, nativeEvent));
+  }
+
+  /**
+   * 记录鼠标的屏幕坐标。缩放会改变 viewportTransform，光标预览的场景坐标
+   * 必须据当前 transform 从屏幕坐标重新反算，才能继续贴着鼠标。
+   * @param {Event} nativeEvent
+   */
+  _rememberClientPoint(nativeEvent) {
+    if (typeof nativeEvent.clientX !== 'number' || typeof nativeEvent.clientY !== 'number') return;
+    this._lastClientPoint = { clientX: nativeEvent.clientX, clientY: nativeEvent.clientY };
   }
 
   /**
@@ -448,9 +463,30 @@ class BrushModule extends BaseModule {
     this._cursorPreview = null;
     // 撤销/重做、换图或导入 ORA 会清空画布并重建对象，旧预览引用随之失效。
     // 若鼠标此刻停在画布上，立即按最后位置重建，避免光标指示消失到下次移动。
-    if (this.active && this._lastPointer) {
-      this._showCursorAt(this._lastPointer);
+    if (this.active) {
+      const point = this._resolveCurrentCursorPoint(canvas);
+      if (point) { this._showCursorAt(point); }
     }
+  }
+
+  /**
+   * 解析光标的当前场景坐标。
+   *
+   * 缩放（canvas:zoomChanged）会改变 viewportTransform：同一场景坐标对应的
+   * 屏幕位置随之漂移，若仍用 _lastPointer（旧场景坐标）恢复，光标会越飘越远，
+   * 看起来就是「缩放后跟随没有了」。因此只要有最后的屏幕坐标，就按当前
+   * transform 重新反算；没有屏幕坐标（如纯画布重建）才退回旧场景坐标。
+   * @param {fabric.Canvas} canvas
+   * @returns {{x: number, y: number}|null}
+   */
+  _resolveCurrentCursorPoint(canvas) {
+    if (!canvas) return null;
+    if (this._lastClientPoint) {
+      // 清缓存，确保 getPointer 用当前 viewportTransform 重新反算。
+      const { clientX, clientY } = this._lastClientPoint;
+      return this._getCursorPointer(canvas, { clientX, clientY });
+    }
+    return this._lastPointer;
   }
 
   _hideCursorPreview() {

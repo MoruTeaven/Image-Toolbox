@@ -86,6 +86,8 @@ class StubCanvas {
     // 模拟 Fabric 的 pointer 缓存：getPointer 无第二参时优先返回 _absolutePointer。
     this._absolutePointer = null;
     this._pointer = null;
+    // 模拟 viewportTransform，用于验证缩放后光标重投影。
+    this._vpt = [1, 0, 0, 1, 0, 0];
   }
   on(type, fn) {
     if (!this._fabricListeners.has(type)) { this._fabricListeners.set(type, []); }
@@ -108,11 +110,16 @@ class StubCanvas {
     this.remove(obj);
     this._objects.push(obj);
   }
-  getPointer(nativeEvent) {
+  getPointer(nativeEvent, ignoreVpt) {
     // 复刻 fabric 5.3 的关键行为：缓存存在时优先返回缓存（可能 stale），
     // 清掉缓存后按当前原生事件重算。这样测试才能真正抓住「绘制中光标不跟随」。
-    if (this._absolutePointer && !nativeEvent?.__force) { return this._absolutePointer; }
+    if (this._absolutePointer) { return this._absolutePointer; }
     const p = nativeEvent?.__canvasPoint || this.__pointer || { x: 0, y: 0 };
+    // 模拟 viewportTransform：client 点先经 vpt 反算到场景坐标。
+    if (!ignoreVpt) {
+      const v = this._vpt;
+      return { x: (p.x - v[4]) / v[0], y: (p.y - v[5]) / v[3] };
+    }
     return p;
   }
   renderAll() { this.renderAllCount++; }
@@ -189,16 +196,42 @@ check('重建后立即可见，无需鼠标移动', preview().visible === true);
 check('重建位置沿用最后指针', preview().left === 210 && preview().top === 170);
 check('重建后的预览已加入画布', canvas.getObjects().includes(preview()));
 
-// ── 5. 缩放后重定位（canvas:zoomChanged）同样无需鼠标再动 ──
+// ── 5. 缩放后重投影：场景坐标随 vpt 变化，屏幕位置仍贴住鼠标 ──
+// 这是「滚轮缩放后光标跟随没有了」的根因：光标存的是场景坐标，缩放改变
+// viewportTransform 后必须用鼠标屏幕坐标重新反算，否则光标越飘越远。
 canvas.clear();
-eventBus.emit('canvas:zoomChanged', 2);
+canvas._absolutePointer = null;
+canvas._vpt = [1, 0, 0, 1, 0, 0];
+canvas.__pointer = { x: 305, y: 280 };
+el.fire('mousemove', { clientX: 305, clientY: 280, __canvasPoint: { x: 305, y: 280 } });
+check('缩放前光标在鼠标位置 305,280', preview().left === 305 && preview().top === 280);
+// 模拟滚轮放大：vpt 变成 1.2 倍并带平移偏移
+canvas.clear();
+canvas._vpt = [1.2, 0, 0, 1.2, -80, -60];
+eventBus.emit('canvas:zoomChanged', 1.2);
+const expX = (305 - (-80)) / 1.2; // 320.8333
+const expY = (280 - (-60)) / 1.2; // 283.3333
 check('canvas:zoomChanged 后预览重建且可见', !!preview() && preview().visible === true);
+check(
+  '缩放后光标场景坐标按新 vpt 重算',
+  Math.abs(preview().left - expX) < 0.01 && Math.abs(preview().top - expY) < 0.01,
+  `实际 ${preview().left},${preview().top} 期望 ${expX.toFixed(2)},${expY.toFixed(2)}`
+);
+// 投影回屏幕应贴住鼠标（client 305,280）
+const screenX = preview().left * 1.2 - 80;
+const screenY = preview().top * 1.2 - 60;
+check(
+  '缩放后光标屏幕位置贴住鼠标（漂移 < 1px）',
+  Math.abs(screenX - 305) < 1 && Math.abs(screenY - 280) < 1,
+  `屏幕 ${screenX.toFixed(1)},${screenY.toFixed(1)} vs 鼠标 305,280`
+);
 
 // ── 5.5 绘制中 pointer 缓存 stale：光标必须跟随最新位置，不卡在旧值 ──
 // 这是曾经漏掉、导致用户仍看不到跟随的真 bug：绘制时 Fabric 的 _absolutePointer
 // 缓存是上一帧旧值，getPointer 无第二参会优先返回它。修复通过先清缓存强制重算，
 // 避开 stale。若这段清理被去掉，本断言必须变红（下面会做变异自验）。
 canvas.isDrawingMode = true;
+canvas._vpt = [1, 0, 0, 1, 0, 0]; // 复位缩放，避免影响本场景断言
 canvas._absolutePointer = { x: 1, y: 1 }; // Fabric 留下的过期缓存
 canvas.__pointer = { x: 400, y: 350 };
 el.fire('mousemove', { clientX: 400, clientY: 350, __canvasPoint: { x: 400, y: 350 } });
