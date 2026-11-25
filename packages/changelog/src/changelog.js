@@ -50,7 +50,7 @@
  * 修改此处即代表发版意图，其余引用点由构建期校验强制同步。
  * @type {string}
  */
-export const APP_VERSION = '3.0.1-dev';
+export const APP_VERSION = '3.0.1';
 
 /**
  * 版本记录条目结构
@@ -68,8 +68,8 @@ export const APP_VERSION = '3.0.1-dev';
  */
 export const CHANGELOG = [
   {
-    version: '3.0.1-dev',
-    date: '2026-11-10',
+    version: '3.0.1',
+    date: '2026-11-25',
     changes: {
       added: [
         { text: '新增账号自动登录：打开插件自动恢复登录状态，登录过期自动续期，网络不稳时不再被误登出', platforms: null }
@@ -79,7 +79,9 @@ export const CHANGELOG = [
         { text: '修复画笔光标跟随有时不显示、绘制及缩放后不跟随的问题，光标改为单个圆圈', platforms: null }
       ],
       improved: [],
-      adjusted: [],
+      adjusted: [
+        { text: '正式版暂未开放积分功能，待消耗链路完成后上线', platforms: null }
+      ],
       removed: []
     }
   },
