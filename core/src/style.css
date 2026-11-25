@@ -4138,6 +4138,36 @@ html, body {
   background: var(--color-accent);
   box-shadow: 0 0 8px color-mix(in srgb, var(--color-accent) 50%, transparent);
 }
+.account-pack-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 108px;
+  overflow-y: auto;
+}
+.account-pack-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: var(--bg-hover);
+  font-size: 11px;
+}
+.account-pack-row__amount {
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.account-pack-row__expiry {
+  color: var(--color-text-secondary);
+}
+.account-pack-row__expiry--soon {
+  color: var(--color-warning);
+  font-weight: 600;
+}
 .account-pool__foot {
   margin-top: auto;
   padding-top: 12px;

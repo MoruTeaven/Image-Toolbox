@@ -781,16 +781,54 @@ class AccountPage {
     `;
   }
 
-  /** 加量包池：永久余额，不过期，每日额度用完后自动使用 */
+  /**
+   * 加量包池：按到期日从近到远列出各批次；无到期日按永久处理。
+   * 消耗按 FEFO（到期最早优先），临期批次即使当日额度没用完也会先用。
+   */
   _renderBalancePool(credits) {
     const balance = credits.balance || '0.00';
+    const packs = Array.isArray(credits.packs) ? credits.packs : [];
+    const rows = packs.map((p) => {
+      const expiry = p.expiresOn
+        ? `${this._escapeHTML(this._formatDate(p.expiresOn))} 到期`
+        : '永久有效';
+      const soon = p.expiresOn && this._isExpiringSoon(p.expiresOn);
+      return `
+            <div class="account-pack-row">
+              <span class="account-pack-row__amount">${this._escapeHTML(p.remaining)}</span>
+              <span class="account-pack-row__expiry ${soon ? 'account-pack-row__expiry--soon' : ''}">${expiry}</span>
+            </div>
+          `;
+    }).join('');
+    const foot = packs.some((p) => p.expiresOn)
+      ? '按到期日从近到远消耗 · 临期批次优先'
+      : '永久有效，不过期 · 每日额度用完后自动使用';
+
     return `
           <div class="account-pool account-pool--balance">
             <div class="account-pool__label">加量包</div>
             <div class="account-pool__value"><strong>${this._escapeHTML(balance)}</strong><span class="account-pool__of">积分</span></div>
-            <div class="account-pool__foot">永久有效，不过期 · 每日额度用完后自动使用</div>
+            ${rows ? `<div class="account-pack-list">${rows}</div>` : ''}
+            <div class="account-pool__foot">${foot}</div>
           </div>
     `;
+  }
+
+  /** yyyy-mm-dd → 本地可读日期（按 UTC 解析，避免时区把日期挪前一天） */
+  _formatDate(ymd) {
+    const d = new Date(`${ymd}T00:00:00Z`);
+    if (isNaN(d.getTime())) {
+      return ymd;
+    }
+    return d.toLocaleDateString('zh-CN', {
+      year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC'
+    });
+  }
+
+  /** 到期日 <= 今天 → 临期/已到期，UI 高亮提醒优先消耗 */
+  _isExpiringSoon(ymd) {
+    const today = new Date().toISOString().slice(0, 10);
+    return ymd <= today;
   }
 
   /** 累计获得 / 累计消耗 */
