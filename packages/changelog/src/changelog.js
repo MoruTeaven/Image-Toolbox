@@ -80,7 +80,8 @@ export const CHANGELOG = [
         { text: '修复画笔光标跟随有时不显示的问题', platforms: null }
       ],
       improved: [
-        { text: '每日免费额度改为当天有效、每天零点自动刷新，未用完不结转，消费时优先使用', platforms: null }
+        { text: '每日免费额度改为当天有效、每天零点自动刷新，未用完不结转，消费时优先使用', platforms: null },
+        { text: '优化积分页：每日额度进度直观可见，加载过程改为骨架屏', platforms: null }
       ],
       adjusted: [],
       removed: []

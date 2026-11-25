@@ -703,11 +703,7 @@ class AccountPage {
     }
 
     if (this._creditsLoading && !this._credits) {
-      return `
-        <div class="account-card">
-          <div class="account-page__loading">加载中…</div>
-        </div>
-      `;
+      return this._renderCreditsSkeleton();
     }
 
     // 后端尚无积分路由（如未切流的旧版后端）：温和提示，不当作错误
@@ -736,20 +732,34 @@ class AccountPage {
     }
 
     const credits = this._credits || {};
-    const balance = credits.balance || '0.00';
-    const earned = credits.totalEarned || '0.00';
-    const spent = credits.totalSpent || '0.00';
-    const dailyHint = this._renderDailyCreditsHint(credits);
 
     return `
       <div class="account-credits">
+        ${this._renderCreditsHero(credits)}
+        ${this._renderDailyCreditsCard(credits)}
+        ${this._renderCreditsStats(credits)}
+        ${this._renderCreditsTxCard()}
+      </div>
+    `;
+  }
+
+  /** 积分余额主卡 */
+  _renderCreditsHero(credits) {
+    const balance = credits.balance || '0.00';
+    return `
         <div class="account-card account-card--credits-hero">
           <div class="account-card__label">积分余额</div>
           <div class="account-credits__balance">${this._escapeHTML(balance)}</div>
-          <div class="account-credits__balance-unit">积分</div>
-          ${dailyHint}
+          <div class="account-credits__balance-unit">可用于 AI 修图等付费功能</div>
         </div>
+    `;
+  }
 
+  /** 累计获得 / 累计消耗 */
+  _renderCreditsStats(credits) {
+    const earned = credits.totalEarned || '0.00';
+    const spent = credits.totalSpent || '0.00';
+    return `
         <div class="account-credits__stats">
           <div class="account-credits__stat">
             <span class="account-credits__stat-label">累计获得</span>
@@ -760,7 +770,43 @@ class AccountPage {
             <span class="account-credits__stat-value">${this._escapeHTML(spent)}</span>
           </div>
         </div>
+    `;
+  }
 
+  /**
+   * 每日免费额度卡：当日有效、UTC 零点刷新（换算到本地时区），未用完不结转。
+   * 用 7 格进度点直观展示剩余额度；兼容旧后端（无 dailyCredits/dailyResetAt）时不渲染。
+   */
+  _renderDailyCreditsCard(credits) {
+    const hasDaily = credits.dailyCredits !== undefined && credits.dailyResetAt;
+    if (!hasDaily) {
+      return '';
+    }
+    const remaining = Number(credits.dailyCredits) || 0;
+    const total = Number(credits.dailyGrantAmount) || 7;
+    const resetText = this._escapeHTML(this._formatTime(credits.dailyResetAt));
+    const dots = Array.from({ length: total }, (_, i) =>
+      `<span class="account-daily__dot ${i < remaining ? 'account-daily__dot--on' : ''}"></span>`
+    ).join('');
+    const exhausted = remaining <= 0;
+
+    return `
+        <div class="account-card account-daily ${exhausted ? 'account-daily--exhausted' : ''}">
+          <div class="account-daily__head">
+            <span class="account-daily__title">今日免费额度</span>
+            <span class="account-daily__count"><strong>${this._escapeHTML(credits.dailyCredits)}</strong> / ${this._escapeHTML(credits.dailyGrantAmount || '7.00')}</span>
+          </div>
+          <div class="account-daily__dots">${dots}</div>
+          <div class="account-daily__foot">
+            ${exhausted ? '今日额度已用完' : '消费时优先使用，不用余额'} · 每日 ${resetText} 刷新，未用完不结转
+          </div>
+        </div>
+    `;
+  }
+
+  /** 流水卡 */
+  _renderCreditsTxCard() {
+    return `
         <div class="account-card">
           <div class="account-card__header">
             <div class="account-card__label">积分流水</div>
@@ -768,28 +814,33 @@ class AccountPage {
           </div>
           ${this._renderCreditsTxList()}
         </div>
-      </div>
     `;
   }
 
-  /**
-   * 每日额度提示：当日有效、UTC 零点刷新，刷新时间换算到用户本地时区。
-   * 兼容旧后端（无 dailyCredits/dailyResetAt）：不显示该区块，不做错误假设。
-   */
-  _renderDailyCreditsHint(credits) {
-    const hasDaily = credits.dailyCredits !== undefined && credits.dailyResetAt;
-    if (!hasDaily) {
-      return '';
-    }
-    const remaining = this._escapeHTML(credits.dailyCredits);
-    const total = this._escapeHTML(credits.dailyGrantAmount || '7.00');
-    const resetText = this._escapeHTML(this._formatTime(credits.dailyResetAt));
+  /** 积分加载骨架屏：结构与真实页面一致，避免加载完成后的布局跳动 */
+  _renderCreditsSkeleton() {
+    const bar = (w) => `<span class="account-skeleton__bar" style="width:${w}"></span>`;
+    const stat = () => `
+          <div class="account-credits__stat">
+            ${bar('50%')}${bar('70%')}
+          </div>`;
     return `
-          <div class="account-credits__daily">
-            <span class="account-credits__daily-count">今日免费额度 ${remaining} / ${total}</span>
-            <span class="account-credits__daily-reset">每日 ${resetText} 自动刷新，未用完不结转</span>
+      <div class="account-credits account-credits--skeleton" aria-busy="true" aria-label="积分加载中">
+        <div class="account-card account-card--credits-hero">
+          ${bar('30%')}${bar('45%')}${bar('24%')}
+        </div>
+        <div class="account-card account-daily">
+          ${bar('40%')}<span class="account-skeleton__dots">${Array.from({ length: 7 }, () => '<i></i>').join('')}</span>${bar('80%')}
+        </div>
+        <div class="account-credits__stats">${stat()}${stat()}</div>
+        <div class="account-card">
+          <div class="account-card__header">${bar('30%')}${bar('16%')}</div>
+          <div class="account-skeleton__rows">
+            ${Array.from({ length: 4 }, () => `<div class="account-skeleton__row">${bar('22%')}${bar('12%')}${bar('18%')}${bar('26%')}</div>`).join('')}
           </div>
-        `;
+        </div>
+      </div>
+    `;
   }
 
   _renderCreditsTxList() {

@@ -4070,6 +4070,12 @@ html, body {
 
 
 /* ========== 账户中心 · 积分 ========== */
+/* 统一用 gap 管卡片间距，新增/隐藏卡片都不会出现间距错乱（骨架屏共用） */
+.account-credits {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 .account-credits__balance {
   margin-top: 8px;
   font-size: 44px;
@@ -4083,27 +4089,66 @@ html, body {
   color: var(--color-text-secondary);
   margin-top: 2px;
 }
-.account-credits__daily {
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  line-height: 1.6;
+/* 每日免费额度卡：当日池的视觉焦点 */
+.account-daily {
+  border-color: color-mix(in srgb, var(--color-accent) 32%, var(--color-border));
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent) 10%, var(--bg-card)) 0%,
+    var(--bg-card) 62%);
 }
-.account-credits__daily-count {
-  display: block;
-  color: var(--color-accent);
+.account-daily__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.account-daily__title {
   font-size: 13px;
   font-weight: 600;
+  color: var(--color-text);
 }
-.account-credits__daily-reset {
-  display: block;
-  opacity: 0.85;
+.account-daily__count {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.account-daily__count strong {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--color-accent);
+  margin-right: 2px;
+}
+.account-daily__dots {
+  display: flex;
+  gap: 7px;
+  margin-top: 12px;
+}
+.account-daily__dot {
+  flex: 1;
+  height: 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-text) 14%, transparent);
+}
+.account-daily__dot--on {
+  background: var(--color-accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-accent) 50%, transparent);
+}
+.account-daily__foot {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+.account-daily--exhausted .account-daily__count strong {
+  color: var(--color-warning);
+}
+.account-daily--exhausted .account-daily__foot {
+  color: var(--color-warning);
 }
 .account-credits__stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
-  margin-top: 14px;
 }
 .account-credits__stat {
   background: var(--bg-card);
@@ -4175,4 +4220,55 @@ html, body {
   margin-top: 12px;
   display: flex;
   justify-content: center;
+}
+
+/* 积分加载骨架屏 */
+.account-skeleton__bar,
+.account-skeleton__dots i {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--color-text) 8%, transparent) 25%,
+    color-mix(in srgb, var(--color-text) 16%, transparent) 50%,
+    color-mix(in srgb, var(--color-text) 8%, transparent) 75%);
+  background-size: 200% 100%;
+  animation: account-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+.account-skeleton__bar {
+  height: 12px;
+  margin-top: 10px;
+}
+.account-credits--skeleton .account-card--credits-hero .account-skeleton__bar:nth-child(2) {
+  height: 34px;
+  width: 46% !important;
+}
+.account-skeleton__dots {
+  display: flex;
+  gap: 7px;
+  margin-top: 12px;
+}
+.account-skeleton__dots i {
+  flex: 1;
+  height: 7px;
+  border-radius: 4px;
+}
+.account-skeleton__rows {
+  margin-top: 12px;
+}
+.account-skeleton__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.account-skeleton__row:last-child {
+  border-bottom: none;
+}
+.account-skeleton__row .account-skeleton__bar {
+  margin-top: 0;
+}
+@keyframes account-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
